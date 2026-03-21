@@ -1,11 +1,15 @@
-target/
-generated/
-.m2/
-
-# Local unpack from user zip
-vendor/__MACOSX/
-vendor/witup-core/
-
-# IDE / OS
 .idea/
-.DS_Store
+.m2/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+build/
+dist/
+*.egg-info/
+.coverage
+htmlcov/
+generated/
+target/

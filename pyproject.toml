@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "witup-llm"
+version = "0.2.0"
+description = "CLI for AI-driven exception-path analysis, unit-test generation, evaluation, and benchmarking."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Marcelo Amorim" }
+]
+dependencies = []
+
+[project.scripts]
+witup = "witup_llm.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["witup_llm*"]

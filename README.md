@@ -1,189 +1,164 @@
 # witup-llm
 
-Projeto Java que usa `witup-core` como dependencia do `witup-llm` e chama um modelo para gerar:
-- testes unitarios JUnit 5
+CLI Python para analise de caminhos de excecao, geracao automatica de testes e avaliacao orientada a metricas + juiz LLM.
 
-## Como o witup-core entra como dependencia
+## Dominio (DDD)
 
-O `pom.xml` importa:
+### Problema de dominio
+Escolher e operar pipelines de IA para gerar suites de teste confiaveis para um projeto alvo, com feedback objetivo.
 
-- `br.unb.cic.witup:witup-core:0.0.0-local`
+### Linguagem ubiqua
+- **Method Descriptor**: metodo catalogado do projeto alvo.
+- **Exception Path (expath)**: caminho que pode levar a erro/excecao.
+- **Method Analysis**: resultado de analise de um metodo.
+- **Generation Report**: conjunto de arquivos de teste gerados.
+- **Evaluation Report**: consolidado de metricas + avaliacao do juiz.
+- **Benchmark Scenario**: combinacao `modelo_analise -> modelo_geracao`.
+- **Benchmark Report**: ranking dos cenarios executados.
 
-E o repositorio Maven local do projeto esta em:
+### Bounded contexts
+- **Catalogacao**: descoberta e extracao de metodos de Java/Python.
+- **Orquestracao de Pipeline**: fluxo `analyze -> generate -> evaluate`.
+- **Avaliacao e Ranking**: metricas, juiz e ordenacao de cenarios.
 
-- `vendor/m2`
+## Arquitetura (Clean + Hexagonal)
 
-Para publicar o JAR do `witup-core` nesse repositorio local:
+### Camadas
+- **Domain** (`witup_llm/domain`): regras de negocio puras (ex.: cenarios de benchmark).
+- **Application** (`witup_llm/pipelines.py`): casos de uso e orquestracao do fluxo.
+- **Adapters/Infrastructure**:
+  - CLI (`witup_llm/cli.py`)
+  - LLM HTTP client (`witup_llm/llm.py`)
+  - runner de metricas shell (`witup_llm/metrics.py`)
+  - leitura/escrita de artefatos (`witup_llm/artifacts.py`)
+  - parser/catalogador de codigo (`witup_llm/project_catalog.py`)
 
-```bash
-./scripts/publish-witup-core-local.sh /Users/marceloamorim/Documents/unb/witup-llm/vendor/witup-core/target/witup-core-0.0.0-SNAPSHOT.jar
-```
+### Principios aplicados
+- Baixo acoplamento por interfaces implicitas (injecao de `llm_client` e `metric_runner` no `PipelineService`).
+- Alta coesao por modulos especializados.
+- Regras de dominio desacopladas de IO (ex.: `build_benchmark_scenarios`).
 
-Se nao passar argumento, o script usa esse caminho padrao automaticamente.
+## Fluxo de uso
 
-Para sincronizar do GitHub, compilar e publicar no `vendor/m2` automaticamente:
-
-```bash
-./scripts/sync-witup-core-from-github.sh
-```
-
-Exemplo fixando branch/commit:
-
-```bash
-./scripts/sync-witup-core-from-github.sh --ref main
-./scripts/sync-witup-core-from-github.sh --ref 01a8ec3b6984afd6cd5258daed5b1e4cde793a55
-```
+1. Catalogar metodos do projeto alvo.
+2. Pedir ao modelo de analise os expaths.
+3. Gerar testes por container.
+4. Medir qualidade com metricas objetivas.
+5. (Opcional) passar para juiz LLM.
+6. Ranquear cenarios de benchmark.
 
 ## Requisitos
 
-- Java 21+
-- Maven 3.9+
-- Ollama rodando localmente em `http://localhost:11434`
-- Um modelo instalado no Ollama (exemplo: `qwen2.5-coder:7b`)
-- Classes Java alvo compiladas com bytecode compativel com SootUp (recomendado `--release 17` ou `--release 21`)
-- Opcional no macOS para limite rigido de CPU: `brew install cpulimit`
+- Python 3.11+
+- Endpoint(s) de modelo configurados (`ollama` ou `openai_compatible`)
+- Arquivo TOML (`witup.toml`)
 
-Comandos uteis do Ollama:
+Use `witup.toml.example` como base.
 
-```bash
-ollama serve
-ollama pull qwen2.5-coder:7b
-```
+## Comandos
 
-## Fluxo
-
-1. O CLI roda o WITUp para extrair caminhos ate `throw` e condicoes simbolicas.
-2. Salva esse contexto em `generated/witup-analysis.json`.
-3. Monta um prompt com o contexto de analise.
-4. Chama `/api/generate` no Ollama local.
-5. Salva o Markdown final com os testes unitarios gerados.
-
-## Limitar CPU no macOS
-
-Voce tem 2 niveis de limite:
-
-1. Limite por requisicao no Ollama (threads):
+Listar modelos:
 
 ```bash
-mvn -q -DskipTests exec:java -Dexec.args="--class-path /caminho/target/classes --class-name com.exemplo.MinhaClasse --num-thread 2"
+python3 -m witup_llm models --config witup.toml
 ```
 
-2. Limite rigido do processo Ollama no macOS:
+Analisar:
 
 ```bash
-./scripts/macos-limit-ollama.sh 60
+python3 -m witup_llm analyze --config witup.toml --model local_qwen
 ```
 
-Isso limita o processo `ollama` a `60%` de CPU.  
-Para remover o limite:
+Gerar testes:
 
 ```bash
-pkill -f "cpulimit -p"
+python3 -m witup_llm generate \
+  --config witup.toml \
+  --analysis generated/SEU-RUN/analysis.json \
+  --model local_qwen
 ```
 
-## Como rodar
-
-Exemplo:
+Avaliar:
 
 ```bash
-mvn -q -DskipTests exec:java -Dexec.args="--class-path /caminho/target/classes --class-name com.exemplo.MinhaClasse --model qwen2.5-coder:7b --overview-file /caminho/contexto-witup.txt"
+python3 -m witup_llm evaluate \
+  --config witup.toml \
+  --analysis generated/SEU-RUN/analysis.json \
+  --generation generated/SEU-RUN/generation.json \
+  --judge-model judge
 ```
 
-Saidas padrao:
-
-- `generated/witup-analysis.json`
-- `generated/witup-unit-tests.md`
-
-## Classes de exemplo para testes
-
-O projeto inclui classes Java de exemplo em:
-
-- `examples/java-src/com/example/witupllmdemo/`
-
-Classes disponiveis:
-
-- `com.example.witupllmdemo.ExampleTransferService`
-- `com.example.witupllmdemo.ExampleRegistrationService`
-- `com.example.witupllmdemo.ExampleTextRules`
-
-Contexto adicional para prompt:
-
-- `examples/project-overview.txt`
-
-## Script pronto para executar o fluxo completo
-
-Para compilar as classes de exemplo e executar o `witup-llm`:
+Pipeline completo:
 
 ```bash
-./scripts/run-example-witup-llm.sh
+python3 -m witup_llm run \
+  --config witup.toml \
+  --analysis-model local_qwen \
+  --generation-model local_qwen \
+  --judge-model judge
 ```
 
-Esse script:
-
-1. Compila as classes de exemplo para `generated/examples-classes`.
-2. Compila o projeto `witup-llm`.
-3. Sobe o Ollama (se necessario).
-4. Aplica limite de CPU no macOS (`cpulimit`) quando disponivel.
-5. Executa o `witup-llm` com limite por requisicao (`--num-thread`).
-
-Exemplo em dry-run:
+Benchmark acoplado (mesmo modelo para analise e geracao):
 
 ```bash
-./scripts/run-example-witup-llm.sh --dry-run
+python3 -m witup_llm benchmark \
+  --config witup.toml \
+  --model local_qwen \
+  --model local_llama \
+  --judge-model judge
 ```
 
-Exemplo escolhendo classe/modelo/limite:
+Benchmark em matriz (feature nova):
 
 ```bash
-./scripts/run-example-witup-llm.sh \
-  --class-name com.example.witupllmdemo.ExampleRegistrationService \
-  --model qwen2.5-coder:7b \
-  --num-thread 2 \
-  --cpu-limit 50
+python3 -m witup_llm benchmark \
+  --config witup.toml \
+  --analysis-model local_qwen \
+  --analysis-model local_llama \
+  --generation-model local_qwen \
+  --generation-model local_llama \
+  --judge-model judge
 ```
 
-## Modo sem Ollama (dry-run)
+## Artefatos gerados
 
-Para validar apenas a parte WITUp + prompt:
+Cada run cria pasta em `generated/` com:
+
+- `catalog.json`
+- `analysis.json`
+- `generation.json`
+- `evaluation.json`
+- `benchmark.json`
+- `benchmark.md`
+- `generated-tests/`
+- `prompts/`
+- `responses/`
+
+## Metricas
+
+Metricas sao declaradas no TOML e executadas via shell com placeholders:
+
+- `{project_root}`
+- `{run_dir}`
+- `{tests_dir}`
+- `{analysis_path}`
+- `{generation_path}`
+- `{model_key}`
+
+Se `value_regex` existir, o numero extraido e normalizado para score (0-100).
+
+## Qualidade e testes
+
+Executar testes:
 
 ```bash
-mvn -q -DskipTests exec:java -Dexec.args="--class-path /caminho/target/classes --class-name com.exemplo.MinhaClasse --dry-run"
+python3 -m unittest discover -s tests -v
 ```
 
-Saidas no dry-run:
+Cobertura e mutacao podem ser integradas pelas metricas configuradas no TOML do projeto alvo.
 
-- `generated/witup-analysis.json`
-- `generated/unit-test-prompt.txt`
+## Backlog tecnico
 
-## Testes do projeto
-
-```bash
-mvn test
-```
-
-## Testes de integracao com Testcontainers (Ollama)
-
-O projeto inclui `OllamaContainerIT`, que sobe um container `ollama/ollama:latest` apenas durante o teste e remove ao final.
-
-Para executar os testes de integracao:
-
-```bash
-mvn -Pllm-it verify
-```
-
-Notas:
-
-- Requer Docker em execucao.
-- Se Docker nao estiver disponivel, os testes `*IT` sao marcados como skipped automaticamente (`@Testcontainers(disabledWithoutDocker = true)`).
-
-## Mutation tests (PIT)
-
-Para rodar mutation testing:
-
-```bash
-mvn pitest:mutationCoverage
-```
-
-Relatorios gerados em:
-
-- `target/pit-reports/`
+- Melhorar parser Java para casos avancados (generics complexos, lambdas e metodos encadeados).
+- Adicionar adapter de persistencia para historico de runs e comparativos longitudinalmente.
+- Incluir testes de integracao com endpoint HTTP mockado para validar contratos de LLM.
