@@ -1,0 +1,10 @@
+WITUp-LLM demo examples:
+
+- ExampleTransferService: transfer rules with lock check, positive amount, sufficient funds,
+  and minimum remaining balance.
+- ExampleRegistrationService: validates email, age, and password quality before creating account.
+- ExampleTextRules: validates and normalizes text tags.
+
+Goal for generated output:
+- concise technical documentation
+- JUnit 5 tests that cover success and exception paths

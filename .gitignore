@@ -1,0 +1,11 @@
+target/
+generated/
+.m2/
+
+# Local unpack from user zip
+vendor/__MACOSX/
+vendor/witup-core/
+
+# IDE / OS
+.idea/
+.DS_Store
