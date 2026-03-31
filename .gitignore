@@ -1,0 +1,20 @@
+.idea/
+.venv/
+.m2/
+
+# Build artifacts
+bin/
+build/
+dist/
+generated/
+target/
+
+# Go
+*.test
+*.out
+coverage.out
+.gocache/
+
+# OS/editor noise
+.DS_Store
+resources

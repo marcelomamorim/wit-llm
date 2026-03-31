@@ -1,0 +1,50 @@
+[project]
+root = "/absolute/path/to/target-project"
+include = ["src/main/java", "."]
+exclude = [".git", "target", "build", "generated", "tests"]
+overview_file = "README.md"
+test_framework = "junit5"
+
+[pipeline]
+output_dir = "./generated"
+save_prompts = true
+max_methods = 0 # 0 = analyze all methods
+judge_model = "openai_judge"
+
+[models.openai_main]
+provider = "openai_compatible"
+model = "gpt-5.4"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+temperature = 0.0
+timeout_seconds = 180
+max_retries = 2
+
+[models.openai_judge]
+provider = "openai_compatible"
+model = "gpt-5.4"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+temperature = 0.0
+timeout_seconds = 180
+max_retries = 2
+
+[[metrics]]
+name = "unit-tests"
+kind = "tests"
+command = "./mvnw -q -DskipITs test"
+weight = 1.0
+value_regex = "Tests run: [0-9]+, Failures: [0-9]+, Errors: [0-9]+, Skipped: [0-9]+"
+scale = 100.0
+working_directory = "."
+description = "Runs unit tests after generation"
+
+[[metrics]]
+name = "line-coverage"
+kind = "coverage"
+command = "./mvnw -q test jacoco:report"
+weight = 1.0
+value_regex = "LINE COVERAGE[: ]+([0-9]+(?:\\.[0-9]+)?)"
+scale = 100.0
+working_directory = "."
+description = "Line coverage score extracted from build output"
