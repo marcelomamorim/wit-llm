@@ -1,53 +1,50 @@
 [project]
-root = "."
-language = "java"
-include = ["src/main/java"]
-exclude = [".git", "target", "build", ".venv", "__pycache__", ".pytest_cache", "generated", "tests"]
+root = "/absolute/path/to/target-project"
+include = ["src/main/java", "."]
+exclude = [".git", "target", "build", "generated", "tests"]
 overview_file = "README.md"
 test_framework = "junit5"
 
 [pipeline]
-output_dir = "generated"
+output_dir = "./generated"
 save_prompts = true
-judge_model = "judge"
-max_methods = 0
+max_methods = 0 # 0 = analyze all methods
+judge_model = "openai_judge"
 
-[models.local_qwen]
-provider = "ollama"
-model = "qwen2.5-coder:7b"
-base_url = "http://localhost:11434"
-temperature = 0.1
-timeout_seconds = 180
-
-[models.local_llama]
-provider = "ollama"
-model = "llama3.1:8b"
-base_url = "http://localhost:11434"
-temperature = 0.1
-timeout_seconds = 180
-
-[models.judge]
+[models.openai_main]
 provider = "openai_compatible"
-model = "gpt-4.1-mini"
+model = "gpt-5.4"
 base_url = "https://api.openai.com/v1"
 api_key_env = "OPENAI_API_KEY"
 temperature = 0.0
-timeout_seconds = 120
+timeout_seconds = 180
+max_retries = 2
+
+[models.openai_judge]
+provider = "openai_compatible"
+model = "gpt-5.4"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+temperature = 0.0
+timeout_seconds = 180
+max_retries = 2
 
 [[metrics]]
-name = "statement-coverage"
+name = "unit-tests"
+kind = "tests"
+command = "./mvnw -q -DskipITs test"
+weight = 1.0
+value_regex = "Tests run: [0-9]+, Failures: [0-9]+, Errors: [0-9]+, Skipped: [0-9]+"
+scale = 100.0
+working_directory = "."
+description = "Runs unit tests after generation"
+
+[[metrics]]
+name = "line-coverage"
 kind = "coverage"
-description = "Example metric that extracts a coverage percentage from stdout."
-command = "mvn -q test jacoco:report"
-value_regex = "(\\d+(?:\\.\\d+)?)%"
+command = "./mvnw -q test jacoco:report"
 weight = 1.0
+value_regex = "LINE COVERAGE[: ]+([0-9]+(?:\\.[0-9]+)?)"
 scale = 100.0
-
-[[metrics]]
-name = "mutation-score"
-kind = "mutation"
-description = "Example metric that extracts a mutation score percentage from stdout."
-command = "mvn -q pitest:mutationCoverage"
-value_regex = "(\\d+(?:\\.\\d+)?)%"
-weight = 1.0
-scale = 100.0
+working_directory = "."
+description = "Line coverage score extracted from build output"
