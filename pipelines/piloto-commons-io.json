@@ -1,0 +1,51 @@
+{
+  "version": "1",
+  "project": {
+    "root": "/absolute/path/to/commons-io",
+    "include": ["src/main/java", "."],
+    "exclude": [".git", "target", "build", "generated", "tests"],
+    "overview_file": "README.md",
+    "test_framework": "junit5"
+  },
+  "pipeline": {
+    "output_dir": "./generated/piloto-commons-io",
+    "duckdb_path": "./generated/analitico/witup-llm.duckdb",
+    "replication_root": "./resources/wit-replication-package/data/output",
+    "baseline_file": "wit.json",
+    "save_prompts": true,
+    "max_methods": 100,
+    "judge_model": "openai_judge"
+  },
+  "models": {
+    "openai_main": {
+      "provider": "openai_compatible",
+      "model": "gpt-5.4",
+      "base_url": "https://api.openai.com/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "temperature": 0.0,
+      "timeout_seconds": 180,
+      "max_retries": 2
+    },
+    "openai_judge": {
+      "provider": "openai_compatible",
+      "model": "gpt-5.4",
+      "base_url": "https://api.openai.com/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "temperature": 0.0,
+      "timeout_seconds": 180,
+      "max_retries": 2
+    }
+  },
+  "metrics": [
+    {
+      "name": "unit-tests",
+      "kind": "tests",
+      "command": "./mvnw -q -DskipITs test",
+      "weight": 1.0,
+      "value_regex": "Tests run: ([0-9]+), Failures: [0-9]+, Errors: [0-9]+, Skipped: [0-9]+",
+      "scale": 100.0,
+      "working_directory": ".",
+      "description": "Executa os testes unitários após a geração"
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/marcelomamorim/witup-llm/schemas/pipeline.schema.json",
+  "title": "witup-llm pipeline",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "project", "pipeline", "models"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root"],
+      "properties": {
+        "root": {"type": "string", "minLength": 1},
+        "include": {"type": "array", "items": {"type": "string"}},
+        "exclude": {"type": "array", "items": {"type": "string"}},
+        "overview_file": {"type": "string"},
+        "test_framework": {"type": "string"}
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "output_dir": {"type": "string"},
+        "duckdb_path": {"type": "string"},
+        "replication_root": {"type": "string"},
+        "baseline_file": {"type": "string"},
+        "save_prompts": {"type": "boolean"},
+        "max_methods": {"type": "integer", "minimum": 0},
+        "judge_model": {"type": "string"},
+        "llm_mode": {"type": "string", "enum": ["direct", "multiagent"]},
+        "deep_validation_subset_size": {"type": "integer", "minimum": 0}
+      }
+    },
+    "models": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["provider", "model", "base_url", "api_key_env"],
+        "properties": {
+          "provider": {"type": "string", "enum": ["openai_compatible", "ollama"]},
+          "model": {"type": "string", "minLength": 1},
+          "base_url": {"type": "string", "minLength": 1},
+          "api_key_env": {"type": "string", "minLength": 1},
+          "temperature": {"type": "number", "minimum": 0},
+          "timeout_seconds": {"type": "integer", "exclusiveMinimum": 0},
+          "max_retries": {"type": "integer", "minimum": 0},
+          "reasoning_effort": {"type": "string", "enum": ["none", "low", "medium", "high", "xhigh"]},
+          "prompt_cache_retention": {"type": "string"},
+          "service_tier": {"type": "string", "enum": ["auto", "default", "flex", "priority"]},
+          "max_output_tokens": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "command"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "kind": {"type": "string"},
+          "command": {"type": "string", "minLength": 1},
+          "weight": {"type": "number", "minimum": 0},
+          "value_regex": {"type": "string"},
+          "scale": {"type": "number", "minimum": 0},
+          "working_directory": {"type": "string"},
+          "description": {"type": "string"}
+        }
+      }
+    }
+  }
+}
