@@ -3,186 +3,427 @@
 [![CI](https://github.com/marcelomamorim/witup-llm/actions/workflows/ci.yml/badge.svg)](https://github.com/marcelomamorim/witup-llm/actions/workflows/ci.yml)
 [![Release CLI](https://github.com/marcelomamorim/witup-llm/actions/workflows/release.yml/badge.svg)](https://github.com/marcelomamorim/witup-llm/actions/workflows/release.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/marcelomamorim/witup-llm)](https://goreportcard.com/report/github.com/marcelomamorim/witup-llm)
-![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)
-![Coverage](https://img.shields.io/badge/Coverage-go%20test%20-cover-success)
+![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)
 ![Target](https://img.shields.io/badge/Target-Java%20projects-orange?logo=openjdk&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-`witup-llm` is an open source Go CLI for research on exception-path extraction in Java projects.
+`witup-llm` é uma CLI em Go para pesquisa sobre geração de exception paths em projetos Java.
 
-It prepares and compares three experiment branches:
+## Status do projeto
+
+Este repositório está em `pesquisa ativa`.
+
+Hoje ele já permite:
+- carregar o baseline do artigo no DuckDB;
+- comparar `WITUP_ONLY`, `LLM_ONLY` e `WITUP_PLUS_LLM`;
+- gerar testes unitários a partir dos expaths;
+- consolidar resultados e métricas no DuckDB.
+
+Hoje ele ainda tem limitações importantes:
+- a cobertura global de testes ainda não atingiu a meta de `>90%`;
+- a meta de `>90%` em mutação ainda não foi atingida;
+- a Parte 2 do experimento ainda depende da maturidade das métricas configuradas no pipeline para produzir resultados fortes em todos os projetos.
+
+Esse posicionamento explícito ajuda o repositório a ficar mais honesto como projeto open source: ele já é utilizável, mas ainda é um protótipo de pesquisa em evolução.
+
+O projeto compara três variantes experimentais:
 - `WITUP_ONLY`
 - `LLM_ONLY`
 - `WITUP_PLUS_LLM`
 
-The goal is to compare exception paths extracted from the WIT/WITUP replication package with exception paths inferred through a role-based LLM workflow, then reuse those artifacts for downstream tasks such as test generation and evaluation.
+O baseline do artigo é carregado primeiro em `DuckDB`. Depois disso, o `witup-llm` passa a interagir com os dados do artigo pelo banco, e não diretamente pela pasta `resources/`.
 
-## Why this project exists
+O protocolo de pesquisa tem duas comparações:
 
-This repository supports a research workflow that asks:
-- how well a static baseline (`WITUP`) extracts exception paths,
-- how well an LLM-only pipeline does the same,
-- whether combining both sources produces stronger derived artifacts.
+1. comparar a qualidade dos `expaths` gerados por `WITUP` e `LLM`;
+2. gerar testes unitários a partir dessas fontes e comparar a qualidade das
+   suítes derivadas.
 
-The current implementation is intentionally `Java-only`.
+Na branch `LLM_ONLY`, o experimento agora trabalha com `dois modos`:
 
-## Core experiment branches
+- `direct`: uma chamada por método para varredura ampla;
+- `multiagent`: começa com a varredura direta e só faz refino multiagente em
+  casos `maybe`, divergências, métodos interprocedurais e um subconjunto
+  adicional de validação profunda.
 
-### `WITUP_ONLY`
+Em ambos os modos, a LLM analisa apenas o subconjunto de métodos do checkout
+atual que foi resolvido a partir da baseline do WITUP.
 
-Imports `wit.json` or `wit_filtered.json` from the local replication package under `resources/wit-replication-package`.
+## Visão geral
 
-### `LLM_ONLY`
+O fluxo principal é:
 
-Runs a deterministic multi-agent workflow implemented by the repository:
-1. `Archaeologist`
-2. `Dependency Mesh`
-3. `Expath Extractor`
-4. `Skeptic Reviewer`
+1. carregar as baselines do artigo para o DuckDB;
+2. consultar e materializar a baseline WITUP a partir do banco;
+3. alinhar a baseline WITUP ao checkout atual e resolver os métodos-alvo;
+4. executar a branch `LLM_ONLY` sobre esse mesmo conjunto-alvo;
+5. comparar WITUP e LLM;
+6. materializar `WITUP_PLUS_LLM`;
+7. registrar os artefatos gerados no DuckDB para consulta posterior.
 
-The workflow is code-orchestrated and provider-agnostic at the application layer. Providers only serve JSON completions.
+## Stack
 
-### `WITUP_PLUS_LLM`
+- Go 1.24+
+- DuckDB como armazenamento analítico e índice de artefatos
+- projetos Java como alvo
+- OpenAI via `Responses API` com `prompt_cache_key`
+- provedores compatíveis com OpenAI e Ollama
+- GitHub Actions para CI e releases
+- configuração de pipeline em JSON versionado
 
-Merges the two branches only after they have run independently, preserving research validity.
+## Pré-requisitos
 
-## Tech stack
+- Go `1.24+`
+- Git
+- acesso ao pacote de replicação WITUP em `resources/wit-replication-package/data/output`
+- uma chave válida em `OPENAI_API_KEY` para as execuções com OpenAI
+- Java para avaliar as suítes geradas
+- Maven, `mvnw` ou acesso de rede para o fallback automático de download do Maven no script do piloto
 
-- Go 1.22+
-- Java source projects as targets
-- OpenAI-compatible and Ollama model adapters
-- GitHub Actions for CI and release packaging
-
-## Install
-
-Clone the repository and build the CLI:
+## Instalação
 
 ```bash
-git clone git@github.com:marcelomamorim/witup-llm.git
+git clone https://github.com/marcelomamorim/witup-llm.git
 cd witup-llm
 make build
 ```
 
-The binary will be available at `bin/witup`.
+O binário será gerado em `bin/witup`.
 
-## Quick start
+## Configuração
 
-1. Copy the example configuration:
+O projeto usa arquivos JSON em `pipelines/`.
+
+Comece copiando o exemplo base:
 
 ```bash
-cp witup.toml.example witup.toml
+cp pipeline.example.json pipeline.local.json
 ```
 
-2. Point `project.root` to the checked out Java project you want to analyze.
+Depois ajuste os campos principais:
+- `project.root`
+- `pipeline.output_dir`
+- `pipeline.duckdb_path`
+- `pipeline.replication_root`
+- `pipeline.baseline_file`
+- `pipeline.llm_mode`
+- `pipeline.deep_validation_subset_size`
 
-3. Configure at least one model under `[models]`.
+Exemplo mínimo:
 
-4. Probe connectivity:
-
-```bash
-./bin/witup probe --config witup.toml --model openai_main
+```json
+{
+  "version": "1",
+  "project": {
+    "root": "/caminho/do/projeto-java"
+  },
+  "pipeline": {
+    "output_dir": "./generated",
+    "duckdb_path": "./generated/witup-llm.duckdb",
+    "replication_root": "./resources/wit-replication-package/data/output",
+    "baseline_file": "wit.json",
+    "save_prompts": true,
+    "max_methods": 0,
+    "llm_mode": "multiagent",
+    "deep_validation_subset_size": 8
+  }
+}
 ```
 
-5. Run the three-branch experiment:
+O schema está em [`schemas/pipeline.schema.json`](schemas/pipeline.schema.json).
+
+## Início rápido
+
+1. Configure sua API key:
 
 ```bash
-./bin/witup run-experiment \
-  --config witup.toml \
+export OPENAI_API_KEY="sua-chave"
+```
+
+2. Teste conectividade do modelo:
+
+```bash
+./bin/witup sondar --config pipeline.local.json --model openai_main
+```
+
+3. Carregue as baselines do artigo no DuckDB:
+
+```bash
+./bin/witup ingerir-witup --config pipeline.local.json
+```
+
+4. Abra a interface gráfica do banco:
+
+```bash
+./bin/witup visualizar-dados --config pipeline.local.json
+```
+
+Depois abra:
+
+```text
+http://127.0.0.1:8421
+```
+
+5. Execute apenas a Parte 1 do experimento para um projeto:
+
+```bash
+./bin/witup executar-experimento \
+  --config pipeline.local.json \
   --model openai_main \
   --project-key commons-io
 ```
 
-6. Generate tests from one prepared variant:
+6. Execute o estudo completo para um projeto:
 
 ```bash
-./bin/witup generate \
-  --config witup.toml \
-  --analysis generated/<run-id>/variants/witup_plus_llm.analysis.json \
+./bin/witup executar-estudo-completo \
+  --config pipeline.local.json \
+  --analysis-model openai_main \
+  --generation-model openai_main \
+  --judge-model openai_judge \
+  --project-key commons-io
+```
+
+7. Gere testes manualmente a partir de uma variante, se quiser isolar a Parte 2:
+
+```bash
+./bin/witup gerar \
+  --config pipeline.local.json \
+  --analysis generated/<run-id>/variants/witup-plus-llm.analysis.json \
   --model openai_main
 ```
 
-## CLI banner
-
-The CLI prints a banner on human-facing runs.
-
-For scripted environments, disable it with:
+8. Consolide manualmente a Parte 1 e a Parte 2 em um único artefato, se necessário:
 
 ```bash
-WITUP_NO_BANNER=1 ./bin/witup help
+./bin/witup consolidar-estudo \
+  --config pipeline.local.json \
+  --summary generated/<run-id>/estudo-completo.json \
+  --project-key commons-io
 ```
 
-JSON-oriented commands such as `probe --json` suppress the banner automatically.
+## Como executar a pesquisa completa
 
-## Commands
+Este é o fluxo mais direto para rodar o piloto do `visualee` ponta a ponta.
+
+### 1. Limpar artefatos anteriores
+
+```bash
+./scripts/limpar-projeto.sh --confirmar
+```
+
+### 2. Validar a integração real com a OpenAI
+
+```bash
+export OPENAI_API_KEY="sua-chave-aqui"
+./bin/witup sondar --config pipeline.local.json --model openai_main
+```
+
+### 3. Executar o piloto do `visualee`
+
+```bash
+export OPENAI_API_KEY="sua-chave-aqui"
+./scripts/executar-visualee-piloto.sh
+```
+
+O script já executa:
+
+1. clone e checkout no commit do artigo;
+2. carga do baseline no DuckDB;
+3. alinhamento do conjunto-alvo do WITUP com o checkout local;
+4. `WITUP_ONLY`, `LLM_ONLY` e `WITUP_PLUS_LLM`;
+5. `LLM_ONLY` em `direct` ou `multiagent`, conforme o JSON;
+6. geração de testes por variante;
+7. avaliação das suítes geradas por variante;
+8. geração automática de gráficos textuais a partir do DuckDB;
+9. persistência do estudo completo e índices no DuckDB.
+
+Variáveis opcionais úteis:
+
+```bash
+MAX_METHODS=25
+LLM_MODE=multiagent
+OPENAI_MODEL=gpt-5.4
+OPENAI_API_KEY_LOCAL=""
+```
+
+Para rodar explicitamente as três variantes do estudo em sequência e já receber os
+diretórios principais ao final:
+
+```bash
+./scripts/executar-visualee-rodadas.sh
+```
+
+### 4. Abrir a interface do DuckDB
+
+```bash
+./bin/witup visualizar-dados --config generated/configs/piloto-visualee.runtime.json
+```
+
+Depois abra:
 
 ```text
-models            List configured models
-probe             Probe model connectivity and auth
-ingest-witup      Import a WITUP baseline into canonical analysis JSON
-analyze           Analyze methods with a direct LLM prompt
-analyze-agentic   Analyze methods with the multi-agent LLM workflow
-compare-sources   Compare canonical WITUP and LLM analysis artifacts
-generate          Generate tests from an analysis artifact
-evaluate          Run metrics and optional judge evaluation
-run               Execute analyze -> generate -> evaluate
-run-experiment    Prepare WITUP_ONLY, LLM_ONLY, and WITUP_PLUS_LLM
-benchmark         Run coupled or matrix benchmark scenarios
+http://127.0.0.1:8421
 ```
 
-## Reproducing the test suite
+### 5. Consultas principais para a pesquisa
 
-The project keeps local reproduction simple.
+**Parte 1: qualidade dos expaths**
 
-Run the full test suite:
+Resumo por execução:
 
-```bash
-make test
+```sql
+SELECT *
+FROM vw_comparacao_fontes_resumo
+ORDER BY gerado_em DESC;
 ```
 
-Run formatting, vetting, and tests together:
+Colunas principais da Parte 1:
+- `taxa_cobertura_metodos_llm_sobre_witup`
+- `taxa_cobertura_expaths_llm_sobre_witup`
+- `taxa_precisao_estrutural_llm`
+- `indice_jaccard_expaths`
+- `taxa_novidade_llm`
 
-```bash
-make quality
+Relação estrutural por método:
+
+```sql
+SELECT *
+FROM vw_h2_relacoes_estruturais
+WHERE chave_projeto = 'visualee'
+ORDER BY assinatura_metodo;
 ```
 
-Generate a local coverage report:
+Casos `maybe` do WITUP com recuperação pela LLM:
 
-```bash
-make coverage
+```sql
+SELECT *
+FROM vw_h1_maybe_recuperacao
+WHERE chave_projeto = 'visualee'
+ORDER BY assinatura_metodo;
 ```
 
-The explicit commands used underneath are:
+**Parte 2: qualidade dos testes derivados**
 
-```bash
-go test ./...
-go test ./... -coverprofile=coverage.out
-go tool cover -func=coverage.out
+Comparação por variante:
+
+```sql
+SELECT *
+FROM vw_estudo_variantes
+WHERE chave_projeto = 'visualee'
+ORDER BY id_execucao DESC, variante;
 ```
 
-If your environment restricts Go's global build cache, you can force a local cache:
+Colunas principais da Parte 2:
+- `taxa_arquivos_teste_por_metodo`
+- `taxa_arquivos_teste_por_expath`
+- `taxa_sucesso_metricas`
+- `nota_metricas`
+- `nota_juiz`
+- `nota_combinada`
 
-```bash
-mkdir -p .gocache
-GOCACHE=$(pwd)/.gocache go test ./...
+Métricas individuais por variante:
+
+```sql
+SELECT *
+FROM vw_h3_metricas_variantes
+WHERE chave_projeto = 'visualee'
+ORDER BY id_execucao DESC, variante, nome_metrica;
 ```
 
-## GitHub Actions
+Comparação direta entre as três suítes:
 
-This repository ships with:
-- `.github/workflows/ci.yml`
-  - formatting check
-  - `go vet`
-  - `go test`
-  - coverage artifact upload
-- `.github/workflows/release.yml`
-  - cross-platform CLI builds for tagged releases
-  - GitHub Release asset upload
+```sql
+SELECT *
+FROM vw_h3_comparacao_suites
+WHERE chave_projeto = 'visualee'
+ORDER BY id_execucao DESC;
+```
 
-## Artifacts and reproducibility
+Essa view já expõe os deltas mais úteis:
+- `delta_metricas_llm_vs_witup`
+- `delta_metricas_combinado_vs_witup`
+- `delta_metricas_combinado_vs_llm`
+- `delta_combinada_llm_vs_witup`
+- `delta_combinada_combinado_vs_witup`
+- `delta_combinada_combinado_vs_llm`
 
-Each run writes a deterministic workspace under `pipeline.output_dir`.
+Métricas fortes usadas no piloto `visualee`:
+- `unit-tests`
+- `jacoco-line`
+- `jacoco-branch`
+- `pit-mutation`
+- `exception-reproduction`
 
-Important folders:
+Agregado por variante:
+
+```sql
+SELECT *
+FROM vw_h3_qualidade_variantes
+WHERE chave_projeto = 'visualee'
+ORDER BY variante;
+```
+
+**Preparação para H4**
+
+Base atual de divergências:
+
+```sql
+SELECT *
+FROM vw_h4_divergencias_base
+WHERE chave_projeto = 'visualee'
+ORDER BY assinatura_metodo;
+```
+
+Essa view ainda não estratifica interproceduralidade. Ela prepara o terreno
+para a futura classificação estrutural dos métodos.
+
+## Scripts disponíveis
+
+A pasta [`scripts`](scripts) foi reduzida ao mínimo operacional:
+
+- [`scripts/executar-visualee-piloto.sh`](scripts/executar-visualee-piloto.sh)
+- [`scripts/executar-visualee-rodadas.sh`](scripts/executar-visualee-rodadas.sh)
+- [`scripts/limpar-projeto.sh`](scripts/limpar-projeto.sh)
+
+## Interface gráfica do DuckDB
+
+O comando `visualizar-dados` inicia uma interface web simples com:
+- lista de tabelas e views;
+- visualização rápida de linhas;
+- execução de SQL somente de leitura;
+- consulta direta dos artefatos indexados pelo projeto.
+
+Além da interface embutida, o arquivo `.duckdb` também pode ser aberto em clientes externos compatíveis, como DBeaver.
+
+Ao final de `executar-estudo-completo`, o projeto também gera gráficos textuais
+em `plots/` dentro da raiz da execução. Quando a extensão `textplot` do DuckDB
+está disponível, esses arquivos usam as funções de plotagem do DuckDB; caso
+contrário, o projeto grava uma versão tabular de fallback sem interromper a
+execução.
+
+## Comandos
+
+```text
+modelos               Lista os modelos configurados
+sondar                Testa conectividade e autenticação
+ingerir-witup         Carrega as baselines do artigo para o DuckDB
+visualizar-dados      Abre a interface web de consulta do DuckDB
+analisar              Analisa métodos com prompt direto
+analisar-multiagentes Executa a análise multiagente
+comparar-fontes       Compara artefatos canônicos do WITUP e da LLM
+consolidar-estudo     Registra o resumo consolidado da Parte 1 e Parte 2
+gerar                 Gera testes a partir de uma análise
+avaliar               Executa métricas e avaliação opcional por juiz
+executar              Executa analisar -> gerar -> avaliar
+executar-experimento  Executa WITUP_ONLY, LLM_ONLY e WITUP_PLUS_LLM
+executar-estudo-completo Executa Parte 1 + Parte 2 e consolida o estudo
+executar-benchmark    Executa cenários de benchmark
+```
+
+## Estrutura de saída
+
+Cada execução gera artefatos em disco:
 - `sources/`
 - `comparisons/`
 - `variants/`
@@ -191,65 +432,109 @@ Important folders:
 - `prompts/`
 - `responses/`
 
-These artifacts are treated as first-class research outputs.
+O DuckDB funciona como camada persistente de consulta e índice, sem substituir os artefatos brutos.
 
-## Repository layout
+## Como reproduzir os testes
 
-```text
-cmd/witup/main.go
-.github/workflows/
-docs/
-internal/
-  agentic/
-  artifacts/
-  catalog/
-  config/
-  domain/
-  experiment/
-  llm/
-  metrics/
-  pipeline/
-  witup/
-resources/
-witup.toml.example
-Makefile
-go.mod
+Executar toda a suíte:
+
+```bash
+make test
 ```
 
-## Documentation
+Executar formatação, vet e testes:
 
-- [Architecture](docs/architecture.md)
-- [Research context](docs/research_context.md)
-- [Project review](docs/project_review.md)
-- [Review guide](docs/review_guide.md)
-- [Thesis foundation](docs/thesis_foundation.md)
+```bash
+make quality
+```
 
-If you want to understand the codebase quickly, start with [docs/review_guide.md](docs/review_guide.md).
+Executar cobertura:
 
-## Roadmap
+```bash
+make coverage
+```
 
-The core source experiment is implemented. The next major steps are:
-- formal comparison between `WITUP` and `LLM`,
-- dynamic validation over concrete counterexamples,
-- mutation-focused evaluation,
-- statistical aggregation for H1-H4.
+Se o ambiente restringir o cache global do Go:
 
-## Contributing
+```bash
+mkdir -p .gocache
+GOCACHE=$(pwd)/.gocache go test ./...
+```
 
-1. Fork the repository.
-2. Create a focused branch.
-3. Keep changes small and tested.
-4. Run `make quality`.
-5. Open a pull request with reproducible steps.
+## Cobertura e qualidade
 
-## Security and responsible use
+Última medição local validada neste repositório:
 
-- Never commit API keys.
-- Use environment variables for secrets.
-- Persist raw model outputs in research runs.
-- Do not treat LLM judges as formal oracles.
-- Do not leak WITUP answers into the `LLM_ONLY` branch of the main experiment.
+| Escopo | Cobertura de linha |
+| --- | ---: |
+| global (`go test ./... -coverprofile=coverage.out`) | `70.97%` |
+| `internal/metricas` | `90.6%` |
+| `internal/llm` | `75.0%` |
+| `internal/aplicacao` | `63.7%` |
+| `internal/armazenamento` | `63.5%` |
 
-## License
+Notas importantes:
+- os números acima são um retrato da última execução local validada;
+- a meta de engenharia/pesquisa continua sendo `>90%` global de cobertura de linha;
+- a meta de mutação `>90%` ainda não foi atingida.
 
-MIT. See [LICENSE](LICENSE).
+Para regenerar os números:
+
+```bash
+mkdir -p .gocache
+GOCACHE=$(pwd)/.gocache go test ./... -coverprofile=coverage.out
+GOCACHE=$(pwd)/.gocache go tool cover -func=coverage.out
+```
+
+Para mutação, a rodada mais estável hoje é:
+
+```bash
+GOCACHE=$(pwd)/.gocache $(go env GOPATH)/bin/go-mutesting ./internal/metricas --exec-timeout=20
+```
+
+## Estrutura do repositório
+
+```text
+cmd/witup/principal.go
+internal/
+  agentes/
+  aplicacao/
+  armazenamento/
+  artefatos/
+  catalogo/
+  configuracao/
+  dominio/
+  experimento/
+  llm/
+  metricas/
+  witup/
+pipelines/
+resources/
+schemas/
+pipeline.example.json
+```
+
+## Contribuição
+
+Contribuições são bem-vindas, principalmente em:
+- melhoria da comparação estrutural e semântica de expaths;
+- aumento de cobertura e força da suíte de testes;
+- robustez da Parte 2 do experimento;
+- suporte a mais projetos Java do baseline;
+- melhoria da visualização dos resultados no DuckDB.
+
+Enquanto o projeto não tiver um `CONTRIBUTING.md` dedicado, o fluxo recomendado é:
+1. abrir uma issue descrevendo o problema ou proposta;
+2. alinhar o escopo da mudança;
+3. enviar um PR pequeno e focado.
+
+## Suporte
+
+Para relatar bugs, regressões ou discutir ideias de evolução:
+- abra uma issue com passos de reprodução e contexto do experimento;
+- inclua o `run_id`, o trecho relevante do log e a configuração usada quando o problema envolver uma execução;
+- ao compartilhar resultados, prefira apontar também o caminho do artefato consolidado no DuckDB ou na pasta `generated/`.
+
+## Licença
+
+Este projeto é distribuído sob a licença MIT. Veja [`LICENSE`](LICENSE).

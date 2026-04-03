@@ -1,0 +1,61 @@
+{
+  "version": "1",
+  "project": {
+    "root": "/absolute/path/to/project",
+    "include": ["src/main/java", "."],
+    "exclude": [".git", "target", "build", "generated", "tests"],
+    "overview_file": "README.md",
+    "test_framework": "junit5"
+  },
+  "pipeline": {
+    "output_dir": "./generated/default",
+    "duckdb_path": "./generated/analitico/witup-llm.duckdb",
+    "replication_root": "./resources/wit-replication-package/data/output",
+    "baseline_file": "wit.json",
+    "save_prompts": true,
+    "max_methods": 0,
+    "judge_model": "openai_judge",
+    "llm_mode": "multiagent",
+    "deep_validation_subset_size": 8
+  },
+  "models": {
+    "openai_main": {
+      "provider": "openai_compatible",
+      "model": "gpt-5.4",
+      "base_url": "https://api.openai.com/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "temperature": 0.0,
+      "timeout_seconds": 180,
+      "max_retries": 2,
+      "reasoning_effort": "low",
+      "prompt_cache_retention": "24h",
+      "service_tier": "auto",
+      "max_output_tokens": 0
+    },
+    "openai_judge": {
+      "provider": "openai_compatible",
+      "model": "gpt-5.4",
+      "base_url": "https://api.openai.com/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "temperature": 0.0,
+      "timeout_seconds": 180,
+      "max_retries": 2,
+      "reasoning_effort": "low",
+      "prompt_cache_retention": "24h",
+      "service_tier": "auto",
+      "max_output_tokens": 0
+    }
+  },
+  "metrics": [
+    {
+      "name": "unit-tests",
+      "kind": "tests",
+      "command": "./mvnw -q -DskipITs test",
+      "weight": 1.0,
+      "value_regex": "Tests run: ([0-9]+), Failures: [0-9]+, Errors: [0-9]+, Skipped: [0-9]+",
+      "scale": 100.0,
+      "working_directory": ".",
+      "description": "Executa os testes unitários após a geração"
+    }
+  ]
+}
