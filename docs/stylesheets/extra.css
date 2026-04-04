@@ -161,7 +161,13 @@
 
 @media screen and (max-width: 44.9375em) {
   .md-tabs {
-    display: block;
+    display: block !important;
+    position: sticky;
+    top: var(--md-header-height);
+    z-index: 3;
+    visibility: visible !important;
+    opacity: 1 !important;
+    transform: none !important;
     overflow-x: auto;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
