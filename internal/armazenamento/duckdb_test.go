@@ -491,6 +491,125 @@ func TestGerarGraficosExecucaoMaterializaArquivosFallback(t *testing.T) {
 	}
 }
 
+func TestExportarHistoricoExecucaoParquetMaterializaArquivos(t *testing.T) {
+	tempDir := t.TempDir()
+	banco, err := AbrirBancoDuckDB(filepath.Join(tempDir, "witup.duckdb"))
+	if err != nil {
+		t.Fatalf("abrir DuckDB: %v", err)
+	}
+	defer banco.Fechar()
+
+	comparacao := map[string]interface{}{
+		"run_id":       "run-history",
+		"generated_at": "2026-04-01T12:01:00Z",
+		"summary": map[string]interface{}{
+			"witup_method_count":      1,
+			"llm_method_count":        1,
+			"methods_in_both":         1,
+			"methods_only_witup":      0,
+			"methods_only_llm":        0,
+			"witup_expath_count":      1,
+			"llm_expath_count":        1,
+			"shared_expath_count":     1,
+			"witup_only_expath_count": 0,
+			"llm_only_expath_count":   0,
+		},
+		"metrics": map[string]interface{}{
+			"llm_method_coverage_over_witup": 100.0,
+			"llm_expath_coverage_over_witup": 100.0,
+			"llm_structural_precision":       100.0,
+			"expath_jaccard_index":           100.0,
+			"llm_novelty_rate":               0.0,
+		},
+		"methods": []interface{}{
+			map[string]interface{}{
+				"unit": map[string]interface{}{
+					"class_name":       "sample.Example",
+					"method_signature": "sample.Example.run(java.lang.String)",
+					"exception_type":   "NullPointerException",
+				},
+				"witup_expath_count":    1,
+				"llm_expath_count":      1,
+				"shared_expath_count":   1,
+				"witup_only_expath_ids": []interface{}{},
+				"llm_only_expath_ids":   []interface{}{},
+			},
+		},
+	}
+	if err := banco.RegistrarArtefatoExecucao("run-history", "comparacao_fontes", "sample", "", "/tmp/comparacao.json", "2026-04-01T12:01:00Z", comparacao); err != nil {
+		t.Fatalf("registrar comparacao: %v", err)
+	}
+
+	estudo := map[string]interface{}{
+		"run_id":       "run-history",
+		"generated_at": "2026-04-01T12:02:00Z",
+		"project_key":  "sample",
+		"variants": []interface{}{
+			map[string]interface{}{
+				"variant":         "WITUP_ONLY",
+				"analysis_path":   "/tmp/witup.analysis.json",
+				"method_count":    1,
+				"expath_count":    1,
+				"generation_path": "/tmp/witup.generation.json",
+				"test_file_count": 1,
+				"evaluation_path": "/tmp/witup.evaluation.json",
+				"metric_results": []interface{}{
+					map[string]interface{}{
+						"name":             "coverage",
+						"kind":             "coverage",
+						"success":          true,
+						"numeric_value":    75.0,
+						"normalized_score": 75.0,
+						"weight":           1.0,
+						"description":      "Cobertura",
+					},
+				},
+				"metric_score":   75.0,
+				"combined_score": 75.0,
+				"derived_metrics": map[string]interface{}{
+					"test_files_per_method": 1.0,
+					"test_files_per_expath": 1.0,
+					"metric_success_rate":   100.0,
+				},
+			},
+		},
+		"suite_comparison": map[string]interface{}{
+			"best_variant_by_metric_score":   "WITUP_ONLY",
+			"best_variant_by_combined_score": "WITUP_ONLY",
+		},
+	}
+	if err := banco.RegistrarArtefatoExecucao("run-history", "estudo_completo", "sample", "", "/tmp/estudo.json", "2026-04-01T12:02:00Z", estudo); err != nil {
+		t.Fatalf("registrar estudo: %v", err)
+	}
+
+	resumo, err := banco.ExportarHistoricoExecucaoParquet("run-history", "sample", filepath.Join(tempDir, "historico", "sample", "run-history"))
+	if err != nil {
+		t.Fatalf("exportar histórico parquet: %v", err)
+	}
+	if len(resumo.ArquivosGerados) < 4 {
+		t.Fatalf("esperava múltiplos arquivos parquet, recebi %d", len(resumo.ArquivosGerados))
+	}
+
+	for _, caminho := range resumo.ArquivosGerados {
+		info, err := os.Stat(caminho)
+		if err != nil {
+			t.Fatalf("esperava arquivo parquet materializado %q: %v", caminho, err)
+		}
+		if info.Size() == 0 {
+			t.Fatalf("arquivo parquet vazio: %s", caminho)
+		}
+	}
+
+	var total int
+	consulta := fmt.Sprintf("SELECT COUNT(*) FROM read_parquet('%s')", escaparLiteralSQL(filepath.Join(resumo.Diretorio, "comparacao_fontes_resumo.parquet")))
+	if err := banco.db.QueryRow(consulta).Scan(&total); err != nil {
+		t.Fatalf("ler parquet exportado: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("esperava 1 linha no parquet de comparação, recebi %d", total)
+	}
+}
+
 func TestListarObjetosEVisualizarObjeto(t *testing.T) {
 	tempDir := t.TempDir()
 	banco, err := AbrirBancoDuckDB(filepath.Join(tempDir, "witup.duckdb"))

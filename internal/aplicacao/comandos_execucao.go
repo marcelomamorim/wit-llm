@@ -198,6 +198,7 @@ func executarExperimento(args []string, service *Servico) int {
 	fmt.Printf("Cobertura métodos LLM : %s\n", metricas.FormatarPontuacao(result.RelatorioComparacao.Metricas.TaxaCoberturaMetodosLLMSobreWITUP))
 	fmt.Printf("Cobertura expaths LLM : %s\n", metricas.FormatarPontuacao(result.RelatorioComparacao.Metricas.TaxaCoberturaExpathsLLMSobreWITUP))
 	fmt.Printf("Jaccard expaths       : %s\n", metricas.FormatarPontuacao(result.RelatorioComparacao.Metricas.IndiceJaccardExpaths))
+	fmt.Printf("Histórico Parquet     : %s\n", result.DiretorioHistorico)
 	imprimirResumoObservabilidade(*configPath, cfg, result.EspacoTrabalho)
 	return 0
 }
@@ -248,6 +249,7 @@ func executarEstudoCompleto(args []string, service *Servico) int {
 	fmt.Printf("Caminho da comparação : %s\n", result.CaminhoComparacao)
 	fmt.Printf("Caminho do estudo     : %s\n", result.CaminhoEstudoCompleto)
 	fmt.Printf("Gráficos do estudo    : %s\n", result.DiretorioGraficos)
+	fmt.Printf("Histórico Parquet     : %s\n", result.DiretorioHistorico)
 	fmt.Printf("Rastreios de agentes  : %s\n", result.CaminhoRelatorioRastreio)
 	fmt.Printf("Métodos em comum      : %d\n", result.RelatorioComparacao.Resumo.MetodosEmAmbos)
 	fmt.Printf("Variantes avaliadas   : %d\n", len(result.ResultadosVariantes))

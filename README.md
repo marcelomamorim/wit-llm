@@ -236,7 +236,8 @@ O script já executa:
 6. geração de testes por variante;
 7. avaliação das suítes geradas por variante;
 8. geração automática de gráficos textuais a partir do DuckDB;
-9. persistência do estudo completo e índices no DuckDB.
+9. persistência do estudo completo e índices no DuckDB;
+10. exportação histórica da execução em arquivos `.parquet` dentro de `historico/`.
 
 Variáveis opcionais úteis:
 
@@ -433,6 +434,9 @@ Cada execução gera artefatos em disco:
 - `responses/`
 
 O DuckDB funciona como camada persistente de consulta e índice, sem substituir os artefatos brutos.
+
+Além disso, cada rodada de experimento também exporta snapshots analíticos em
+`.parquet` para [`historico/`](historico), separados por projeto e `run_id`.
 
 ## Como reproduzir os testes
 

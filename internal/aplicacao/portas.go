@@ -87,6 +87,7 @@ type ArmazenamentoAnalitico interface {
 	CarregarRelatorioBaseline(chaveProjeto, nomeArquivo string) (dominio.RelatorioAnalise, string, error)
 	ImportarBaselineProjeto(chaveProjeto, caminhoBaseline, nomeArquivo string) (bool, bool, error)
 	GerarGraficosExecucao(idExecucao, diretorioSaida string) (armazenamento.ResumoGraficos, error)
+	ExportarHistoricoExecucaoParquet(idExecucao, chaveProjeto, diretorioSaida string) (armazenamento.ResumoHistoricoParquet, error)
 	Fechar() error
 }
 
