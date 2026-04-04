@@ -61,6 +61,16 @@ O fluxo principal é:
 6. materializar `WITUP_PLUS_LLM`;
 7. registrar os artefatos gerados no DuckDB para consulta posterior.
 
+## Referências bibliográficas
+
+Esta lista resume alguns dos trabalhos mais diretamente relacionados ao
+protocolo experimental e à baseline usada neste repositório. Ela não pretende
+ser exaustiva e pode crescer conforme a pesquisa evoluir.
+
+1. Diego Marcilio, Carlo A. Furia. *Lightweight precise automatic extraction of exception preconditions in java methods*. Empirical Software Engineering, 29, artigo 30, 2024. DOI: [10.1007/s10664-023-10392-x](https://doi.org/10.1007/s10664-023-10392-x)
+2. Diego Marcilio, Carlo A. Furia. *What Is Thrown? Lightweight Precise Automatic Extraction of Exception Preconditions in Java Methods*. In: Proceedings of the 38th IEEE International Conference on Software Maintenance and Evolution (ICSME 2022), pp. 340-351. DOI: [10.1109/ICSME55016.2022.00038](https://doi.org/10.1109/ICSME55016.2022.00038)
+3. Diego Marcilio, Carlo A. Furia. *How Java Programmers Test Exceptional Behavior*. In: Proceedings of the 18th IEEE/ACM International Conference on Mining Software Repositories (MSR 2021), pp. 207-218. DOI: [10.1109/MSR52588.2021.00033](https://doi.org/10.1109/MSR52588.2021.00033)
+
 ## Stack
 
 - Go 1.24+
@@ -236,7 +246,8 @@ O script já executa:
 6. geração de testes por variante;
 7. avaliação das suítes geradas por variante;
 8. geração automática de gráficos textuais a partir do DuckDB;
-9. persistência do estudo completo e índices no DuckDB.
+9. persistência do estudo completo e índices no DuckDB;
+10. exportação histórica da execução em arquivos `.parquet` dentro de `historico/`.
 
 Variáveis opcionais úteis:
 
@@ -433,6 +444,9 @@ Cada execução gera artefatos em disco:
 - `responses/`
 
 O DuckDB funciona como camada persistente de consulta e índice, sem substituir os artefatos brutos.
+
+Além disso, cada rodada de experimento também exporta snapshots analíticos em
+`.parquet` para [`historico/`](historico), separados por projeto e `run_id`.
 
 ## Como reproduzir os testes
 

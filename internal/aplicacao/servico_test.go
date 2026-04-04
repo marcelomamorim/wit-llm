@@ -436,6 +436,75 @@ func TestPrepararSandboxAvaliacaoIsolaTestes(t *testing.T) {
 	}
 }
 
+func TestPrepararSandboxAvaliacaoSanitizaPomParaMetricas(t *testing.T) {
+	tempDir := t.TempDir()
+	projetoRaiz := filepath.Join(tempDir, "projeto")
+	if err := os.MkdirAll(filepath.Join(projetoRaiz, "src/main/java/com/example"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pom := `<project>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.sonatype.plugins</groupId>
+        <artifactId>nexus-staging-maven-plugin</artifactId>
+        <extensions>true</extensions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-release-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-gpg-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+  <distributionManagement>
+    <repository><id>ossrh</id></repository>
+  </distributionManagement>
+</project>`
+	if err := os.WriteFile(filepath.Join(projetoRaiz, "pom.xml"), []byte(pom), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &dominio.ConfigAplicacao{
+		Projeto: dominio.ConfigProjeto{Raiz: projetoRaiz},
+		Fluxo:   dominio.ConfigFluxo{DiretorioSaida: filepath.Join(tempDir, "generated")},
+	}
+	workspace, err := artefatos.NovoEspacoTrabalho(cfg.Fluxo.DiretorioSaida, "sandbox-pom")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raizSandbox, err := prepararSandboxAvaliacao(cfg, workspace)
+	if err != nil {
+		t.Fatalf("prepararSandboxAvaliacao falhou: %v", err)
+	}
+	dados, err := os.ReadFile(filepath.Join(raizSandbox, "pom.xml"))
+	if err != nil {
+		t.Fatalf("ler pom da sandbox: %v", err)
+	}
+	texto := string(dados)
+	for _, removido := range []string{
+		"nexus-staging-maven-plugin",
+		"maven-release-plugin",
+		"maven-gpg-plugin",
+		"<distributionManagement>",
+	} {
+		if strings.Contains(texto, removido) {
+			t.Fatalf("pom sanitizado ainda contém %q", removido)
+		}
+	}
+	if !strings.Contains(texto, "maven-compiler-plugin") {
+		t.Fatal("pom sanitizado deveria preservar plugins necessários à compilação")
+	}
+}
+
 // TestPrepararSandboxAvaliacaoMultiModulo verifica o cenário de projeto Maven
 // com layout não-padrão de testes (ex: módulos aninhados).
 func TestPrepararSandboxAvaliacaoMultiModulo(t *testing.T) {

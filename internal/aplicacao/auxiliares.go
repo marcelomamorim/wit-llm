@@ -302,6 +302,50 @@ func registrarArtefatoNoBanco(
 	)
 }
 
+// resolverDiretorioHistorico identifica onde a execução deve materializar os
+// snapshots históricos em Parquet. Quando a saída fica sob `generated/`, o
+// histórico é promovido para um diretório irmão chamado `historico/`.
+func resolverDiretorioHistorico(cfg *dominio.ConfigAplicacao) string {
+	diretorioSaida := strings.TrimSpace(cfg.Fluxo.DiretorioSaida)
+	if diretorioSaida == "" {
+		return "historico"
+	}
+
+	atual := filepath.Clean(diretorioSaida)
+	for {
+		if filepath.Base(atual) == "generated" {
+			return filepath.Join(filepath.Dir(atual), "historico")
+		}
+		proximo := filepath.Dir(atual)
+		if proximo == atual {
+			break
+		}
+		atual = proximo
+	}
+	return filepath.Join(diretorioSaida, "historico")
+}
+
+// exportarHistoricoParquet grava snapshots em Parquet para preservar uma visão
+// estável dos resultados analíticos de cada execução.
+func exportarHistoricoParquet(
+	cfg *dominio.ConfigAplicacao,
+	idExecucao string,
+	chaveProjeto string,
+) (armazenamento.ResumoHistoricoParquet, error) {
+	banco, err := abrirBancoAnalitico(cfg)
+	if err != nil {
+		return armazenamento.ResumoHistoricoParquet{}, err
+	}
+	defer banco.Fechar()
+
+	diretorioHistorico := filepath.Join(
+		resolverDiretorioHistorico(cfg),
+		artefatos.Slugificar(chaveProjeto),
+		idExecucao,
+	)
+	return banco.ExportarHistoricoExecucaoParquet(idExecucao, chaveProjeto, diretorioHistorico)
+}
+
 // imprimirResumoObservabilidade mostra onde acompanhar logs, artefatos e banco.
 func imprimirResumoObservabilidade(configPath string, cfg *dominio.ConfigAplicacao, raizExecucao string) {
 	if strings.TrimSpace(raizExecucao) != "" {

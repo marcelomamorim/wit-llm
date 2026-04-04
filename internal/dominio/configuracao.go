@@ -59,14 +59,15 @@ type OpcoesRequisicaoLLM struct {
 
 // ConfigMetrica define um comando executável de métrica.
 type ConfigMetrica struct {
-	Nome              string  `json:"name"`
-	Tipo              string  `json:"kind"`
-	Comando           string  `json:"command"`
-	Peso              float64 `json:"weight"`
-	RegexValor        string  `json:"value_regex"`
-	Escala            float64 `json:"scale"`
-	DiretorioTrabalho string  `json:"working_directory"`
-	Descricao         string  `json:"description"`
+	Nome              string   `json:"name"`
+	Tipo              string   `json:"kind"`
+	Comando           string   `json:"command"`
+	Peso              float64  `json:"weight"`
+	RegexValor        string   `json:"value_regex"`
+	Escala            float64  `json:"scale"`
+	DiretorioTrabalho string   `json:"working_directory"`
+	SaidasEsperadas   []string `json:"expected_outputs"`
+	Descricao         string   `json:"description"`
 }
 
 // ConfigAplicacao representa a configuração raiz da aplicação.

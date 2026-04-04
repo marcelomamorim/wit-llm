@@ -38,6 +38,7 @@ type ResultadoExecucao struct {
 // comparação entre fontes.
 type ResultadoExecucaoExperimento struct {
 	EspacoTrabalho       string
+	DiretorioHistorico   string
 	CaminhoAnaliseWITUP  string
 	CaminhoAnaliseLLM    string
 	CaminhoComparacao    string
@@ -54,6 +55,7 @@ type ResultadoExecucaoEstudoCompleto struct {
 	CaminhoExperimento       string
 	CaminhoEstudoCompleto    string
 	DiretorioGraficos        string
+	DiretorioHistorico       string
 	RelatorioExperimento     dominio.RelatorioExperimento
 	RelatorioComparacao      dominio.RelatorioComparacaoFontes
 	RelatorioEstudoCompleto  dominio.RelatorioEstudoCompleto
@@ -307,10 +309,15 @@ func (s *Servico) ExecutarExperimento(cfg *dominio.ConfigAplicacao, chaveProjeto
 	if err := registrarArtefatoNoBanco(cfg, report.IDExecucao, "experimento", chaveProjeto, "", reportPath, report.GeradoEm, report); err != nil {
 		return ResultadoExecucaoExperimento{}, err
 	}
+	resumoHistorico, err := exportarHistoricoParquet(cfg, report.IDExecucao, chaveProjeto)
+	if err != nil {
+		return ResultadoExecucaoExperimento{}, err
+	}
 	registro.Info("pipeline", "experimento concluído: comparação=%s variantes=%d raiz=%s", comparisonPath, len(variantArtifacts), workspace.Raiz)
 
 	return ResultadoExecucaoExperimento{
 		EspacoTrabalho:       workspace.Raiz,
+		DiretorioHistorico:   resumoHistorico.Diretorio,
 		CaminhoAnaliseWITUP:  witupPath,
 		CaminhoAnaliseLLM:    llmPath,
 		CaminhoComparacao:    comparisonPath,
@@ -478,13 +485,18 @@ func (s *Servico) ExecutarEstudoCompleto(
 	if err != nil {
 		return ResultadoExecucaoEstudoCompleto{}, err
 	}
+	resumoHistorico, err := exportarHistoricoParquet(cfg, relatorioEstudo.IDExecucao, chaveProjeto)
+	if err != nil {
+		return ResultadoExecucaoEstudoCompleto{}, err
+	}
 
 	registro.Info(
 		"pipeline",
-		"estudo completo concluído: estudo=%s variantes=%d gráficos=%s textplot=%t",
+		"estudo completo concluído: estudo=%s variantes=%d gráficos=%s histórico=%s textplot=%t",
 		caminhoEstudo,
 		len(resultadosVariantes),
 		resumoGraficos.Diretorio,
+		resumoHistorico.Diretorio,
 		resumoGraficos.UsouTextplot,
 	)
 
@@ -493,6 +505,7 @@ func (s *Servico) ExecutarEstudoCompleto(
 		CaminhoExperimento:       filepath.Join(resultadoExperimento.EspacoTrabalho, "experimento.json"),
 		CaminhoEstudoCompleto:    caminhoEstudo,
 		DiretorioGraficos:        resumoGraficos.Diretorio,
+		DiretorioHistorico:       resumoHistorico.Diretorio,
 		RelatorioExperimento:     resultadoExperimento.RelatorioExperimento,
 		RelatorioComparacao:      resultadoExperimento.RelatorioComparacao,
 		RelatorioEstudoCompleto:  relatorioEstudo,

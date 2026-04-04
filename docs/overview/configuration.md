@@ -61,9 +61,9 @@ Define como o codigo gerado e avaliado.
 | :--- | :--- | :--- |
 | `name` | `string` | Identificador unico (ex: `jacoco-line-coverage`) |
 | `kind` | `string` | Tipo: `tests`, `coverage` ou `mutation` |
-| `command` | `string` | Comando shell (suporta placeholders como `${TARGET_CLASSES}`) |
+| `command` | `string` | Comando shell executado na sandbox do projeto |
 | `value_regex` | `string` | Regex para extrair o valor do resultado |
-| `value_file` | `string` | Arquivo para ler em vez de stdout (ex: `index.html`) |
+| `expected_outputs` | `string[]` | Arquivos ou diretorios que precisam existir para a metrica ser considerada valida |
 | `weight` | `float` | Peso na pontuacao agregada |
 
 ## Mapeamento Configuracao-Entidade

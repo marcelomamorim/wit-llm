@@ -55,39 +55,40 @@
       "value_regex": "Tests run: ([0-9]+), Failures: [0-9]+, Errors: [0-9]+, Skipped: [0-9]+",
       "scale": 100.0,
       "working_directory": ".",
+      "expected_outputs": ["target/surefire-reports"],
       "description": "Executa os testes unitários após a geração"
     },
     {
       "name": "jacoco-line-coverage",
       "kind": "coverage",
-      "command": "./mvnw -q jacoco:report",
+      "command": "./mvnw -q org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.12:report && ./bin/witup extrair-jacoco --xml target/site/jacoco/jacoco.xml --counter LINE",
       "weight": 1.0,
-      "value_regex": "Total.*?([0-9]+)%",
-      "value_file": "target/site/jacoco/index.html",
+      "value_regex": "([0-9]+(?:\\\\.[0-9]+)?)",
       "scale": 100.0,
       "working_directory": ".",
+      "expected_outputs": ["target/site/jacoco/jacoco.xml"],
       "description": "Cobertura de linhas via JaCoCo (requer plugin no pom.xml do projeto-alvo)"
     },
     {
       "name": "jacoco-branch-coverage",
       "kind": "coverage",
-      "command": "",
+      "command": "./mvnw -q org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.12:report && ./bin/witup extrair-jacoco --xml target/site/jacoco/jacoco.xml --counter BRANCH",
       "weight": 1.0,
-      "value_regex": "Cov.*?([0-9]+)%",
-      "value_file": "target/site/jacoco/index.html",
+      "value_regex": "([0-9]+(?:\\\\.[0-9]+)?)",
       "scale": 100.0,
       "working_directory": ".",
+      "expected_outputs": ["target/site/jacoco/jacoco.xml"],
       "description": "Cobertura de branches via JaCoCo (extraída do mesmo relatório de linhas)"
     },
     {
       "name": "pit-mutation-score",
       "kind": "mutation",
-      "command": "./mvnw -q org.pitest:pitest-maven:mutationCoverage -DtargetClasses='${TARGET_CLASSES}' -DtargetTests='${TARGET_TESTS}'",
+      "command": "./mvnw -q -DtimestampedReports=false -DoutputFormats=XML org.pitest:pitest-maven:mutationCoverage && ./bin/witup extrair-pit --report-dir target/pit-reports",
       "weight": 1.0,
-      "value_regex": ">> Line Coverage:.*?([0-9]+)%.*?>> Mutation Coverage:.*?([0-9]+)%",
-      "value_file": "target/pit-reports/index.html",
+      "value_regex": "([0-9]+(?:\\\\.[0-9]+)?)",
       "scale": 100.0,
       "working_directory": ".",
+      "expected_outputs": ["target/pit-reports/mutations.xml"],
       "description": "Mutation score via PIT (requer plugin pitest-maven no pom.xml do projeto-alvo)"
     }
   ]
