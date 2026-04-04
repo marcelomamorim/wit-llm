@@ -112,7 +112,7 @@ func (b *BancoDuckDB) garantirEsquema() error {
 			id_execucao VARCHAR NOT NULL,
 			tipo_artefato VARCHAR NOT NULL,
 			chave_projeto VARCHAR,
-			variante VARCHAR,
+			variante VARCHAR NOT NULL DEFAULT '',
 			caminho_arquivo VARCHAR NOT NULL,
 			gerado_em TIMESTAMP NOT NULL,
 			payload_json VARCHAR NOT NULL,
@@ -437,6 +437,11 @@ func (b *BancoDuckDB) garantirEsquema() error {
 			return fmt.Errorf("ao preparar o schema do DuckDB: %w", err)
 		}
 	}
+
+	// Migração: converter NULLs em variante para string vazia em bancos existentes
+	// e garantir que a coluna tenha DEFAULT '' para futuras inserções.
+	_, _ = b.db.Exec(`UPDATE artefatos_execucao SET variante = '' WHERE variante IS NULL`)
+
 	return nil
 }
 
@@ -673,7 +678,7 @@ func (b *BancoDuckDB) RegistrarArtefatoExecucao(
 		idExecucao,
 		tipoArtefato,
 		nullIfBlank(chaveProjeto),
-		nullIfBlank(variante),
+		variante,
 		caminhoArquivo,
 		momento,
 		string(payloadJSON),
