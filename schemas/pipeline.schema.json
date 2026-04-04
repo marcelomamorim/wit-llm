@@ -73,6 +73,10 @@
           "value_regex": {"type": "string"},
           "scale": {"type": "number", "minimum": 0},
           "working_directory": {"type": "string"},
+          "expected_outputs": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
           "description": {"type": "string"}
         }
       }

@@ -68,7 +68,7 @@ func TestExecutarMetricaCapturaSaidaECodigoDeErro(t *testing.T) {
 
 	falha := executor.ExecutarMetrica(dominio.ConfigMetrica{
 		Nome:       "pit",
-		Comando:    "echo 'mutation failed' 1>&2; exit 7",
+		Comando:    "echo 'mutation failed 42' 1>&2; exit 7",
 		RegexValor: `([0-9.]+)`,
 		Escala:     100,
 		Peso:       1,
@@ -77,7 +77,10 @@ func TestExecutarMetricaCapturaSaidaECodigoDeErro(t *testing.T) {
 		t.Fatalf("esperava falha com exit code 7, recebi %#v", falha)
 	}
 	if falha.ValorNumerico != nil {
-		t.Fatalf("não esperava valor numérico em falha sem regex compatível: %#v", falha.ValorNumerico)
+		t.Fatalf("não esperava valor numérico em falha: %#v", falha.ValorNumerico)
+	}
+	if falha.NotaNormalizada != nil {
+		t.Fatalf("não esperava nota normalizada em falha: %#v", falha.NotaNormalizada)
 	}
 }
 
@@ -100,11 +103,14 @@ func TestRenderizarComandoEFormatarPontuacao(t *testing.T) {
 }
 
 func TestInterpretarValorNumericoENormalizarNotaLidamComBordas(t *testing.T) {
-	if valor := interpretarValorNumerico(`valor=([0-9.]+)%`, "valor=12.5%", ""); valor == nil || *valor != 12.5 {
+	if valor := interpretarValorNumerico(`valor=([0-9.]+)%`, "valor=12.5%", true); valor == nil || *valor != 12.5 {
 		t.Fatalf("valor interpretado inesperado: %#v", valor)
 	}
-	if interpretarValorNumerico("(", "x", "y") != nil {
+	if interpretarValorNumerico("(", "x", true) != nil {
 		t.Fatalf("regex inválida deveria retornar nil")
+	}
+	if interpretarValorNumerico(`valor=([0-9.]+)`, "valor=99", false) != nil {
+		t.Fatalf("falhas não devem produzir valor numérico")
 	}
 	negativo := -10.0
 	if nota := normalizarNota(&negativo, 100); nota == nil || *nota != 0 {
@@ -183,16 +189,16 @@ func TestAgregarPontuacaoIgnoraNilERetornaNilSemNotas(t *testing.T) {
 }
 
 func TestInterpretarValorNumericoCobreCantos(t *testing.T) {
-	if interpretarValorNumerico("", "10", "") != nil {
+	if interpretarValorNumerico("", "10", true) != nil {
 		t.Fatalf("regex vazia deveria retornar nil")
 	}
-	if interpretarValorNumerico(`valor=[0-9.]+`, "valor=10", "") != nil {
+	if interpretarValorNumerico(`valor=[0-9.]+`, "valor=10", true) != nil {
 		t.Fatalf("regex sem grupo de captura deveria retornar nil")
 	}
-	if interpretarValorNumerico(`valor=(.+)`, "valor=abc", "") != nil {
+	if interpretarValorNumerico(`valor=(.+)`, "valor=abc", true) != nil {
 		t.Fatalf("valor não numérico deveria retornar nil")
 	}
-	if interpretarValorNumerico(`valor=([0-9.]+)`, "sem match", "") != nil {
+	if interpretarValorNumerico(`valor=([0-9.]+)`, "sem match", true) != nil {
 		t.Fatalf("sem correspondência deveria retornar nil")
 	}
 }
@@ -222,5 +228,54 @@ func TestNormalizarNotaECombinarPontuacoesCobremFallbacks(t *testing.T) {
 	}
 	if combinado := CombinarPontuacoes(nil, ponteiroFloat(20)); combinado == nil || *combinado != 20 {
 		t.Fatalf("nota combinada deveria cair para juiz: %#v", combinado)
+	}
+}
+
+func TestExecutarMetricaExigeArtefatoEsperado(t *testing.T) {
+	executor := NovoExecutor()
+	ctx := ContextoExecucao{RaizProjeto: t.TempDir()}
+
+	resultado := executor.ExecutarMetrica(dominio.ConfigMetrica{
+		Nome:            "jacoco",
+		Comando:         "printf '88.2'",
+		RegexValor:      `([0-9.]+)`,
+		Escala:          100,
+		SaidasEsperadas: []string{"target/site/jacoco/jacoco.xml"},
+	}, ctx)
+	if resultado.Sucesso {
+		t.Fatalf("esperava falha quando o artefato esperado não existe")
+	}
+	if resultado.ValorNumerico != nil || resultado.NotaNormalizada != nil {
+		t.Fatalf("não deveria pontuar métrica sem artefato esperado: %#v", resultado)
+	}
+	if !strings.Contains(resultado.SaidaErro, "artefato esperado não encontrado") {
+		t.Fatalf("esperava mensagem sobre artefato esperado, recebi %q", resultado.SaidaErro)
+	}
+}
+
+func TestExecutarMetricaPontuaComArtefatoEsperadoPresente(t *testing.T) {
+	raiz := t.TempDir()
+	arquivo := filepath.Join(raiz, "target", "site", "jacoco", "jacoco.xml")
+	if err := os.MkdirAll(filepath.Dir(arquivo), 0o755); err != nil {
+		t.Fatalf("mkdir artefato esperado: %v", err)
+	}
+	if err := os.WriteFile(arquivo, []byte("<report/>"), 0o644); err != nil {
+		t.Fatalf("write artefato esperado: %v", err)
+	}
+
+	executor := NovoExecutor()
+	ctx := ContextoExecucao{RaizProjeto: raiz}
+	resultado := executor.ExecutarMetrica(dominio.ConfigMetrica{
+		Nome:            "jacoco",
+		Comando:         "printf '88.2'",
+		RegexValor:      `([0-9.]+)`,
+		Escala:          100,
+		SaidasEsperadas: []string{"target/site/jacoco/jacoco.xml"},
+	}, ctx)
+	if !resultado.Sucesso {
+		t.Fatalf("esperava sucesso com artefato esperado presente: %#v", resultado)
+	}
+	if resultado.ValorNumerico == nil || *resultado.ValorNumerico != 88.2 {
+		t.Fatalf("valor numérico inesperado: %#v", resultado.ValorNumerico)
 	}
 }

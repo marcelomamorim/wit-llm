@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="witup-doc-shell{% if page.is_homepage %} witup-doc-shell--home{% endif %}">
+    {{ super() }}
+  </div>
+{% endblock %}

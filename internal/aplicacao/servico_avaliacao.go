@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -210,5 +211,55 @@ func prepararSandboxAvaliacao(cfg *dominio.ConfigAplicacao, workspace *artefatos
 	if err := artefatos.CopiarDiretorioNoDestino(workspace.Testes, raizSandbox); err != nil {
 		return "", fmt.Errorf("ao injetar os testes gerados na sandbox de avaliação: %w", err)
 	}
+	if err := prepararProjetoMavenParaAvaliacao(raizSandbox); err != nil {
+		return "", fmt.Errorf("ao preparar o projeto Maven na sandbox de avaliação: %w", err)
+	}
 	return raizSandbox, nil
+}
+
+// prepararProjetoMavenParaAvaliacao remove extensões e plugins de release que
+// não participam da execução das métricas, mas podem impedir builds locais da
+// sandbox por exigirem credenciais ou repositórios extras.
+func prepararProjetoMavenParaAvaliacao(raizSandbox string) error {
+	caminhoPOM := filepath.Join(raizSandbox, "pom.xml")
+	dados, err := os.ReadFile(caminhoPOM)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("ao ler pom.xml da sandbox: %w", err)
+	}
+
+	conteudoOriginal := string(dados)
+	conteudoAjustado := conteudoOriginal
+	for _, artifactID := range []string{
+		"nexus-staging-maven-plugin",
+		"maven-gpg-plugin",
+		"maven-release-plugin",
+	} {
+		conteudoAjustado = removerPluginMaven(conteudoAjustado, artifactID)
+	}
+	conteudoAjustado = removerBlocoXML(conteudoAjustado, "distributionManagement")
+
+	if conteudoAjustado == conteudoOriginal {
+		return nil
+	}
+	if err := os.WriteFile(caminhoPOM, []byte(conteudoAjustado), 0o644); err != nil {
+		return fmt.Errorf("ao reescrever pom.xml sanitizado na sandbox: %w", err)
+	}
+	return nil
+}
+
+// removerPluginMaven elimina plugins específicos do POM quando a execução de
+// avaliação precisa ignorar etapas de release/deploy.
+func removerPluginMaven(conteudo, artifactID string) string {
+	padrao := fmt.Sprintf(`(?s)<plugin>\s*.*?<artifactId>\s*%s\s*</artifactId>.*?</plugin>`, regexp.QuoteMeta(artifactID))
+	return regexp.MustCompile(padrao).ReplaceAllString(conteudo, "")
+}
+
+// removerBlocoXML apaga blocos simples do POM que não influenciam compilação
+// ou execução dos testes durante a avaliação.
+func removerBlocoXML(conteudo, nome string) string {
+	padrao := fmt.Sprintf(`(?s)<%s>\s*.*?</%s>`, regexp.QuoteMeta(nome), regexp.QuoteMeta(nome))
+	return regexp.MustCompile(padrao).ReplaceAllString(conteudo, "")
 }

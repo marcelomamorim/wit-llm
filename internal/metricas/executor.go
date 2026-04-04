@@ -2,6 +2,7 @@ package metricas
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -64,7 +65,17 @@ func (r *Executor) ExecutarMetrica(metric dominio.ConfigMetrica, ctx ContextoExe
 	}
 	saidaPadrao := string(saidaPadraoBytes)
 
-	valorNumerico := interpretarValorNumerico(metric.RegexValor, saidaPadrao, saidaErro)
+	if codigoSaida == 0 {
+		if err := validarSaidasEsperadas(metric.SaidasEsperadas, diretorioTrabalho); err != nil {
+			codigoSaida = 1
+			if saidaErro != "" {
+				saidaErro += "\n"
+			}
+			saidaErro += err.Error()
+		}
+	}
+
+	valorNumerico := interpretarValorNumerico(metric.RegexValor, saidaPadrao, codigoSaida == 0)
 	notaNormalizada := normalizarNota(valorNumerico, metric.Escala)
 
 	resultado := dominio.ResultadoMetrica{
@@ -115,17 +126,19 @@ func renderizarComando(template string, ctx ContextoExecucao) string {
 	return substituidor.Replace(template)
 }
 
-// interpretarValorNumerico extrai um valor numérico da saída usando regex configurada.
-func interpretarValorNumerico(regexValor, stdout, stderr string) *float64 {
-	if strings.TrimSpace(regexValor) == "" {
+// interpretarValorNumerico extrai um valor numérico da saída padrão usando regex configurada.
+//
+// A extração só acontece quando o comando foi concluído com sucesso. Isso evita
+// contaminar métricas com números acidentais presentes em logs de erro.
+func interpretarValorNumerico(regexValor, stdout string, comandoBemSucedido bool) *float64 {
+	if strings.TrimSpace(regexValor) == "" || !comandoBemSucedido {
 		return nil
 	}
 	regex, err := regexp.Compile(regexValor)
 	if err != nil {
 		return nil
 	}
-	saidaCombinada := stdout + "\n" + stderr
-	grupos := regex.FindStringSubmatch(saidaCombinada)
+	grupos := regex.FindStringSubmatch(stdout)
 	if len(grupos) < 2 {
 		return nil
 	}
@@ -135,6 +148,32 @@ func interpretarValorNumerico(regexValor, stdout, stderr string) *float64 {
 		return nil
 	}
 	return &valor
+}
+
+// validarSaidasEsperadas garante que arquivos ou diretórios prometidos pela
+// métrica realmente foram materializados antes de pontuar o resultado.
+func validarSaidasEsperadas(saidas []string, diretorioTrabalho string) error {
+	for _, caminho := range saidas {
+		caminho = strings.TrimSpace(caminho)
+		if caminho == "" {
+			continue
+		}
+		absoluto := caminho
+		if !filepath.IsAbs(absoluto) {
+			absoluto = filepath.Join(diretorioTrabalho, caminho)
+		}
+		info, err := os.Stat(absoluto)
+		if err != nil {
+			return fmt.Errorf("artefato esperado não encontrado: %s", absoluto)
+		}
+		if info.IsDir() {
+			continue
+		}
+		if info.Size() == 0 {
+			return fmt.Errorf("artefato esperado vazio: %s", absoluto)
+		}
+	}
+	return nil
 }
 
 // normalizarNota converte um valor bruto para a escala percentual do projeto.
