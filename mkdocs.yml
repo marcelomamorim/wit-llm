@@ -1,0 +1,92 @@
+site_name: witup-llm
+site_url: https://marcelomamorim.github.io/witup-llm/
+site_description: >-
+  CLI em Go para pesquisa sobre geração e validação de exception paths em projetos Java.
+  Compara abordagens de análise estática (WITUP) com Large Language Models (LLM).
+
+repo_name: marcelomamorim/witup-llm
+repo_url: https://github.com/marcelomamorim/witup-llm
+
+theme:
+  name: material
+  language: pt-BR
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Modo escuro
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Modo claro
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Inicio: index.md
+  - Visao Geral:
+    - Introducao: overview/index.md
+    - Primeiros Passos: overview/getting-started.md
+    - Referencia de Configuracao: overview/configuration.md
+  - CLI e Comandos:
+    - Visao Geral: cli/index.md
+    - Comandos de Analise: cli/analysis.md
+    - Experimento e Estudo: cli/experiment.md
+    - Geracao, Avaliacao e Benchmark: cli/generation.md
+    - Utilitarios: cli/utilities.md
+  - Arquitetura:
+    - Visao Geral: architecture/index.md
+    - Modelo de Dominio: architecture/domain-model.md
+    - Camada de Servico: architecture/service-layer.md
+    - Alinhamento WITUP: architecture/witup-alignment.md
+  - Integracao LLM:
+    - Cliente LLM: llm/client.md
+    - Orquestrador Multi-Agente: llm/multi-agent.md
+  - Armazenamento e Relatorios:
+    - Visao Geral: storage/index.md
+    - Schema e Ingestao DuckDB: storage/schema.md
+    - Views Analiticas e Visualizacao: storage/views.md
+  - Catalogacao e Metricas:
+    - Visao Geral: cataloging/index.md
+    - Executor de Metricas: cataloging/metrics.md
+  - Testes:
+    - Visao Geral: testing/index.md
+    - Suite de Testes Go: testing/go-tests.md
+  - Glossario: glossary.md
