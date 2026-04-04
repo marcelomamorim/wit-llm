@@ -18,5 +18,5 @@ coverage.out
 # OS/editor noise
 .DS_Store
 resources
-docs
-scriptssite/
+scripts
+site/
