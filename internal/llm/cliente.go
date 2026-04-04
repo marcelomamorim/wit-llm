@@ -426,7 +426,11 @@ func sleepBackoff(attempt int, retryAfter time.Duration) {
 	if d > 60*time.Second {
 		d = 60 * time.Second
 	}
+	const limiteRetryAfter = 5 * time.Minute
 	if retryAfter > 0 && retryAfter > d {
+		if retryAfter > limiteRetryAfter {
+			retryAfter = limiteRetryAfter
+		}
 		d = retryAfter
 	}
 	time.Sleep(d)

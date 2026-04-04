@@ -115,8 +115,7 @@ func (b *BancoDuckDB) garantirEsquema() error {
 			variante VARCHAR NOT NULL DEFAULT '',
 			caminho_arquivo VARCHAR NOT NULL,
 			gerado_em TIMESTAMP NOT NULL,
-			payload_json VARCHAR NOT NULL,
-			UNIQUE (id_execucao, tipo_artefato, variante)
+			payload_json VARCHAR NOT NULL
 		);`,
 		`CREATE OR REPLACE VIEW vw_baselines_witup AS
 		 SELECT
@@ -442,6 +441,16 @@ func (b *BancoDuckDB) garantirEsquema() error {
 	// e garantir que a coluna tenha DEFAULT '' para futuras inserções.
 	_, _ = b.db.Exec(`UPDATE artefatos_execucao SET variante = '' WHERE variante IS NULL`)
 
+	// Migração: deduplicar linhas existentes e garantir constraint UNIQUE em bancos
+	// criados antes desta versão (CREATE TABLE IF NOT EXISTS não altera tabelas existentes).
+	_, _ = b.db.Exec(`DELETE FROM artefatos_execucao
+		WHERE rowid NOT IN (
+			SELECT MAX(rowid) FROM artefatos_execucao
+			GROUP BY id_execucao, tipo_artefato, variante
+		)`)
+	_, _ = b.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_artefatos_execucao_unico
+		ON artefatos_execucao (id_execucao, tipo_artefato, variante)`)
+
 	return nil
 }
 
@@ -666,7 +675,7 @@ func (b *BancoDuckDB) RegistrarArtefatoExecucao(
 	}
 
 	if _, err := b.db.Exec(
-		`INSERT OR REPLACE INTO artefatos_execucao (
+		`INSERT INTO artefatos_execucao (
 			id_execucao,
 			tipo_artefato,
 			chave_projeto,
@@ -674,7 +683,13 @@ func (b *BancoDuckDB) RegistrarArtefatoExecucao(
 			caminho_arquivo,
 			gerado_em,
 			payload_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (id_execucao, tipo_artefato, variante)
+		DO UPDATE SET
+			chave_projeto = EXCLUDED.chave_projeto,
+			caminho_arquivo = EXCLUDED.caminho_arquivo,
+			gerado_em = EXCLUDED.gerado_em,
+			payload_json = EXCLUDED.payload_json`,
 		idExecucao,
 		tipoArtefato,
 		nullIfBlank(chaveProjeto),
