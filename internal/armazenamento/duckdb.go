@@ -112,7 +112,7 @@ func (b *BancoDuckDB) garantirEsquema() error {
 			id_execucao VARCHAR NOT NULL,
 			tipo_artefato VARCHAR NOT NULL,
 			chave_projeto VARCHAR,
-			variante VARCHAR,
+			variante VARCHAR NOT NULL DEFAULT '',
 			caminho_arquivo VARCHAR NOT NULL,
 			gerado_em TIMESTAMP NOT NULL,
 			payload_json VARCHAR NOT NULL
@@ -237,6 +237,7 @@ func (b *BancoDuckDB) garantirEsquema() error {
 		 FROM vw_witup_maybe w
 		 LEFT JOIN vw_comparacao_fontes_metodo c
 		   ON c.id_execucao = w.id_execucao
+		  AND c.nome_classe = w.nome_container
 		  AND c.assinatura_metodo = w.assinatura_metodo
 		  AND coalesce(c.tipo_excecao, '') = coalesce(w.tipo_excecao, '')
 		 ORDER BY w.id_execucao DESC, w.assinatura_metodo, w.id_caminho;`,
@@ -401,9 +402,33 @@ func (b *BancoDuckDB) garantirEsquema() error {
 		   quantidade_expaths_llm,
 		   quantidade_expaths_compartilhados,
 		   quantidade_expaths_apenas_witup,
-		   quantidade_expaths_apenas_llm
+		   quantidade_expaths_apenas_llm,
+		   CASE
+		     WHEN coalesce(quantidade_expaths_witup, 0) + coalesce(quantidade_expaths_llm, 0) <= 2 THEN 'SIMPLES'
+		     WHEN coalesce(quantidade_expaths_witup, 0) + coalesce(quantidade_expaths_llm, 0) <= 5 THEN 'MODERADO'
+		     ELSE 'COMPLEXO'
+		   END AS faixa_complexidade
 		 FROM vw_comparacao_fontes_metodo
 		 ORDER BY id_execucao DESC, assinatura_metodo;`,
+		`CREATE OR REPLACE VIEW vw_h4_estratificacao AS
+		 SELECT
+		   id_execucao,
+		   chave_projeto,
+		   faixa_complexidade,
+		   tipo_excecao,
+		   relacao_estrutural,
+		   COUNT(*) AS total_metodos,
+		   SUM(quantidade_expaths_witup) AS total_expaths_witup,
+		   SUM(quantidade_expaths_llm) AS total_expaths_llm,
+		   SUM(quantidade_expaths_compartilhados) AS total_compartilhados,
+		   SUM(quantidade_expaths_apenas_witup) AS total_apenas_witup,
+		   SUM(quantidade_expaths_apenas_llm) AS total_apenas_llm,
+		   ROUND(AVG(CASE WHEN quantidade_expaths_witup > 0
+		     THEN (1.0 * quantidade_expaths_compartilhados / quantidade_expaths_witup) * 100
+		     ELSE NULL END), 1) AS media_cobertura_llm_pct
+		 FROM vw_h4_divergencias_base
+		 GROUP BY id_execucao, chave_projeto, faixa_complexidade, tipo_excecao, relacao_estrutural
+		 ORDER BY id_execucao DESC, faixa_complexidade, tipo_excecao, relacao_estrutural;`,
 	}
 
 	for _, instrucao := range instrucoes {
@@ -411,6 +436,21 @@ func (b *BancoDuckDB) garantirEsquema() error {
 			return fmt.Errorf("ao preparar o schema do DuckDB: %w", err)
 		}
 	}
+
+	// Migração: converter NULLs em variante para string vazia em bancos existentes
+	// e garantir que a coluna tenha DEFAULT '' para futuras inserções.
+	_, _ = b.db.Exec(`UPDATE artefatos_execucao SET variante = '' WHERE variante IS NULL`)
+
+	// Migração: deduplicar linhas existentes e garantir constraint UNIQUE em bancos
+	// criados antes desta versão (CREATE TABLE IF NOT EXISTS não altera tabelas existentes).
+	_, _ = b.db.Exec(`DELETE FROM artefatos_execucao
+		WHERE rowid NOT IN (
+			SELECT MAX(rowid) FROM artefatos_execucao
+			GROUP BY id_execucao, tipo_artefato, variante
+		)`)
+	_, _ = b.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_artefatos_execucao_unico
+		ON artefatos_execucao (id_execucao, tipo_artefato, variante)`)
+
 	return nil
 }
 
@@ -643,11 +683,17 @@ func (b *BancoDuckDB) RegistrarArtefatoExecucao(
 			caminho_arquivo,
 			gerado_em,
 			payload_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (id_execucao, tipo_artefato, variante)
+		DO UPDATE SET
+			chave_projeto = EXCLUDED.chave_projeto,
+			caminho_arquivo = EXCLUDED.caminho_arquivo,
+			gerado_em = EXCLUDED.gerado_em,
+			payload_json = EXCLUDED.payload_json`,
 		idExecucao,
 		tipoArtefato,
 		nullIfBlank(chaveProjeto),
-		nullIfBlank(variante),
+		variante,
 		caminhoArquivo,
 		momento,
 		string(payloadJSON),

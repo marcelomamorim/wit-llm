@@ -199,6 +199,19 @@ func criarIndiceCaminhosExcecao(caminhos []dominio.CaminhoExcecao) map[string]do
 }
 
 // chaveCaminhoExcecao sintetiza os campos usados na comparação estrutural.
+//
+// LIMITAÇÃO CONHECIDA: a comparação atual é puramente sintática — dois expaths
+// são considerados iguais apenas quando exception_type, trigger e guard_conditions
+// coincidem textualmente. Isso significa que:
+//   - reformulações semânticas ("x == null" vs "x is null") geram falsos negativos;
+//   - variações de ordenação das guard_conditions também causam divergência;
+//   - a LLM tende a produzir descrições mais detalhadas que o baseline, inflando
+//     a contagem de expaths "apenas LLM".
+//
+// Para o estágio atual da pesquisa, isso é aceitável porque o Jaccard Index e as
+// taxas de cobertura já expõem o grau de sobreposição. Uma futura melhoria seria
+// aplicar similaridade semântica (embedding distance) ou normalização canônica
+// antes de comparar os campos.
 func chaveCaminhoExcecao(caminho dominio.CaminhoExcecao) string {
 	return strings.Join([]string{
 		strings.TrimSpace(caminho.TipoExcecao),

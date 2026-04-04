@@ -363,7 +363,7 @@ func (c *Cliente) requestJSON(method, url string, payload map[string]interface{}
 			cancel()
 			registro.Info("llm", "falha de transporte em %s %s tentativa=%d/%d: %v", method, url, attempt, attempts, err)
 			if attempt < attempts {
-				sleepBackoff(attempt)
+				sleepBackoff(attempt, 0)
 				continue
 			}
 			return nil, fmt.Errorf("a requisição para %s falhou: %w", url, err)
@@ -392,7 +392,7 @@ func (c *Cliente) requestJSON(method, url string, payload map[string]interface{}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			registro.Info("llm", "resposta não bem-sucedida em %s %s: status=%d corpo=%s", method, url, resp.StatusCode, truncate(string(responseBody), 400))
 			if retryableStatus[resp.StatusCode] && attempt < attempts {
-				sleepBackoff(attempt)
+				sleepBackoff(attempt, parseRetryAfter(resp.Header.Get("Retry-After")))
 				continue
 			}
 			return nil, fmt.Errorf("http %d de %s: %s", resp.StatusCode, url, truncate(string(responseBody), 800))
@@ -419,13 +419,41 @@ func primeiroHeader(headers http.Header, chaves ...string) string {
 	return "-"
 }
 
-// sleepBackoff aplica um backoff exponencial simples entre tentativas.
-func sleepBackoff(attempt int) {
+// sleepBackoff aplica um backoff exponencial entre tentativas, respeitando
+// o cabeçalho Retry-After quando informado pelo servidor.
+func sleepBackoff(attempt int, retryAfter time.Duration) {
 	d := 200 * time.Millisecond * time.Duration(1<<(attempt-1))
-	if d > 2*time.Second {
-		d = 2 * time.Second
+	if d > 60*time.Second {
+		d = 60 * time.Second
+	}
+	const limiteRetryAfter = 5 * time.Minute
+	if retryAfter > 0 && retryAfter > d {
+		if retryAfter > limiteRetryAfter {
+			retryAfter = limiteRetryAfter
+		}
+		d = retryAfter
 	}
 	time.Sleep(d)
+}
+
+// parseRetryAfter extrai a duração do cabeçalho Retry-After.
+// Aceita segundos inteiros ou datas HTTP (RFC1123).
+func parseRetryAfter(header string) time.Duration {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return 0
+	}
+	var seconds int
+	if _, err := fmt.Sscanf(header, "%d", &seconds); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	if t, err := time.Parse(time.RFC1123, header); err == nil {
+		delta := time.Until(t)
+		if delta > 0 {
+			return delta
+		}
+	}
+	return 0
 }
 
 // truncate limita uma string a um tamanho máximo para mensagens de erro.
