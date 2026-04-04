@@ -58,40 +58,56 @@ graph TD
 - **Armazenamento Analítico**: Usa DuckDB para armazenar baselines, artefatos de execução e gráficos gerados para consolidação de estudos.
 - **Execução de Métricas**: Orquestra ferramentas externas como Maven para medir cobertura de testes (JaCoCo) e scores de mutação (PIT).
 
-## Navegação
+## Navegação Rápida
 
 <div class="grid cards" markdown>
 
--   :material-rocket-launch:{ .lg .middle } **Primeiros Passos**
+-   :rocket:{ .lg .middle } **Primeiros Passos**
 
     ---
 
     Instruções para configurar Go, Java e DuckDB para rodar seu primeiro experimento.
 
-    [:octicons-arrow-right-24: Primeiros Passos](overview/getting-started.md)
+    [**Começar &rarr;**](overview/getting-started.md)
 
--   :material-cog:{ .lg .middle } **Configuração**
+-   :gear:{ .lg .middle } **Configuração**
 
     ---
 
     Detalhamento da estrutura `pipeline.json` e objetos de configuração.
 
-    [:octicons-arrow-right-24: Referência de Configuração](overview/configuration.md)
+    [**Ver referência &rarr;**](overview/configuration.md)
 
--   :material-console:{ .lg .middle } **Comandos CLI**
+-   :computer:{ .lg .middle } **Comandos CLI**
 
     ---
 
     Referência completa dos comandos disponíveis.
 
-    [:octicons-arrow-right-24: CLI e Comandos](cli/index.md)
+    [**Ver comandos &rarr;**](cli/index.md)
 
--   :material-layers-outline:{ .lg .middle } **Arquitetura**
+-   :building_construction:{ .lg .middle } **Arquitetura**
 
     ---
 
     Ports and Adapters, modelo de domínio e camada de serviço.
 
-    [:octicons-arrow-right-24: Arquitetura](architecture/index.md)
+    [**Explorar &rarr;**](architecture/index.md)
+
+-   :robot:{ .lg .middle } **Integração LLM**
+
+    ---
+
+    Cliente OpenAI, Responses API e orquestrador multi-agente.
+
+    [**Ver detalhes &rarr;**](llm/client.md)
+
+-   :floppy_disk:{ .lg .middle } **Armazenamento**
+
+    ---
+
+    Schema DuckDB, views analíticas e visualização de resultados.
+
+    [**Ver schema &rarr;**](storage/index.md)
 
 </div>
