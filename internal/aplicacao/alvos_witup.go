@@ -77,8 +77,15 @@ func indexarCatalogoPorArquivoENome(metodos []dominio.DescritorMetodo) map[strin
 	return indice
 }
 
+// limiteDistanciaLinhasAlinhamento define a distância máxima de linhas permitida
+// entre a posição reportada pelo WITUP e o candidato local. Alinhamentos que
+// excedam este limite são descartados para evitar correspondências incorretas
+// quando o código-fonte divergiu significativamente do commit original.
+const limiteDistanciaLinhasAlinhamento = 50
+
 // resolverMetodoCatalogado escolhe o melhor candidato local para um método do
-// WITUP usando arquivo, nome e proximidade de linha.
+// WITUP usando arquivo, nome e proximidade de linha, respeitando um limite
+// máximo de distância para evitar falsos positivos.
 func resolverMetodoCatalogado(indice map[string][]*candidatoCatalogo, metodoWITUP dominio.DescritorMetodo) (dominio.DescritorMetodo, bool) {
 	candidatos := indice[chaveArquivoENome(metodoWITUP.CaminhoArquivo, metodoWITUP.NomeMetodo)]
 	if len(candidatos) == 0 {
@@ -92,6 +99,9 @@ func resolverMetodoCatalogado(indice map[string][]*candidatoCatalogo, metodoWITU
 			continue
 		}
 		distancia := distanciaLinhas(metodoWITUP.LinhaInicial, candidato.metodo.LinhaInicial)
+		if distancia > limiteDistanciaLinhasAlinhamento {
+			continue
+		}
 		if melhor == nil || distancia < melhorDistancia {
 			melhor = candidato
 			melhorDistancia = distancia

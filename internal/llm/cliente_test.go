@@ -454,6 +454,54 @@ func TestCompletarJSONFazFallbackParaOllama(t *testing.T) {
 	}
 }
 
+func TestSleepBackoffRespeitaRetryAfter(t *testing.T) {
+	// Sem Retry-After: backoff exponencial normal
+	inicio := time.Now()
+	sleepBackoff(1, 0)
+	elapsed := time.Since(inicio)
+	if elapsed < 150*time.Millisecond || elapsed > 500*time.Millisecond {
+		t.Fatalf("sleepBackoff(1, 0) deveria aguardar ~200ms, levou %v", elapsed)
+	}
+
+	// Com Retry-After maior que o backoff: deve usar o Retry-After
+	inicio = time.Now()
+	sleepBackoff(1, 1*time.Second)
+	elapsed = time.Since(inicio)
+	if elapsed < 900*time.Millisecond {
+		t.Fatalf("sleepBackoff(1, 1s) deveria aguardar ~1s (Retry-After), levou %v", elapsed)
+	}
+
+	// Com Retry-After menor que o backoff calculado: deve usar o backoff
+	inicio = time.Now()
+	sleepBackoff(3, 50*time.Millisecond) // backoff = 200ms * 2^2 = 800ms
+	elapsed = time.Since(inicio)
+	if elapsed < 700*time.Millisecond {
+		t.Fatalf("sleepBackoff(3, 50ms) deveria usar backoff ~800ms, levou %v", elapsed)
+	}
+}
+
+func TestParseRetryAfter(t *testing.T) {
+	// Segundos inteiros
+	if d := parseRetryAfter("5"); d != 5*time.Second {
+		t.Fatalf("esperava 5s, obteve %v", d)
+	}
+
+	// Vazio
+	if d := parseRetryAfter(""); d != 0 {
+		t.Fatalf("esperava 0, obteve %v", d)
+	}
+
+	// Valor negativo ou inválido
+	if d := parseRetryAfter("abc"); d != 0 {
+		t.Fatalf("esperava 0 para valor inválido, obteve %v", d)
+	}
+
+	// Zero
+	if d := parseRetryAfter("0"); d != 0 {
+		t.Fatalf("esperava 0 para zero, obteve %v", d)
+	}
+}
+
 func TestOpenAIHeadersErrosESleepBackoffTruncate(t *testing.T) {
 	if _, err := openAIHeaders(dominio.ConfigModelo{
 		Modelo:                   "gpt-5.4",
@@ -463,7 +511,7 @@ func TestOpenAIHeadersErrosESleepBackoffTruncate(t *testing.T) {
 	}
 
 	inicio := time.Now()
-	sleepBackoff(1)
+	sleepBackoff(1, 0)
 	if time.Since(inicio) < 150*time.Millisecond {
 		t.Fatalf("sleepBackoff deveria aguardar pelo menos o backoff mínimo")
 	}

@@ -56,6 +56,39 @@
       "scale": 100.0,
       "working_directory": ".",
       "description": "Executa os testes unitários após a geração"
+    },
+    {
+      "name": "jacoco-line-coverage",
+      "kind": "coverage",
+      "command": "./mvnw -q jacoco:report",
+      "weight": 1.0,
+      "value_regex": "Total.*?([0-9]+)%",
+      "value_file": "target/site/jacoco/index.html",
+      "scale": 100.0,
+      "working_directory": ".",
+      "description": "Cobertura de linhas via JaCoCo (requer plugin no pom.xml do projeto-alvo)"
+    },
+    {
+      "name": "jacoco-branch-coverage",
+      "kind": "coverage",
+      "command": "",
+      "weight": 1.0,
+      "value_regex": "Cov.*?([0-9]+)%",
+      "value_file": "target/site/jacoco/index.html",
+      "scale": 100.0,
+      "working_directory": ".",
+      "description": "Cobertura de branches via JaCoCo (extraída do mesmo relatório de linhas)"
+    },
+    {
+      "name": "pit-mutation-score",
+      "kind": "mutation",
+      "command": "./mvnw -q org.pitest:pitest-maven:mutationCoverage -DtargetClasses='${TARGET_CLASSES}' -DtargetTests='${TARGET_TESTS}'",
+      "weight": 1.0,
+      "value_regex": ">> Line Coverage:.*?([0-9]+)%.*?>> Mutation Coverage:.*?([0-9]+)%",
+      "value_file": "target/pit-reports/index.html",
+      "scale": 100.0,
+      "working_directory": ".",
+      "description": "Mutation score via PIT (requer plugin pitest-maven no pom.xml do projeto-alvo)"
     }
   ]
 }

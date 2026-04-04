@@ -276,6 +276,8 @@ func (o *Orquestrador) executarPapelPorMetodo(
 }
 
 // executar centraliza a chamada ao executor injetado e enriquece o erro com o papel do agente.
+// Quando previous_response_id está presente e a chamada falha, tenta novamente sem o contexto
+// stateful para evitar que a expiração do ID aborte toda a execução.
 func (o *Orquestrador) executar(
 	model dominio.ConfigModelo,
 	papel dominio.PapelAgente,
@@ -284,6 +286,13 @@ func (o *Orquestrador) executar(
 	opcoes dominio.OpcoesRequisicaoLLM,
 ) (ResultadoExecucaoAgente, error) {
 	resultado, err := o.executor(model, promptSistema, promptUsuario, opcoes)
+	if err != nil && strings.TrimSpace(opcoes.PreviousResponseID) != "" {
+		registro.Info("agentes", "agente %s falhou com previous_response_id=%s; tentando sem contexto stateful: %v",
+			papel, opcoes.PreviousResponseID, err)
+		opcoesSemContexto := opcoes
+		opcoesSemContexto.PreviousResponseID = ""
+		resultado, err = o.executor(model, promptSistema, promptUsuario, opcoesSemContexto)
+	}
 	if err != nil {
 		return ResultadoExecucaoAgente{}, fmt.Errorf("a chamada do agente %s falhou: %w", papel, err)
 	}

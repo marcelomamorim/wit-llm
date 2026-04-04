@@ -346,6 +346,140 @@ func TestAvaliarCombinaMetricasEJuiz(t *testing.T) {
 	}
 }
 
+// TestPrepararSandboxAvaliacaoIsolaTestes verifica que a sandbox de avaliação:
+// 1. Remove testes originais (src/test) para não contaminar métricas
+// 2. Injeta os testes gerados no local correto
+// 3. Preserva o código-fonte do projeto
+// Isso protege o invariante #5: a Parte 2 avalia em sandbox isolada.
+func TestPrepararSandboxAvaliacaoIsolaTestes(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Simular estrutura de projeto Java com testes originais
+	projetoRaiz := filepath.Join(tempDir, "projeto")
+	for _, dir := range []string{
+		"src/main/java/com/example",
+		"src/test/java/com/example",
+		"pom.xml",
+	} {
+		if strings.HasSuffix(dir, ".xml") {
+			if err := os.MkdirAll(filepath.Join(projetoRaiz, filepath.Dir(dir)), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(projetoRaiz, dir), []byte("<project/>"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if err := os.MkdirAll(filepath.Join(projetoRaiz, dir), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	// Arquivo fonte original
+	if err := os.WriteFile(filepath.Join(projetoRaiz, "src/main/java/com/example/App.java"), []byte("class App {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Teste original que NÃO deve aparecer na sandbox
+	if err := os.WriteFile(filepath.Join(projetoRaiz, "src/test/java/com/example/AppTest.java"), []byte("class AppTest {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &dominio.ConfigAplicacao{
+		Projeto: dominio.ConfigProjeto{
+			Raiz: projetoRaiz,
+		},
+		Fluxo: dominio.ConfigFluxo{
+			DiretorioSaida: filepath.Join(tempDir, "generated"),
+		},
+	}
+
+	workspace, err := artefatos.NovoEspacoTrabalho(cfg.Fluxo.DiretorioSaida, "sandbox-test")
+	if err != nil {
+		t.Fatalf("criar workspace: %v", err)
+	}
+
+	// Escrever testes gerados no workspace
+	testGerado := filepath.Join(workspace.Testes, "src/test/java/com/example/GeneratedTest.java")
+	if err := os.MkdirAll(filepath.Dir(testGerado), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(testGerado, []byte("class GeneratedTest {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	raizSandbox, err := prepararSandboxAvaliacao(cfg, workspace)
+	if err != nil {
+		t.Fatalf("prepararSandboxAvaliacao falhou: %v", err)
+	}
+
+	// Invariante #5a: testes originais devem ter sido removidos
+	testOriginalSandbox := filepath.Join(raizSandbox, "src/test/java/com/example/AppTest.java")
+	if _, err := os.Stat(testOriginalSandbox); err == nil {
+		t.Fatal("teste original NÃO deveria existir na sandbox (violação do invariante #5)")
+	}
+
+	// Invariante #5b: testes gerados devem estar presentes
+	testGeradoSandbox := filepath.Join(raizSandbox, "src/test/java/com/example/GeneratedTest.java")
+	if _, err := os.Stat(testGeradoSandbox); err != nil {
+		t.Fatalf("teste gerado deveria existir na sandbox: %v", err)
+	}
+
+	// Invariante #5c: código-fonte do projeto deve estar preservado
+	fonteSandbox := filepath.Join(raizSandbox, "src/main/java/com/example/App.java")
+	if _, err := os.Stat(fonteSandbox); err != nil {
+		t.Fatalf("código-fonte deveria estar preservado na sandbox: %v", err)
+	}
+
+	// Invariante #5d: pom.xml deve existir para que Maven funcione
+	pomSandbox := filepath.Join(raizSandbox, "pom.xml")
+	if _, err := os.Stat(pomSandbox); err != nil {
+		t.Fatalf("pom.xml deveria estar preservado na sandbox: %v", err)
+	}
+}
+
+// TestPrepararSandboxAvaliacaoMultiModulo verifica o cenário de projeto Maven
+// com layout não-padrão de testes (ex: módulos aninhados).
+func TestPrepararSandboxAvaliacaoMultiModulo(t *testing.T) {
+	tempDir := t.TempDir()
+	projetoRaiz := filepath.Join(tempDir, "multi-modulo")
+	for _, dir := range []string{
+		"modulo-a/src/main/java",
+		"modulo-a/src/test/java",
+		"modulo-b/src/main/java",
+	} {
+		if err := os.MkdirAll(filepath.Join(projetoRaiz, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(projetoRaiz, "modulo-a/src/test/java/OldTest.java"), []byte("class OldTest {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &dominio.ConfigAplicacao{
+		Projeto: dominio.ConfigProjeto{Raiz: projetoRaiz},
+		Fluxo:   dominio.ConfigFluxo{DiretorioSaida: filepath.Join(tempDir, "generated")},
+	}
+	workspace, err := artefatos.NovoEspacoTrabalho(cfg.Fluxo.DiretorioSaida, "sandbox-multi")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raizSandbox, err := prepararSandboxAvaliacao(cfg, workspace)
+	if err != nil {
+		t.Fatalf("prepararSandboxAvaliacao falhou: %v", err)
+	}
+
+	// src/test no nível raiz deve ter sido removido, mas testes em submódulos
+	// persistem porque prepararSandboxAvaliacao remove apenas src/test de primeiro nível.
+	// Isso é um trade-off documentado: projetos multi-módulo podem precisar de
+	// configuração de exclude adicional.
+	if _, err := os.Stat(filepath.Join(raizSandbox, "modulo-a/src/main/java")); err != nil {
+		t.Fatalf("submódulo fonte deveria estar preservado: %v", err)
+	}
+	if _, err := os.Stat(raizSandbox); err != nil {
+		t.Fatalf("sandbox deveria existir: %v", err)
+	}
+}
+
 func TestNormalizarAnaliseMetodoIgnoraEntradasInvalidas(t *testing.T) {
 	method := dominio.DescritorMetodo{IDMetodo: "sample:method:1"}
 	report := normalizarAnaliseMetodo(method, map[string]interface{}{

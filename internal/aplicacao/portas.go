@@ -1,6 +1,7 @@
 package aplicacao
 
 import (
+	"github.com/marceloamorim/witup-llm/internal/armazenamento"
 	"github.com/marceloamorim/witup-llm/internal/catalogo"
 	"github.com/marceloamorim/witup-llm/internal/dominio"
 	"github.com/marceloamorim/witup-llm/internal/llm"
@@ -77,6 +78,16 @@ func NovoExecutorMetricas(runner *metricas.Executor) ExecutorMetricas {
 // ExecutarTodas delega a execução de métricas ao executor concreto.
 func (a adaptadorExecutorMetricas) ExecutarTodas(metricConfigs []dominio.ConfigMetrica, ctx metricas.ContextoExecucao) []dominio.ResultadoMetrica {
 	return a.executor.ExecutarTodas(metricConfigs, ctx)
+}
+
+// ArmazenamentoAnalitico abstrai as operações de persistência analítica (DuckDB)
+// para permitir injeção de dependência e testes com doubles.
+type ArmazenamentoAnalitico interface {
+	RegistrarArtefatoExecucao(idExecucao, tipoArtefato, chaveProjeto, variante, caminhoArquivo, geradoEm string, payload interface{}) error
+	CarregarRelatorioBaseline(chaveProjeto, nomeArquivo string) (dominio.RelatorioAnalise, string, error)
+	ImportarBaselineProjeto(chaveProjeto, caminhoBaseline, nomeArquivo string) (bool, bool, error)
+	GerarGraficosExecucao(idExecucao string) (armazenamento.ResumoGraficos, error)
+	Fechar() error
 }
 
 type fabricaCatalogoPadrao struct{}
