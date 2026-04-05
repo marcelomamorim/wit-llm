@@ -84,6 +84,38 @@ func TestAuxiliaresDeFluxoLLMEGeracao(t *testing.T) {
 	}
 }
 
+func TestFiltrarAnalisesParte2RemoveHTMLManager(t *testing.T) {
+	report := dominio.RelatorioAnalise{
+		TotalMetodos: 2,
+		Analises: []dominio.AnaliseMetodo{
+			{
+				Metodo: dominio.DescritorMetodo{
+					IDMetodo:       "html:1",
+					CaminhoArquivo: "src/main/java/de/strullerbaumann/visualee/ui/graph/control/HTMLManager.java",
+					NomeContainer:  "de.strullerbaumann.visualee.ui.graph.control.HTMLManager",
+					Assinatura:     "de.strullerbaumann.visualee.ui.graph.control.HTMLManager.generateHTML(Graph graph, String htmlTemplate)",
+				},
+			},
+			{
+				Metodo: dominio.DescritorMetodo{
+					IDMetodo:       "ok:1",
+					CaminhoArquivo: "src/main/java/de/strullerbaumann/visualee/examiner/Examiner.java",
+					NomeContainer:  "de.strullerbaumann.visualee.examiner.Examiner",
+					Assinatura:     "de.strullerbaumann.visualee.examiner.Examiner.isAValidClassName(String className)",
+				},
+			},
+		},
+	}
+
+	filtrado := filtrarAnalisesParte2(report)
+	if filtrado.TotalMetodos != 1 || len(filtrado.Analises) != 1 {
+		t.Fatalf("esperava apenas uma análise após o filtro da Parte 2: %#v", filtrado.Analises)
+	}
+	if filtrado.Analises[0].Metodo.NomeContainer != "de.strullerbaumann.visualee.examiner.Examiner" {
+		t.Fatalf("análise restante inesperada: %#v", filtrado.Analises[0].Metodo)
+	}
+}
+
 func TestAuxiliaresDeArquivosEFormatacao(t *testing.T) {
 	arquivos := []dominio.ArquivoTesteGerado{{CaminhoRelativo: "A.java", Conteudo: "1"}, {CaminhoRelativo: "A.java", Conteudo: "2"}, {CaminhoRelativo: "B.java", Conteudo: "3"}}
 	consolidados := consolidarArquivosGerados(arquivos)

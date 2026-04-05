@@ -121,6 +121,27 @@ func TestExtrairMutacaoPITConsideraOutrosStatusDetectados(t *testing.T) {
 	}
 }
 
+func TestExtrairTestesExecutadosSurefire(t *testing.T) {
+	tempDir := t.TempDir()
+	relatoriosDir := filepath.Join(tempDir, "target", "surefire-reports")
+	xmlA := `<testsuite tests="3"></testsuite>`
+	xmlB := `<testsuite tests="5"></testsuite>`
+	if err := artefatos.EscreverTexto(filepath.Join(relatoriosDir, "TEST-a.xml"), xmlA); err != nil {
+		t.Fatalf("fixture surefire A: %v", err)
+	}
+	if err := artefatos.EscreverTexto(filepath.Join(relatoriosDir, "TEST-b.xml"), xmlB); err != nil {
+		t.Fatalf("fixture surefire B: %v", err)
+	}
+
+	valor, err := ExtrairTestesExecutadosSurefire(relatoriosDir)
+	if err != nil {
+		t.Fatalf("extrair testes executados surefire: %v", err)
+	}
+	if valor != 8 {
+		t.Fatalf("esperava 8 testes executados, recebi %.2f", valor)
+	}
+}
+
 func TestCalcularReproducaoExcecoesUsaFallbackDeArquivosEClasseSimples(t *testing.T) {
 	tempDir := t.TempDir()
 	caminhoAnalise := filepath.Join(tempDir, "analysis.json")

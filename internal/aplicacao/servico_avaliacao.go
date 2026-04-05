@@ -17,6 +17,7 @@ import (
 // Gerar pede ao modelo de geração que crie arquivos de teste a partir da análise.
 func (s *Servico) Gerar(cfg *dominio.ConfigAplicacao, analysisReport dominio.RelatorioAnalise, analysisPath, modelKey string, workspace *artefatos.EspacoTrabalho) (dominio.RelatorioGeracao, string, *artefatos.EspacoTrabalho, error) {
 	registro.Info("pipeline", "iniciando geração de testes com modelo=%s origem=%s", modelKey, analysisPath)
+	analysisReport = filtrarAnalisesParte2(analysisReport)
 	model, err := getModelOrError(cfg, modelKey)
 	if err != nil {
 		return dominio.RelatorioGeracao{}, "", workspace, err
@@ -57,7 +58,7 @@ func (s *Servico) Gerar(cfg *dominio.ConfigAplicacao, analysisReport dominio.Rel
 				len(methodsPayload),
 				contarCaminhosAnalises(methodsPayload),
 			)
-			systemPrompt := construirPromptGeracaoSistema(cfg.Projeto.TestFramework)
+			systemPrompt := construirPromptGeracaoSistema(resolverFrameworkTestes(cfg.Projeto))
 			userPrompt := construirPromptGeracaoUsuario(overview, containerName, methodsPayload)
 			response, err := s.completionClient.CompletarJSON(model, systemPrompt, userPrompt, dominio.OpcoesRequisicaoLLM{
 				PromptCacheKey: construirPromptCacheKey(identificarProjeto(cfg), "generation", containerName),
@@ -66,6 +67,7 @@ func (s *Servico) Gerar(cfg *dominio.ConfigAplicacao, analysisReport dominio.Rel
 				return dominio.RelatorioGeracao{}, "", workspace, fmt.Errorf("a geração falhou para %s (lote %d/%d): %w", containerName, indiceLote+1, len(lotes), err)
 			}
 			summary, files := normalizarRespostaGeracao(response.Payload)
+			files = adaptarArquivosTesteAoProjeto(cfg.Projeto.Raiz, files)
 			if strings.TrimSpace(summary) != "" {
 				strategyParts = append(strategyParts, summary)
 			}
@@ -126,6 +128,16 @@ func (s *Servico) Avaliar(cfg *dominio.ConfigAplicacao, analysisReport dominio.R
 			return dominio.RelatorioAvaliacao{}, "", workspace, err
 		}
 	}
+	analysisReport = filtrarAnalisesParte2(analysisReport)
+	generationReport.ArquivosTeste = adaptarArquivosTesteAoProjeto(cfg.Projeto.Raiz, generationReport.ArquivosTeste)
+	analysisPathMetricas := analysisPath
+	generationPathMetricas := generationPath
+	if analysisPathMetricas, generationPathMetricas, err = materializarArtefatosFiltradosParte2(workspace, analysisReport, generationReport); err != nil {
+		return dominio.RelatorioAvaliacao{}, "", workspace, err
+	}
+	if err := materializarSuiteGeradaNoWorkspace(workspace, generationReport); err != nil {
+		return dominio.RelatorioAvaliacao{}, "", workspace, err
+	}
 
 	raizProjetoAvaliado, err := prepararSandboxAvaliacao(cfg, workspace)
 	if err != nil {
@@ -136,8 +148,8 @@ func (s *Servico) Avaliar(cfg *dominio.ConfigAplicacao, analysisReport dominio.R
 		RaizProjeto:       raizProjetoAvaliado,
 		DiretorioExecucao: workspace.Raiz,
 		DiretorioTestes:   workspace.Testes,
-		CaminhoAnalise:    analysisPath,
-		CaminhoGeracao:    generationPath,
+		CaminhoAnalise:    analysisPathMetricas,
+		CaminhoGeracao:    generationPathMetricas,
 		ChaveModelo:       generationReport.ChaveModelo,
 	})
 	metricScore := metricas.AgregarPontuacao(metricResults)
@@ -211,16 +223,49 @@ func prepararSandboxAvaliacao(cfg *dominio.ConfigAplicacao, workspace *artefatos
 	if err := artefatos.CopiarDiretorioNoDestino(workspace.Testes, raizSandbox); err != nil {
 		return "", fmt.Errorf("ao injetar os testes gerados na sandbox de avaliação: %w", err)
 	}
-	if err := prepararProjetoMavenParaAvaliacao(raizSandbox); err != nil {
+	if err := prepararProjetoMavenParaAvaliacao(raizSandbox, resolverFrameworkTestes(cfg.Projeto)); err != nil {
 		return "", fmt.Errorf("ao preparar o projeto Maven na sandbox de avaliação: %w", err)
 	}
 	return raizSandbox, nil
 }
 
+// materializarSuiteGeradaNoWorkspace reidrata os arquivos da geração quando a
+// avaliação é executada isoladamente a partir de um generation.json já salvo.
+func materializarSuiteGeradaNoWorkspace(workspace *artefatos.EspacoTrabalho, generationReport dominio.RelatorioGeracao) error {
+	if workspace == nil {
+		return nil
+	}
+	for _, arquivo := range generationReport.ArquivosTeste {
+		rel, err := artefatos.CaminhoRelativoSeguro(arquivo.CaminhoRelativo)
+		if err != nil {
+			return err
+		}
+		if err := artefatos.EscreverTexto(filepath.Join(workspace.Testes, rel), arquivo.Conteudo); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func materializarArtefatosFiltradosParte2(workspace *artefatos.EspacoTrabalho, analysisReport dominio.RelatorioAnalise, generationReport dominio.RelatorioGeracao) (string, string, error) {
+	if workspace == nil {
+		return "", "", fmt.Errorf("workspace de avaliação ausente")
+	}
+	analysisPath := filepath.Join(workspace.Raiz, "analysis-parte-2.json")
+	if err := artefatos.EscreverJSON(analysisPath, analysisReport); err != nil {
+		return "", "", err
+	}
+	generationPath := filepath.Join(workspace.Raiz, "generation-parte-2.json")
+	if err := artefatos.EscreverJSON(generationPath, generationReport); err != nil {
+		return "", "", err
+	}
+	return analysisPath, generationPath, nil
+}
+
 // prepararProjetoMavenParaAvaliacao remove extensões e plugins de release que
 // não participam da execução das métricas, mas podem impedir builds locais da
 // sandbox por exigirem credenciais ou repositórios extras.
-func prepararProjetoMavenParaAvaliacao(raizSandbox string) error {
+func prepararProjetoMavenParaAvaliacao(raizSandbox string, frameworkProjeto string) error {
 	caminhoPOM := filepath.Join(raizSandbox, "pom.xml")
 	dados, err := os.ReadFile(caminhoPOM)
 	if err != nil {
@@ -232,14 +277,27 @@ func prepararProjetoMavenParaAvaliacao(raizSandbox string) error {
 
 	conteudoOriginal := string(dados)
 	conteudoAjustado := conteudoOriginal
+	conteudoAjustado = substituirTagXML(conteudoAjustado, "packaging", "jar")
+	conteudoAjustado = ajustarNivelCompilacaoMaven(conteudoAjustado)
 	for _, artifactID := range []string{
 		"nexus-staging-maven-plugin",
 		"maven-gpg-plugin",
 		"maven-release-plugin",
+		"maven-plugin-plugin",
+		"license-maven-plugin",
 	} {
 		conteudoAjustado = removerPluginMaven(conteudoAjustado, artifactID)
 	}
 	conteudoAjustado = removerBlocoXML(conteudoAjustado, "distributionManagement")
+	if testesGeradosUsamJUnitJupiter(raizSandbox) && !pomSuportaJUnitJupiter(conteudoAjustado) {
+		conteudoAjustado = garantirDependenciasJUnitJupiter(conteudoAjustado)
+		conteudoAjustado = garantirPluginSurefireCompativelJUnit5(conteudoAjustado)
+		registro.Info("pipeline", "sandbox de avaliação adaptada para compilar/executar testes JUnit 5 sobre projeto %s", frameworkProjeto)
+	}
+	if testesGeradosUsamMockito(raizSandbox) && !pomSuportaMockito(conteudoAjustado) {
+		conteudoAjustado = garantirDependenciasMockito(conteudoAjustado)
+		registro.Info("pipeline", "sandbox de avaliação adaptada para compilar testes que usam Mockito")
+	}
 
 	if conteudoAjustado == conteudoOriginal {
 		return nil
@@ -250,11 +308,99 @@ func prepararProjetoMavenParaAvaliacao(raizSandbox string) error {
 	return nil
 }
 
+// garantirDependenciasJUnitJupiter injeta as dependências mínimas de API e
+// engine do JUnit 5 para que a sandbox consiga compilar e executar testes
+// previamente gerados com Jupiter.
+func garantirDependenciasJUnitJupiter(conteudo string) string {
+	if pomSuportaJUnitJupiter(conteudo) {
+		return conteudo
+	}
+	bloco := `
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <version>5.10.2</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-engine</artifactId>
+      <version>5.10.2</version>
+      <scope>test</scope>
+    </dependency>`
+	if strings.Contains(conteudo, "</dependencies>") {
+		return strings.Replace(conteudo, "</dependencies>", bloco+"\n  </dependencies>", 1)
+	}
+	if strings.Contains(conteudo, "</project>") {
+		novoBloco := fmt.Sprintf("  <dependencies>%s\n  </dependencies>\n</project>", bloco)
+		return strings.Replace(conteudo, "</project>", novoBloco, 1)
+	}
+	return conteudo
+}
+
+// garantirDependenciasMockito injeta Mockito quando os testes gerados
+// dependem dele e o projeto original não o declara.
+func garantirDependenciasMockito(conteudo string) string {
+	if pomSuportaMockito(conteudo) {
+		return conteudo
+	}
+	bloco := `
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <version>5.12.0</version>
+      <scope>test</scope>
+    </dependency>`
+	if strings.Contains(conteudo, "</dependencies>") {
+		return strings.Replace(conteudo, "</dependencies>", bloco+"\n  </dependencies>", 1)
+	}
+	if strings.Contains(conteudo, "</project>") {
+		novoBloco := fmt.Sprintf("  <dependencies>%s\n  </dependencies>\n</project>", bloco)
+		return strings.Replace(conteudo, "</project>", novoBloco, 1)
+	}
+	return conteudo
+}
+
+// garantirPluginSurefireCompativelJUnit5 adiciona uma versão moderna do
+// Surefire quando o projeto original não a declara explicitamente.
+func garantirPluginSurefireCompativelJUnit5(conteudo string) string {
+	if strings.Contains(conteudo, "<artifactId>maven-surefire-plugin</artifactId>") {
+		return conteudo
+	}
+	plugin := `
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+        <configuration>
+          <useModulePath>false</useModulePath>
+        </configuration>
+      </plugin>`
+	if strings.Contains(conteudo, "</plugins>") {
+		return strings.Replace(conteudo, "</plugins>", plugin+"\n    </plugins>", 1)
+	}
+	if strings.Contains(conteudo, "</build>") {
+		novoBloco := fmt.Sprintf("    <plugins>%s\n    </plugins>\n  </build>", plugin)
+		return strings.Replace(conteudo, "</build>", novoBloco, 1)
+	}
+	if strings.Contains(conteudo, "</project>") {
+		novoBloco := fmt.Sprintf("  <build>\n    <plugins>%s\n    </plugins>\n  </build>\n</project>", plugin)
+		return strings.Replace(conteudo, "</project>", novoBloco, 1)
+	}
+	return conteudo
+}
+
 // removerPluginMaven elimina plugins específicos do POM quando a execução de
 // avaliação precisa ignorar etapas de release/deploy.
 func removerPluginMaven(conteudo, artifactID string) string {
-	padrao := fmt.Sprintf(`(?s)<plugin>\s*.*?<artifactId>\s*%s\s*</artifactId>.*?</plugin>`, regexp.QuoteMeta(artifactID))
-	return regexp.MustCompile(padrao).ReplaceAllString(conteudo, "")
+	regexPlugins := regexp.MustCompile(`(?s)<plugin>.*?</plugin>`)
+	regexArtifact := regexp.MustCompile(fmt.Sprintf(`<artifactId>\s*%s\s*</artifactId>`, regexp.QuoteMeta(artifactID)))
+	return regexPlugins.ReplaceAllStringFunc(conteudo, func(bloco string) string {
+		if regexArtifact.MatchString(bloco) {
+			return ""
+		}
+		return bloco
+	})
 }
 
 // removerBlocoXML apaga blocos simples do POM que não influenciam compilação
@@ -262,4 +408,28 @@ func removerPluginMaven(conteudo, artifactID string) string {
 func removerBlocoXML(conteudo, nome string) string {
 	padrao := fmt.Sprintf(`(?s)<%s>\s*.*?</%s>`, regexp.QuoteMeta(nome), regexp.QuoteMeta(nome))
 	return regexp.MustCompile(padrao).ReplaceAllString(conteudo, "")
+}
+
+// substituirTagXML troca o valor textual de uma tag simples quando ela está
+// presente no documento.
+func substituirTagXML(conteudo, nomeTag, novoValor string) string {
+	padrao := fmt.Sprintf(`(?s)<%s>\s*.*?\s*</%s>`, regexp.QuoteMeta(nomeTag), regexp.QuoteMeta(nomeTag))
+	regex := regexp.MustCompile(padrao)
+	if !regex.MatchString(conteudo) {
+		return conteudo
+	}
+	replacement := fmt.Sprintf("<%s>%s</%s>", nomeTag, novoValor, nomeTag)
+	return regex.ReplaceAllString(conteudo, replacement)
+}
+
+// ajustarNivelCompilacaoMaven eleva source/target antigos para Java 8 dentro
+// da sandbox, evitando falhas de compilação em toolchains atuais.
+func ajustarNivelCompilacaoMaven(conteudo string) string {
+	for _, tag := range []string{"source", "target"} {
+		padrao := fmt.Sprintf(`(?s)<%s>\s*(?:1\.)?[0-7]\s*</%s>`, regexp.QuoteMeta(tag), regexp.QuoteMeta(tag))
+		regex := regexp.MustCompile(padrao)
+		replacement := fmt.Sprintf("<%s>1.8</%s>", tag, tag)
+		conteudo = regex.ReplaceAllString(conteudo, replacement)
+	}
+	return conteudo
 }

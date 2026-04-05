@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/marceloamorim/witup-llm/internal/artefatos"
@@ -28,6 +29,14 @@ type pitMutation struct {
 
 type pitReport struct {
 	Mutations []pitMutation `xml:"mutation"`
+}
+
+type surefireTestSuite struct {
+	Tests int `xml:"tests,attr"`
+}
+
+type surefireTestSuites struct {
+	Suites []surefireTestSuite `xml:"testsuite"`
 }
 
 // ExtrairCoberturaJaCoCo lê um relatório XML do JaCoCo e devolve a cobertura
@@ -122,6 +131,39 @@ func CalcularReproducaoExcecoes(caminhoAnalise, caminhoGeracao string) (float64,
 	return (float64(reproduzidos) / float64(totalExpaths)) * 100.0, nil
 }
 
+// ExtrairTestesExecutadosSurefire soma os testes executados a partir dos XMLs
+// produzidos pelo Maven Surefire.
+func ExtrairTestesExecutadosSurefire(raizRelatorios string) (float64, error) {
+	caminhos, err := localizarRelatoriosSurefire(raizRelatorios)
+	if err != nil {
+		return 0, err
+	}
+
+	totalTestes := 0
+	for _, caminho := range caminhos {
+		dados, err := os.ReadFile(caminho)
+		if err != nil {
+			return 0, fmt.Errorf("ao ler relatório Surefire %q: %w", caminho, err)
+		}
+
+		var suite surefireTestSuite
+		if err := xml.Unmarshal(dados, &suite); err == nil && suite.Tests > 0 {
+			totalTestes += suite.Tests
+			continue
+		}
+
+		var suites surefireTestSuites
+		if err := xml.Unmarshal(dados, &suites); err != nil {
+			return 0, fmt.Errorf("ao interpretar relatório Surefire %q: %w", caminho, err)
+		}
+		for _, item := range suites.Suites {
+			totalTestes += item.Tests
+		}
+	}
+
+	return float64(totalTestes), nil
+}
+
 // localizarRelatorioPIT encontra o mutations.xml mais recente dentro da árvore
 // de relatórios gerada pelo PIT.
 func localizarRelatorioPIT(raizRelatorios string) (string, error) {
@@ -148,6 +190,35 @@ func localizarRelatorioPIT(raizRelatorios string) (string, error) {
 		return "", fmt.Errorf("nenhum mutations.xml foi encontrado em %q", raizRelatorios)
 	}
 	return candidato, nil
+}
+
+// localizarRelatoriosSurefire encontra os relatórios XML produzidos pelo
+// Maven Surefire e os devolve em ordem estável.
+func localizarRelatoriosSurefire(raizRelatorios string) ([]string, error) {
+	relatorios := make([]string, 0)
+
+	err := filepath.Walk(raizRelatorios, func(caminho string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		nome := info.Name()
+		if !strings.HasPrefix(nome, "TEST-") || !strings.HasSuffix(nome, ".xml") {
+			return nil
+		}
+		relatorios = append(relatorios, caminho)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ao localizar relatórios Surefire em %q: %w", raizRelatorios, err)
+	}
+	if len(relatorios) == 0 {
+		return nil, fmt.Errorf("nenhum relatório Surefire foi encontrado em %q", raizRelatorios)
+	}
+	sort.Strings(relatorios)
+	return relatorios, nil
 }
 
 // selecionarArquivosDoMetodo limita a inspeção aos arquivos explicitamente

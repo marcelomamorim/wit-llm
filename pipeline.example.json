@@ -5,7 +5,7 @@
     "include": ["src/main/java", "."],
     "exclude": [".git", "target", "build", "generated", "tests"],
     "overview_file": "README.md",
-    "test_framework": "junit5"
+    "test_framework": "infer"
   },
   "pipeline": {
     "output_dir": "./generated/default",
@@ -50,9 +50,9 @@
     {
       "name": "unit-tests",
       "kind": "tests",
-      "command": "./mvnw -q -DskipITs test",
+      "command": "./mvnw -q -DskipITs test && ./bin/witup extrair-surefire --report-dir target/surefire-reports",
       "weight": 1.0,
-      "value_regex": "Tests run: ([0-9]+), Failures: [0-9]+, Errors: [0-9]+, Skipped: [0-9]+",
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\\\.[0-9]+)?)",
       "scale": 100.0,
       "working_directory": ".",
       "expected_outputs": ["target/surefire-reports"],
@@ -63,7 +63,7 @@
       "kind": "coverage",
       "command": "./mvnw -q org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.12:report && ./bin/witup extrair-jacoco --xml target/site/jacoco/jacoco.xml --counter LINE",
       "weight": 1.0,
-      "value_regex": "([0-9]+(?:\\\\.[0-9]+)?)",
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\\\.[0-9]+)?)",
       "scale": 100.0,
       "working_directory": ".",
       "expected_outputs": ["target/site/jacoco/jacoco.xml"],
@@ -74,7 +74,7 @@
       "kind": "coverage",
       "command": "./mvnw -q org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.12:report && ./bin/witup extrair-jacoco --xml target/site/jacoco/jacoco.xml --counter BRANCH",
       "weight": 1.0,
-      "value_regex": "([0-9]+(?:\\\\.[0-9]+)?)",
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\\\.[0-9]+)?)",
       "scale": 100.0,
       "working_directory": ".",
       "expected_outputs": ["target/site/jacoco/jacoco.xml"],
@@ -85,7 +85,7 @@
       "kind": "mutation",
       "command": "./mvnw -q -DtimestampedReports=false -DoutputFormats=XML org.pitest:pitest-maven:mutationCoverage && ./bin/witup extrair-pit --report-dir target/pit-reports",
       "weight": 1.0,
-      "value_regex": "([0-9]+(?:\\\\.[0-9]+)?)",
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\\\.[0-9]+)?)",
       "scale": 100.0,
       "working_directory": ".",
       "expected_outputs": ["target/pit-reports/mutations.xml"],

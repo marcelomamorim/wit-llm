@@ -39,6 +39,8 @@ func Principal(argv []string) int {
 		return executarExtracaoJacoco(args)
 	case "extrair-pit":
 		return executarExtracaoPIT(args)
+	case "extrair-surefire":
+		return executarExtracaoSurefire(args)
 	case "medir-reproducao-excecoes":
 		return executarReproducaoExcecoes(args)
 	case "gerar", "generate":
@@ -82,6 +84,7 @@ func imprimirUso() {
 	fmt.Println("  consolidar-estudo     Registra no DuckDB o resumo completo do estudo")
 	fmt.Println("  extrair-jacoco        Extrai uma métrica numérica de um relatório JaCoCo")
 	fmt.Println("  extrair-pit           Extrai o mutation score do relatório PIT")
+	fmt.Println("  extrair-surefire      Soma os testes executados a partir dos relatórios do Surefire")
 	fmt.Println("  medir-reproducao-excecoes Mede a reprodução de expaths nos testes gerados")
 	fmt.Println("  gerar                 Gera testes a partir de um relatório de análise")
 	fmt.Println("  avaliar               Executa métricas e, opcionalmente, avaliação por juiz")

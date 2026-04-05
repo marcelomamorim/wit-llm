@@ -138,7 +138,7 @@ func TestExecutarExtracoesDeMetricas(t *testing.T) {
 	stdout, _, codigo := capturarSaidas(t, func() int {
 		return executarExtracaoJacoco([]string{"--xml", jacoco})
 	})
-	if codigo != 0 || strings.TrimSpace(stdout) != "90.00" {
+	if codigo != 0 || strings.TrimSpace(stdout) != "WITUP_METRIC=90.00" {
 		t.Fatalf("resultado jacoco inesperado codigo=%d stdout=%q", codigo, stdout)
 	}
 
@@ -149,8 +149,19 @@ func TestExecutarExtracoesDeMetricas(t *testing.T) {
 	stdout, _, codigo = capturarSaidas(t, func() int {
 		return executarExtracaoPIT([]string{"--report-dir", pitDir})
 	})
-	if codigo != 0 || strings.TrimSpace(stdout) != "100.00" {
+	if codigo != 0 || strings.TrimSpace(stdout) != "WITUP_METRIC=100.00" {
 		t.Fatalf("resultado pit inesperado codigo=%d stdout=%q", codigo, stdout)
+	}
+
+	surefireDir := filepath.Join(tempDir, "surefire")
+	if err := artefatos.EscreverTexto(filepath.Join(surefireDir, "TEST-sample.xml"), `<testsuite tests="7"></testsuite>`); err != nil {
+		t.Fatalf("fixture surefire: %v", err)
+	}
+	stdout, _, codigo = capturarSaidas(t, func() int {
+		return executarExtracaoSurefire([]string{"--report-dir", surefireDir})
+	})
+	if codigo != 0 || strings.TrimSpace(stdout) != "WITUP_METRIC=7" {
+		t.Fatalf("resultado surefire inesperado codigo=%d stdout=%q", codigo, stdout)
 	}
 
 	analise := dominio.RelatorioAnalise{Analises: []dominio.AnaliseMetodo{{Metodo: dominio.DescritorMetodo{IDMetodo: "m1"}, CaminhosExcecao: []dominio.CaminhoExcecao{{TipoExcecao: "IllegalArgumentException"}}}}}

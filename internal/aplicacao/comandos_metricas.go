@@ -26,7 +26,7 @@ func executarExtracaoJacoco(args []string) int {
 		fmt.Fprintf(os.Stderr, "erro: %v\n", err)
 		return 1
 	}
-	fmt.Printf("%.2f\n", valor)
+	fmt.Printf("WITUP_METRIC=%.2f\n", valor)
 	return 0
 }
 
@@ -47,7 +47,29 @@ func executarExtracaoPIT(args []string) int {
 		fmt.Fprintf(os.Stderr, "erro: %v\n", err)
 		return 1
 	}
-	fmt.Printf("%.2f\n", valor)
+	fmt.Printf("WITUP_METRIC=%.2f\n", valor)
+	return 0
+}
+
+// executarExtracaoSurefire soma a quantidade de testes executados a partir dos
+// relatórios XML do Maven Surefire.
+func executarExtracaoSurefire(args []string) int {
+	fs := flag.NewFlagSet("extract-surefire", flag.ContinueOnError)
+	raizRelatorios := fs.String("report-dir", "", "Diretório dos relatórios do Surefire")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *raizRelatorios == "" {
+		fmt.Fprintln(os.Stderr, "erro: --report-dir é obrigatório")
+		return 2
+	}
+
+	valor, err := metricas.ExtrairTestesExecutadosSurefire(*raizRelatorios)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "erro: %v\n", err)
+		return 1
+	}
+	fmt.Printf("WITUP_METRIC=%.0f\n", valor)
 	return 0
 }
 

@@ -1,6 +1,7 @@
 package metricas
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -170,12 +171,12 @@ func TestExecutarMetricaUsaDiretorioConfigurado(t *testing.T) {
 	}
 }
 
-func TestAgregarPontuacaoIgnoraNilERetornaNilSemNotas(t *testing.T) {
-	if nota := AgregarPontuacao([]dominio.ResultadoMetrica{{Peso: 1}}); nota != nil {
-		t.Fatalf("esperava nil quando não há notas normalizadas")
+func TestAgregarPontuacaoPenalizaNilComoZeroERetornaNilSemPesos(t *testing.T) {
+	if nota := AgregarPontuacao([]dominio.ResultadoMetrica{{Peso: 0}}); nota != nil {
+		t.Fatalf("esperava nil quando não há pesos válidos")
 	}
 	nota := AgregarPontuacao([]dominio.ResultadoMetrica{{NotaNormalizada: ponteiroFloat(50), Peso: 1}, {Peso: 10}})
-	if nota == nil || *nota != 50 {
+	if nota == nil || math.Abs(*nota-(50.0/11.0)) > 1e-9 {
 		t.Fatalf("nota agregada inesperada: %#v", nota)
 	}
 	nota = AgregarPontuacao([]dominio.ResultadoMetrica{
@@ -183,7 +184,7 @@ func TestAgregarPontuacaoIgnoraNilERetornaNilSemNotas(t *testing.T) {
 		{Peso: 10},
 		{NotaNormalizada: ponteiroFloat(100), Peso: 1},
 	})
-	if nota == nil || *nota != 75 {
+	if nota == nil || math.Abs(*nota-(150.0/12.0)) > 1e-9 {
 		t.Fatalf("nota agregada com elemento nil intermediário inesperada: %#v", nota)
 	}
 }
