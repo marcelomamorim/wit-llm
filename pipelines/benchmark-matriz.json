@@ -5,7 +5,7 @@
     "include": ["src/main/java", "."],
     "exclude": [".git", "target", "build", "generated", "tests"],
     "overview_file": "README.md",
-    "test_framework": "junit5"
+    "test_framework": "infer"
   },
   "pipeline": {
     "output_dir": "./generated/benchmark-matriz",

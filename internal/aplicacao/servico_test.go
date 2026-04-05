@@ -41,6 +41,12 @@ func (f fakeMetricRunner) ExecutarTodas([]dominio.ConfigMetrica, metricas.Contex
 	return f.results
 }
 
+type metricRunnerFunc func([]dominio.ConfigMetrica, metricas.ContextoExecucao) []dominio.ResultadoMetrica
+
+func (f metricRunnerFunc) ExecutarTodas(metricasCfg []dominio.ConfigMetrica, ctx metricas.ContextoExecucao) []dominio.ResultadoMetrica {
+	return f(metricasCfg, ctx)
+}
+
 type fakeCatalog struct {
 	methods  []dominio.DescritorMetodo
 	overview string
@@ -346,6 +352,56 @@ func TestAvaliarCombinaMetricasEJuiz(t *testing.T) {
 	}
 }
 
+func TestAvaliarMaterializaTestesDaGeracaoEmExecucaoIsolada(t *testing.T) {
+	tempDir := t.TempDir()
+	projetoRaiz := filepath.Join(tempDir, "projeto")
+	if err := os.MkdirAll(filepath.Join(projetoRaiz, "src/main/java/com/example"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projetoRaiz, "pom.xml"), []byte("<project/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &dominio.ConfigAplicacao{
+		Projeto: dominio.ConfigProjeto{Raiz: projetoRaiz},
+		Fluxo:   dominio.ConfigFluxo{DiretorioSaida: filepath.Join(tempDir, "generated")},
+	}
+
+	var capturado metricas.ContextoExecucao
+	service := NovoServicoComDependencias(
+		nil,
+		metricRunnerFunc(func(_ []dominio.ConfigMetrica, ctx metricas.ContextoExecucao) []dominio.ResultadoMetrica {
+			capturado = ctx
+			return nil
+		}),
+		fakeCatalogFactory{catalog: fakeCatalog{}},
+	)
+
+	reportGeracao := dominio.RelatorioGeracao{
+		ChaveModelo: "generator",
+		ArquivosTeste: []dominio.ArquivoTesteGerado{{
+			CaminhoRelativo: "src/test/java/com/example/GeneratedTest.java",
+			Conteudo:        "class GeneratedTest {}",
+		}},
+	}
+
+	workspace, err := artefatos.NovoEspacoTrabalho(cfg.Fluxo.DiretorioSaida, "evaluate-rehydrate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := service.Avaliar(cfg, dominio.RelatorioAnalise{}, "/tmp/analysis.json", reportGeracao, "/tmp/generation.json", "", workspace); err != nil {
+		t.Fatalf("Avaliar retornou erro inesperado: %v", err)
+	}
+
+	testeNoWorkspace := filepath.Join(workspace.Testes, "src/test/java/com/example/GeneratedTest.java")
+	if _, err := os.Stat(testeNoWorkspace); err != nil {
+		t.Fatalf("suite gerada deveria ser reidratada no workspace: %v", err)
+	}
+	testeNaSandbox := filepath.Join(capturado.RaizProjeto, "src/test/java/com/example/GeneratedTest.java")
+	if _, err := os.Stat(testeNaSandbox); err != nil {
+		t.Fatalf("suite gerada deveria estar presente na sandbox: %v", err)
+	}
+}
+
 // TestPrepararSandboxAvaliacaoIsolaTestes verifica que a sandbox de avaliação:
 // 1. Remove testes originais (src/test) para não contaminar métricas
 // 2. Injeta os testes gerados no local correto
@@ -443,6 +499,7 @@ func TestPrepararSandboxAvaliacaoSanitizaPomParaMetricas(t *testing.T) {
 		t.Fatal(err)
 	}
 	pom := `<project>
+  <packaging>maven-plugin</packaging>
   <build>
     <plugins>
       <plugin>
@@ -461,6 +518,18 @@ func TestPrepararSandboxAvaliacaoSanitizaPomParaMetricas(t *testing.T) {
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <source>1.7</source>
+          <target>1.7</target>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-plugin-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>license-maven-plugin</artifactId>
       </plugin>
     </plugins>
   </build>
@@ -494,14 +563,136 @@ func TestPrepararSandboxAvaliacaoSanitizaPomParaMetricas(t *testing.T) {
 		"nexus-staging-maven-plugin",
 		"maven-release-plugin",
 		"maven-gpg-plugin",
+		"maven-plugin-plugin",
+		"license-maven-plugin",
 		"<distributionManagement>",
 	} {
 		if strings.Contains(texto, removido) {
 			t.Fatalf("pom sanitizado ainda contém %q", removido)
 		}
 	}
+	if strings.Contains(texto, "<packaging>maven-plugin</packaging>") {
+		t.Fatal("pom sanitizado deveria remover o packaging maven-plugin para evitar goals implícitos de plugin")
+	}
+	if !strings.Contains(texto, "<packaging>jar</packaging>") {
+		t.Fatal("pom sanitizado deveria rebaixar o packaging para jar")
+	}
+	if strings.Contains(texto, "<source>1.7</source>") || strings.Contains(texto, "<target>1.7</target>") {
+		t.Fatal("pom sanitizado deveria elevar source/target antigos para um nível compatível")
+	}
+	if !strings.Contains(texto, "<source>1.8</source>") || !strings.Contains(texto, "<target>1.8</target>") {
+		t.Fatal("pom sanitizado deveria materializar source/target em 1.8 quando o projeto usa níveis antigos")
+	}
 	if !strings.Contains(texto, "maven-compiler-plugin") {
 		t.Fatal("pom sanitizado deveria preservar plugins necessários à compilação")
+	}
+}
+
+func TestPrepararSandboxAvaliacaoInjetaSuporteJunitJupiterQuandoTestesGeradosPrecisam(t *testing.T) {
+	tempDir := t.TempDir()
+	projetoRaiz := filepath.Join(tempDir, "projeto")
+	if err := os.MkdirAll(filepath.Join(projetoRaiz, "src/main/java/com/example"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pom := `<project>
+  <dependencies>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.12</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>`
+	if err := os.WriteFile(filepath.Join(projetoRaiz, "pom.xml"), []byte(pom), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &dominio.ConfigAplicacao{
+		Projeto: dominio.ConfigProjeto{Raiz: projetoRaiz, TestFramework: "infer"},
+		Fluxo:   dominio.ConfigFluxo{DiretorioSaida: filepath.Join(tempDir, "generated")},
+	}
+	workspace, err := artefatos.NovoEspacoTrabalho(cfg.Fluxo.DiretorioSaida, "sandbox-jupiter")
+	if err != nil {
+		t.Fatal(err)
+	}
+	testeGerado := filepath.Join(workspace.Testes, "src/test/java/com/example/GeneratedTest.java")
+	if err := os.MkdirAll(filepath.Dir(testeGerado), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	conteudoTeste := `package com.example;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import org.junit.jupiter.api.Test;
+
+class GeneratedTest {
+	@Test
+	void sample() {
+		assertThrows(RuntimeException.class, () -> { throw new RuntimeException(); });
+	}
+}`
+	if err := os.WriteFile(testeGerado, []byte(conteudoTeste), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	raizSandbox, err := prepararSandboxAvaliacao(cfg, workspace)
+	if err != nil {
+		t.Fatalf("prepararSandboxAvaliacao falhou: %v", err)
+	}
+	dados, err := os.ReadFile(filepath.Join(raizSandbox, "pom.xml"))
+	if err != nil {
+		t.Fatalf("ler pom da sandbox: %v", err)
+	}
+	texto := string(dados)
+	for _, esperado := range []string{
+		"junit-jupiter-api",
+		"junit-jupiter-engine",
+		"maven-surefire-plugin",
+	} {
+		if !strings.Contains(texto, esperado) {
+			t.Fatalf("pom sanitizado deveria conter %q para suportar testes JUnit 5", esperado)
+		}
+	}
+}
+
+func TestResolverFrameworkTestesInfereJUnit4DoPom(t *testing.T) {
+	tempDir := t.TempDir()
+	pom := `<project>
+  <dependencies>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.12</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>`
+	if err := os.WriteFile(filepath.Join(tempDir, "pom.xml"), []byte(pom), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	framework := resolverFrameworkTestes(dominio.ConfigProjeto{Raiz: tempDir, TestFramework: "infer"})
+	if framework != frameworkJUnit4 {
+		t.Fatalf("framework inferido inesperado: %s", framework)
+	}
+}
+
+func TestConstruirPromptGeracaoSistemaParaJUnit4VedaJupiter(t *testing.T) {
+	prompt := construirPromptGeracaoSistema("junit4")
+	if !strings.Contains(prompt, "JUnit 4") {
+		t.Fatalf("prompt deveria mencionar JUnit 4: %s", prompt)
+	}
+	if !strings.Contains(prompt, "org.junit.jupiter") {
+		t.Fatalf("prompt deveria orientar a evitar Jupiter: %s", prompt)
 	}
 }
 

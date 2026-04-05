@@ -100,11 +100,14 @@ func AgregarPontuacao(results []dominio.ResultadoMetrica) *float64 {
 	totalPonderado := 0.0
 	somaPesos := 0.0
 	for _, resultado := range results {
+		if resultado.Peso <= 0 {
+			continue
+		}
+		somaPesos += resultado.Peso
 		if resultado.NotaNormalizada == nil {
 			continue
 		}
 		totalPonderado += (*resultado.NotaNormalizada) * resultado.Peso
-		somaPesos += resultado.Peso
 	}
 	if somaPesos == 0 {
 		return nil

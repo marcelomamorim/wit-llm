@@ -29,7 +29,14 @@ Código-fonte do método:
 
 // construirPromptGeracaoSistema monta o prompt sistêmico para geração de testes.
 func construirPromptGeracaoSistema(framework string) string {
-	return fmt.Sprintf("Você é um especialista em escrita de testes Java usando %s. Responda apenas com JSON.", framework)
+	switch normalizarFrameworkTestes(framework) {
+	case frameworkJUnit4:
+		return "Você é um especialista em escrita de testes Java usando JUnit 4. Responda apenas com JSON. Gere testes compatíveis com org.junit.Test e org.junit.Assert. Use @Before/@After quando necessário. Não use imports, anotações ou utilitários de org.junit.jupiter.* e não dependa de recursos exclusivos de JUnit 5 como @TempDir, @DisplayName ou assertDoesNotThrow. Nunca invente pacotes, classes, métodos, construtores, campos ou enums que não estejam evidentes no contexto fornecido. Não assuma construtor sem argumentos; prefira fábricas públicas, métodos getInstance() ou reflexão local no próprio teste quando a API concreta não estiver visível. Não use Mockito a menos que o contexto mostre dependência explícita do projeto. Não tente sobrescrever ou mockar métodos estáticos de classes do projeto; use entradas reais e asserts sobre comportamento observável."
+	case frameworkJUnit5:
+		return "Você é um especialista em escrita de testes Java usando JUnit 5 (Jupiter). Responda apenas com JSON. Gere testes compatíveis com org.junit.jupiter.api.*. Nunca invente pacotes, classes, métodos, construtores, campos ou enums que não estejam evidentes no contexto fornecido. Não assuma construtor sem argumentos; prefira fábricas públicas, métodos getInstance() ou reflexão local no próprio teste quando a API concreta não estiver visível. Não use Mockito a menos que o contexto mostre dependência explícita do projeto. Não tente sobrescrever ou mockar métodos estáticos de classes do projeto; use entradas reais e asserts sobre comportamento observável."
+	default:
+		return fmt.Sprintf("Você é um especialista em escrita de testes Java usando %s. Responda apenas com JSON.", framework)
+	}
 }
 
 // construirPromptGeracaoUsuario monta o prompt de geração de testes para um contêiner.
@@ -37,6 +44,14 @@ func construirPromptGeracaoUsuario(overview, containerName string, methodsPayloa
 	conteudoCompactado, _ := json.MarshalIndent(compactarAnalisesParaGeracao(methodsPayload), "", "  ")
 	return fmt.Sprintf(`Gere arquivos de teste Java determinísticos para os métodos abaixo.
 Return JSON: {"strategy_summary":"...","files":[{"relative_path":"...","content":"...","covered_method_ids":[...],"notes":"..."}]}
+
+Regras obrigatórias:
+- use apenas tipos, pacotes, enums, construtores e métodos que apareçam de forma explícita no contexto fornecido;
+- se a API de construção de um objeto não estiver clara, prefira um helper local usando reflexão em vez de inventar construtor público;
+- não assuma construtor sem argumentos para classes do projeto;
+- para singletons/fábricas, prefira getInstance() quando houver evidência no contexto;
+- não introduza Mockito, AssertJ ou outras bibliotecas externas sem evidência explícita de que o projeto já as usa;
+- evite imports curingas e referências para pacotes que não apareçam no código real fornecido.
 
 Linguagem: Java
 Contêiner: %s

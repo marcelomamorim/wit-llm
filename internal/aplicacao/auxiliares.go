@@ -24,6 +24,34 @@ func agruparAnalisesPorContainer(report dominio.RelatorioAnalise) map[string][]d
 	return grupos
 }
 
+// filtrarAnalisesParte2 remove métodos que optamos por não materializar como
+// testes na Parte 2. Isso preserva a Parte 1 intacta, mas impede que um alvo
+// sabidamente ruidoso distorça a comparação das suítes.
+func filtrarAnalisesParte2(report dominio.RelatorioAnalise) dominio.RelatorioAnalise {
+	filtradas := make([]dominio.AnaliseMetodo, 0, len(report.Analises))
+	for _, analise := range report.Analises {
+		if deveExcluirAnaliseParte2(analise) {
+			continue
+		}
+		filtradas = append(filtradas, analise)
+	}
+	report.Analises = filtradas
+	report.TotalMetodos = len(filtradas)
+	return report
+}
+
+func deveExcluirAnaliseParte2(analise dominio.AnaliseMetodo) bool {
+	if analise.Metodo.NomeContainer == "de.strullerbaumann.visualee.ui.graph.control.HTMLManager" {
+		return true
+	}
+	caminho := strings.ToLower(filepath.ToSlash(analise.Metodo.CaminhoArquivo))
+	if strings.HasSuffix(caminho, "/ui/graph/control/htmlmanager.java") {
+		return true
+	}
+	assinatura := strings.ToLower(strings.TrimSpace(analise.Metodo.Assinatura))
+	return strings.Contains(assinatura, ".htmlmanager.generatehtml(")
+}
+
 const (
 	limiteMetodosPorLoteGeracao       = 6
 	limiteCaminhosPorLoteGeracao      = 18

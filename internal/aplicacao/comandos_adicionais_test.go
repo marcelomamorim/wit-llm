@@ -124,6 +124,7 @@ func TestExecutarHandlersObrigatoriosRetornamCodigoDois(t *testing.T) {
 		{"ingestao", func() int { return executarIngestaoWITUP(nil, NovoServico(nil, nil)) }},
 		{"jacoco", func() int { return executarExtracaoJacoco(nil) }},
 		{"pit", func() int { return executarExtracaoPIT(nil) }},
+		{"surefire", func() int { return executarExtracaoSurefire(nil) }},
 		{"reproducao", func() int { return executarReproducaoExcecoes(nil) }},
 	}
 	for _, caso := range casos {
