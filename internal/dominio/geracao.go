@@ -17,4 +17,9 @@ type RelatorioGeracao struct {
 	ResumoEstrategia     string                   `json:"strategy_summary"`
 	ArquivosTeste        []ArquivoTesteGerado     `json:"test_files"`
 	RespostasBrutas      []map[string]interface{} `json:"raw_responses"`
+	IntervencoesHarness  []string                 `json:"harness_interventions,omitempty"`
+	RequestCount         int                      `json:"request_count"`
+	InputTokens          int                      `json:"input_tokens"`
+	OutputTokens         int                      `json:"output_tokens"`
+	EstimatedCost        *float64                 `json:"estimated_cost,omitempty"`
 }

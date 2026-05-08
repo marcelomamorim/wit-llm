@@ -7,10 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/marceloamorim/witup-llm/internal/armazenamento"
 	"github.com/marceloamorim/witup-llm/internal/artefatos"
 	"github.com/marceloamorim/witup-llm/internal/dominio"
-	"github.com/marceloamorim/witup-llm/internal/metricas"
 	"github.com/marceloamorim/witup-llm/internal/registro"
 )
 
@@ -50,6 +48,35 @@ func deveExcluirAnaliseParte2(analise dominio.AnaliseMetodo) bool {
 	}
 	assinatura := strings.ToLower(strings.TrimSpace(analise.Metodo.Assinatura))
 	return strings.Contains(assinatura, ".htmlmanager.generatehtml(")
+}
+
+// filtrarMetodosPorContainers restringe a seleção aos contêineres explicitamente
+// declarados na configuração do projeto da segunda fase.
+func filtrarMetodosPorContainers(metodos []dominio.DescritorMetodo, containers []string) []dominio.DescritorMetodo {
+	if len(containers) == 0 {
+		return metodos
+	}
+
+	alvos := normalizarContainersAlvo(containers)
+	filtrados := make([]dominio.DescritorMetodo, 0, len(metodos))
+	for _, metodo := range metodos {
+		if _, ok := alvos[strings.ToLower(strings.TrimSpace(metodo.NomeContainer))]; ok {
+			filtrados = append(filtrados, metodo)
+		}
+	}
+	return filtrados
+}
+
+func normalizarContainersAlvo(containers []string) map[string]struct{} {
+	alvos := make(map[string]struct{}, len(containers))
+	for _, container := range containers {
+		valor := strings.ToLower(strings.TrimSpace(container))
+		if valor == "" {
+			continue
+		}
+		alvos[valor] = struct{}{}
+	}
+	return alvos
 }
 
 const (
@@ -137,6 +164,24 @@ func contarCaminhosAnalises(analises []dominio.AnaliseMetodo) int {
 	return total
 }
 
+func deduplicarStrings(valores []string) []string {
+	if len(valores) == 0 {
+		return nil
+	}
+	vistos := map[string]bool{}
+	saida := make([]string, 0, len(valores))
+	for _, valor := range valores {
+		valor = strings.TrimSpace(valor)
+		if valor == "" || vistos[valor] {
+			continue
+		}
+		vistos[valor] = true
+		saida = append(saida, valor)
+	}
+	sort.Strings(saida)
+	return saida
+}
+
 // paraListaStrings converte slices genéricos em listas de strings limpas.
 func paraListaStrings(raw interface{}) []string {
 	if raw == nil {
@@ -178,42 +223,6 @@ func fallbackIDCaminho(raw, methodID string, index int) string {
 		return fmt.Sprintf("%s:%d", methodID, index)
 	}
 	return valor
-}
-
-// chaveOrdenacaoNota escolhe a melhor nota disponível para ranquear entradas de benchmark.
-func chaveOrdenacaoNota(combined, metric, judge *float64) float64 {
-	if combined != nil {
-		return *combined
-	}
-	if metric != nil {
-		return *metric
-	}
-	if judge != nil {
-		return *judge
-	}
-	return -1
-}
-
-// construirMarkdownBenchmark renderiza o relatório de benchmark em formato Markdown.
-func construirMarkdownBenchmark(entries []dominio.EntradaBenchmark) string {
-	linhas := []string{
-		"# Benchmark Report",
-		"",
-		"| Posicao | Scenario | Metric | Judge | Combined |",
-		"| --- | --- | ---: | ---: | ---: |",
-	}
-	for _, entry := range entries {
-		linhas = append(linhas, fmt.Sprintf("| %d | %s->%s | %s | %s | %s |",
-			entry.Posicao,
-			entry.ChaveModeloAnalise,
-			entry.ChaveModeloGeracao,
-			metricas.FormatarPontuacao(entry.NotaMetricas),
-			metricas.FormatarPontuacao(entry.JudgeScore),
-			metricas.FormatarPontuacao(entry.NotaCombinada),
-		))
-	}
-	linhas = append(linhas, "")
-	return strings.Join(linhas, "\n")
 }
 
 // GarantirCaminhosExistem valida se os arquivos esperados existem antes do carregamento.
@@ -288,105 +297,15 @@ func persistirPromptEResposta(
 	return artefatos.EscreverTexto(filepath.Join(espaco.Respostas, nomeBase+".txt"), resposta)
 }
 
-// abrirBancoAnalitico cria uma conexão curta com o DuckDB configurado.
-func abrirBancoAnalitico(cfg *dominio.ConfigAplicacao) (*armazenamento.BancoDuckDB, error) {
-	caminhoDuckDB := strings.TrimSpace(cfg.Fluxo.CaminhoDuckDB)
-	if caminhoDuckDB == "" {
-		diretorioBase := strings.TrimSpace(cfg.Fluxo.DiretorioSaida)
-		if diretorioBase == "" {
-			diretorioBase = os.TempDir()
-		}
-		caminhoDuckDB = filepath.Join(diretorioBase, "witup-llm.duckdb")
-	}
-	return armazenamento.AbrirBancoDuckDB(caminhoDuckDB)
-}
-
-// registrarArtefatoNoBanco indexa um artefato gerado no DuckDB para facilitar
-// consultas e navegação pela interface gráfica.
-func registrarArtefatoNoBanco(
-	cfg *dominio.ConfigAplicacao,
-	idExecucao string,
-	tipoArtefato string,
-	chaveProjeto string,
-	variante string,
-	caminhoArquivo string,
-	geradoEm string,
-	payload interface{},
-) error {
-	banco, err := abrirBancoAnalitico(cfg)
-	if err != nil {
-		return err
-	}
-	defer banco.Fechar()
-
-	return banco.RegistrarArtefatoExecucao(
-		idExecucao,
-		tipoArtefato,
-		chaveProjeto,
-		variante,
-		caminhoArquivo,
-		geradoEm,
-		payload,
-	)
-}
-
-// resolverDiretorioHistorico identifica onde a execução deve materializar os
-// snapshots históricos em Parquet. Quando a saída fica sob `generated/`, o
-// histórico é promovido para um diretório irmão chamado `historico/`.
-func resolverDiretorioHistorico(cfg *dominio.ConfigAplicacao) string {
-	diretorioSaida := strings.TrimSpace(cfg.Fluxo.DiretorioSaida)
-	if diretorioSaida == "" {
-		return "historico"
-	}
-
-	atual := filepath.Clean(diretorioSaida)
-	for {
-		if filepath.Base(atual) == "generated" {
-			return filepath.Join(filepath.Dir(atual), "historico")
-		}
-		proximo := filepath.Dir(atual)
-		if proximo == atual {
-			break
-		}
-		atual = proximo
-	}
-	return filepath.Join(diretorioSaida, "historico")
-}
-
-// exportarHistoricoParquet grava snapshots em Parquet para preservar uma visão
-// estável dos resultados analíticos de cada execução.
-func exportarHistoricoParquet(
-	cfg *dominio.ConfigAplicacao,
-	idExecucao string,
-	chaveProjeto string,
-) (armazenamento.ResumoHistoricoParquet, error) {
-	banco, err := abrirBancoAnalitico(cfg)
-	if err != nil {
-		return armazenamento.ResumoHistoricoParquet{}, err
-	}
-	defer banco.Fechar()
-
-	diretorioHistorico := filepath.Join(
-		resolverDiretorioHistorico(cfg),
-		artefatos.Slugificar(chaveProjeto),
-		idExecucao,
-	)
-	return banco.ExportarHistoricoExecucaoParquet(idExecucao, chaveProjeto, diretorioHistorico)
-}
-
-// imprimirResumoObservabilidade mostra onde acompanhar logs, artefatos e banco.
-func imprimirResumoObservabilidade(configPath string, cfg *dominio.ConfigAplicacao, raizExecucao string) {
+// imprimirResumoObservabilidade mostra onde acompanhar logs e artefatos locais.
+func imprimirResumoObservabilidade(_ string, cfg *dominio.ConfigAplicacao, raizExecucao string) {
 	if strings.TrimSpace(raizExecucao) != "" {
 		fmt.Printf("Raiz da execução      : %s\n", raizExecucao)
 	}
-	if strings.TrimSpace(cfg.Fluxo.CaminhoDuckDB) != "" {
-		fmt.Printf("DuckDB                : %s\n", cfg.Fluxo.CaminhoDuckDB)
-	}
-	if strings.TrimSpace(configPath) != "" {
-		fmt.Printf("Abrir interface       : ./bin/witup visualizar-dados --config %s\n", configPath)
-		fmt.Printf("Interface padrão      : http://127.0.0.1:8421\n")
-	}
 	if caminhoLog := registro.CaminhoArquivo(); strings.TrimSpace(caminhoLog) != "" {
 		fmt.Printf("Log local             : %s\n", caminhoLog)
+	}
+	if cfg != nil && strings.TrimSpace(cfg.Fluxo.DiretorioSaida) != "" {
+		fmt.Printf("Diretório de saída    : %s\n", cfg.Fluxo.DiretorioSaida)
 	}
 }

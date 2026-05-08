@@ -1,7 +1,6 @@
 package aplicacao
 
 import (
-	"github.com/marceloamorim/witup-llm/internal/armazenamento"
 	"github.com/marceloamorim/witup-llm/internal/catalogo"
 	"github.com/marceloamorim/witup-llm/internal/dominio"
 	"github.com/marceloamorim/witup-llm/internal/llm"
@@ -11,9 +10,13 @@ import (
 // RespostaComplecao representa a resposta de uma LLM no formato esperado pela
 // camada de aplicação.
 type RespostaComplecao struct {
-	IDResposta string
-	Payload    map[string]interface{}
-	RawText    string
+	IDResposta        string
+	Payload           map[string]interface{}
+	RawText           string
+	InputTokens       int
+	OutputTokens      int
+	CachedInputTokens int
+	EstimatedCost     *float64
 }
 
 // ClienteComplecao abstrai o provedor de completions usado pela aplicacao.
@@ -57,9 +60,13 @@ func (a adaptadorClienteComplecao) CompletarJSON(model dominio.ConfigModelo, sys
 		return nil, err
 	}
 	return &RespostaComplecao{
-		IDResposta: response.IDResposta,
-		Payload:    response.Payload,
-		RawText:    response.RawText,
+		IDResposta:        response.IDResposta,
+		Payload:           response.Payload,
+		RawText:           response.RawText,
+		InputTokens:       response.InputTokens,
+		OutputTokens:      response.OutputTokens,
+		CachedInputTokens: response.CachedInputTokens,
+		EstimatedCost:     response.EstimatedCost,
 	}, nil
 }
 
@@ -78,17 +85,6 @@ func NovoExecutorMetricas(runner *metricas.Executor) ExecutorMetricas {
 // ExecutarTodas delega a execução de métricas ao executor concreto.
 func (a adaptadorExecutorMetricas) ExecutarTodas(metricConfigs []dominio.ConfigMetrica, ctx metricas.ContextoExecucao) []dominio.ResultadoMetrica {
 	return a.executor.ExecutarTodas(metricConfigs, ctx)
-}
-
-// ArmazenamentoAnalitico abstrai as operações de persistência analítica (DuckDB)
-// para permitir injeção de dependência e testes com doubles.
-type ArmazenamentoAnalitico interface {
-	RegistrarArtefatoExecucao(idExecucao, tipoArtefato, chaveProjeto, variante, caminhoArquivo, geradoEm string, payload interface{}) error
-	CarregarRelatorioBaseline(chaveProjeto, nomeArquivo string) (dominio.RelatorioAnalise, string, error)
-	ImportarBaselineProjeto(chaveProjeto, caminhoBaseline, nomeArquivo string) (bool, bool, error)
-	GerarGraficosExecucao(idExecucao, diretorioSaida string) (armazenamento.ResumoGraficos, error)
-	ExportarHistoricoExecucaoParquet(idExecucao, chaveProjeto, diretorioSaida string) (armazenamento.ResumoHistoricoParquet, error)
-	Fechar() error
 }
 
 type fabricaCatalogoPadrao struct{}

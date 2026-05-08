@@ -11,17 +11,17 @@ import (
 	"github.com/marceloamorim/witup-llm/internal/experimento"
 )
 
-// executarIngestaoWITUP carrega as baselines do artigo para o DuckDB.
+// executarIngestaoWITUP materializa uma baseline WIT local como análise canônica.
 func executarIngestaoWITUP(args []string, service *Servico) int {
 	fs := flag.NewFlagSet("ingest-witup", flag.ContinueOnError)
 	configPath := fs.String("config", "", "Caminho para o arquivo de configuração JSON")
-	projectKey := fs.String("project-key", "", "Projeto opcional para materializar a análise canônica após a carga")
+	projectKey := fs.String("project-key", "", "Projeto no pacote de replicação a ser materializado")
 	baselineFile := fs.String("baseline-file", "", "Sobrescreve o arquivo de baseline configurado")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *configPath == "" {
-		fmt.Fprintln(os.Stderr, "erro: --config é obrigatório")
+	if *configPath == "" || *projectKey == "" {
+		fmt.Fprintln(os.Stderr, "erro: --config e --project-key são obrigatórios")
 		return 2
 	}
 
@@ -34,35 +34,18 @@ func executarIngestaoWITUP(args []string, service *Servico) int {
 		cfg.Fluxo.ArquivoBaselineWIT = *baselineFile
 	}
 
-	resumo, err := service.SincronizarBaselinesWITUP(cfg)
+	report, analysisPath, _, err := service.IngerirWITUP(cfg, *projectKey, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "erro: %v\n", err)
 		return 1
 	}
 
-	fmt.Printf("DuckDB                : %s\n", cfg.Fluxo.CaminhoDuckDB)
 	fmt.Printf("Raiz de replicação    : %s\n", cfg.Fluxo.RaizReplicacaoWIT)
 	fmt.Printf("Arquivo de baseline   : %s\n", cfg.Fluxo.ArquivoBaselineWIT)
-	fmt.Printf("Projetos encontrados  : %d\n", resumo.ProjetosEncontrados)
-	fmt.Printf("Projetos importados   : %d\n", resumo.ProjetosImportados)
-	fmt.Printf("Projetos atualizados  : %d\n", resumo.ProjetosAtualizados)
-	imprimirResumoObservabilidade(*configPath, cfg, "")
-
-	if *projectKey != "" {
-		espaco, err := artefatos.NovoEspacoTrabalho(cfg.Fluxo.DiretorioSaida, artefatos.NovoIDExecucao("ingest-witup-"+*projectKey))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "erro: %v\n", err)
-			return 1
-		}
-		report, analysisPath, _, err := service.IngerirWITUP(cfg, *projectKey, espaco)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "erro: %v\n", err)
-			return 1
-		}
-		fmt.Printf("Projeto materializado : %s\n", *projectKey)
-		fmt.Printf("Caminho da análise    : %s\n", analysisPath)
-		fmt.Printf("Métodos               : %d\n", report.TotalMetodos)
-	}
+	fmt.Printf("Projeto materializado : %s\n", *projectKey)
+	fmt.Printf("Caminho da análise    : %s\n", analysisPath)
+	fmt.Printf("Métodos               : %d\n", report.TotalMetodos)
+	imprimirResumoObservabilidade(*configPath, cfg, filepath.Dir(analysisPath))
 	return 0
 }
 

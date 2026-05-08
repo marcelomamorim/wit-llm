@@ -17,7 +17,6 @@ func TestExecutarExperimentoProduzTresArtefatosDeVariantes(t *testing.T) {
 		},
 		Fluxo: dominio.ConfigFluxo{
 			DiretorioSaida:     filepath.Join(tempDir, "generated"),
-			CaminhoDuckDB:      filepath.Join(tempDir, "generated", "witup-llm.duckdb"),
 			RaizReplicacaoWIT:  filepath.Join(tempDir, "replication"),
 			ArquivoBaselineWIT: "wit.json",
 			SalvarPrompts:      true,
@@ -152,12 +151,6 @@ func TestExecutarExperimentoProduzTresArtefatosDeVariantes(t *testing.T) {
 	if _, err := os.Stat(result.CaminhoRastreio); err != nil {
 		t.Fatalf("esperava que o artefato de rastreio fosse escrito: %v", err)
 	}
-	if result.DiretorioHistorico == "" {
-		t.Fatalf("esperava diretório de histórico preenchido")
-	}
-	if _, err := os.Stat(filepath.Join(result.DiretorioHistorico, "comparacao_fontes_resumo.parquet")); err != nil {
-		t.Fatalf("esperava snapshot parquet da comparação: %v", err)
-	}
 }
 
 func TestExecutarEstudoCompletoGeraEAvaliaAsTresVariantes(t *testing.T) {
@@ -168,7 +161,6 @@ func TestExecutarEstudoCompletoGeraEAvaliaAsTresVariantes(t *testing.T) {
 		},
 		Fluxo: dominio.ConfigFluxo{
 			DiretorioSaida:     filepath.Join(tempDir, "generated"),
-			CaminhoDuckDB:      filepath.Join(tempDir, "generated", "witup-llm.duckdb"),
 			RaizReplicacaoWIT:  filepath.Join(tempDir, "replication"),
 			ArquivoBaselineWIT: "wit.json",
 			SalvarPrompts:      true,
@@ -302,18 +294,6 @@ func TestExecutarEstudoCompletoGeraEAvaliaAsTresVariantes(t *testing.T) {
 	}
 	if _, err := os.Stat(result.CaminhoEstudoCompleto); err != nil {
 		t.Fatalf("esperava o artefato consolidado do estudo: %v", err)
-	}
-	if result.DiretorioGraficos == "" {
-		t.Fatalf("esperava diretório de gráficos preenchido")
-	}
-	if result.DiretorioHistorico == "" {
-		t.Fatalf("esperava diretório de histórico preenchido")
-	}
-	if _, err := os.Stat(filepath.Join(result.DiretorioGraficos, "parte-1-expaths.txt")); err != nil {
-		t.Fatalf("esperava gráfico da Parte 1: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(result.DiretorioHistorico, "h3_comparacao_suites.parquet")); err != nil {
-		t.Fatalf("esperava histórico parquet das suítes: %v", err)
 	}
 	for _, variante := range result.ResultadosVariantes {
 		if variante.CaminhoGeracao == "" || variante.CaminhoAvaliacao == "" {

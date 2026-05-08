@@ -1,44 +1,41 @@
-# CLI e Referencia de Comandos
+# CLI
 
-O binario `witup` e a interface principal para orquestrar o pipeline de pesquisa. Ele traduz comandos de alto nivel em chamadas ao `Servico` da camada de aplicacao.
+O comando principal da fase atual é:
 
-## Arquitetura de Dispatch
-
-```mermaid
-graph TD
-    User["Usuario/Shell"] -- "witup comando --config" --> CMD["main.go (Comando Raiz)"]
-    CMD -- "Parse JSON" --> CFG["ConfigAplicacao"]
-    CFG -- "Inicializa" --> SVC["internal/aplicacao/servico.go (Servico)"]
-
-    subgraph "Dispatch de Comandos"
-        SVC -- "analisar" --> AGT["internal/agentes/orquestrador.go"]
-        SVC -- "gerar/avaliar" --> MET["internal/metricas/executor.go"]
-        SVC -- "executar-estudo" --> EXP["internal/aplicacao/experimento.go"]
-    end
-
-    AGT -- "CompletarJSON" --> LLM["internal/llm/cliente.go (Responses API)"]
-    EXP -- "RegistrarArtefato" --> DB["internal/armazenamento/duckdb.go (DuckDB)"]
-    MET -- "mvn test" --> JAVA["Projeto Java Externo"]
+```bash
+witup executar-segunda-fase --config <arquivo.json> --generation-model <modelo>
 ```
 
-## Mapeamento de Comandos
+## Comando principal
 
-| Comando CLI | Metodo Principal | Proposito |
-| :--- | :--- | :--- |
-| `analisar` | `AnalisarProjeto` | Scan direto via LLM dos metodos |
-| `analisar-multiagentes` | `AnalisarMultiagentes` | Orquestracao multiagente com papeis especializados |
-| `gerar` | `GerarTestes` | Cria testes JUnit a partir de artefatos de analise |
-| `avaliar` | `AvaliarProjeto` | Executa Maven/JaCoCo/PIT nos testes gerados |
-| `executar-experimento` | `ExecutarExperimento` | Pipeline de comparacao de tres variantes |
-| `executar-estudo-completo` | `ExecutarEstudoCompleto` | Pipeline completo: Analise + Geracao + Avaliacao |
-| `consolidar-estudo` | `ConsolidarEstudo` | Agrega artefatos em resumo para DuckDB |
-| `sondar` | `Sondar` | Verifica conectividade com provedor LLM |
-| `ingerir-witup` | `IngerirWITUP` | Importa baselines WITUP para DuckDB |
-| `visualizar-dados` | `VisualizarDados` | Servidor web local para explorar resultados |
+| Comando | Uso |
+| :--- | :--- |
+| `executar-segunda-fase` | Roda a comparação `WIT_CONTEXT` vs `DIRECT_TESTS` |
 
-## Categorias de Comandos
+## Comandos auxiliares ainda úteis
 
-- [Comandos de Analise](analysis.md) — Descoberta de ExPaths via LLM
-- [Experimento e Estudo](experiment.md) — Orquestracao do protocolo experimental
-- [Geracao, Avaliacao e Benchmark](generation.md) — Producao e medicao de testes
-- [Utilitarios](utilities.md) — Ferramentas auxiliares
+| Comando | Uso |
+| :--- | :--- |
+| `sondar` | Testa conectividade/autenticação do modelo |
+| `extrair-jacoco` | Extrai métrica de um `jacoco.xml` |
+| `extrair-pit` | Extrai mutation score de `mutations.xml` |
+| `extrair-geracao` | Extrai métricas estáticas de `generation.json` cruzado com `analysis.json` |
+| `extrair-surefire` | Soma testes executados a partir dos XMLs do Surefire |
+| `medir-reproducao-excecoes` | Mede a reprodução de expaths em uma geração |
+
+## Exemplo
+
+```bash
+./bin/witup executar-segunda-fase \
+  --config pipelines/fase-dois-guava-commons.json \
+  --generation-model openai_main
+```
+
+## Saída
+
+Ao final, a CLI imprime:
+
+- caminho do relatório JSON;
+- caminho dos CSVs;
+- caminho do dashboard HTML;
+- quantidade de projetos comparados.

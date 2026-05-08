@@ -27,7 +27,6 @@
       "additionalProperties": false,
       "properties": {
         "output_dir": {"type": "string"},
-        "duckdb_path": {"type": "string"},
         "replication_root": {"type": "string"},
         "baseline_file": {"type": "string"},
         "save_prompts": {"type": "boolean"},
@@ -73,11 +72,60 @@
           "value_regex": {"type": "string"},
           "scale": {"type": "number", "minimum": 0},
           "working_directory": {"type": "string"},
+          "timeout_seconds": {"type": "integer", "exclusiveMinimum": 0},
           "expected_outputs": {
             "type": "array",
             "items": {"type": "string"}
           },
-          "description": {"type": "string"}
+          "description": {"type": "string"},
+          "fallbacks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["command"],
+              "properties": {
+                "name": {"type": "string"},
+                "command": {"type": "string", "minLength": 1},
+                "value_regex": {"type": "string"},
+                "scale": {"type": "number", "minimum": 0},
+                "working_directory": {"type": "string"},
+                "timeout_seconds": {"type": "integer", "exclusiveMinimum": 0},
+                "expected_outputs": {
+                  "type": "array",
+                  "items": {"type": "string"}
+                },
+                "description": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "phase_two": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "execution_mode": {"type": "string", "enum": ["strict_1call", "repair_1retry"]},
+        "visualization_title": {"type": "string"},
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "root", "wit_analysis_path"],
+            "properties": {
+              "key": {"type": "string", "minLength": 1},
+              "label": {"type": "string"},
+              "root": {"type": "string", "minLength": 1},
+              "wit_analysis_path": {"type": "string", "minLength": 1},
+              "overview_file": {"type": "string"},
+              "include": {"type": "array", "items": {"type": "string"}},
+              "exclude": {"type": "array", "items": {"type": "string"}},
+              "target_containers": {"type": "array", "items": {"type": "string"}},
+              "test_framework": {"type": "string"}
+            }
+          }
         }
       }
     }

@@ -1,6 +1,10 @@
 .idea/
 .venv/
+.venv-docs/
 .m2/
+.env
+.env.*
+!.env.example
 
 # Build artifacts
 bin/
@@ -8,17 +12,48 @@ build/
 dist/
 generated/
 historico/*
-!historico/.gitkeep
 target/
+site/
+article/
+article.zip
+Monografia-master.zip
+*.zip
 
 # Go
 *.test
 *.out
 coverage.out
 .gocache/
+.gomodcache/
 
 # OS/editor noise
 .DS_Store
-resources
-scripts
-site/
+*.log
+*.tmp
+
+# LaTeX/Overleaf generated files
+*.aux
+*.bbl
+*.blg
+*.brf
+*.fdb_latexmk
+*.fls
+*.lof
+*.lot
+*.out
+*.synctex.gz
+*.toc
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.ist
+
+# Local WIT replication package and extracted resources.
+resources/*
+!resources/README.md
+/AGENTS.md
+/docs/
+/ARCHITECTURE.md
+requirements-docs.txt

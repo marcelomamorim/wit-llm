@@ -31,9 +31,13 @@ var retryableStatus = map[int]bool{
 
 // Resposta encapsula o payload JSON parseado e o texto bruto devolvido pela LLM.
 type Resposta struct {
-	IDResposta string
-	Payload    map[string]interface{}
-	RawText    string
+	IDResposta        string
+	Payload           map[string]interface{}
+	RawText           string
+	InputTokens       int
+	OutputTokens      int
+	CachedInputTokens int
+	EstimatedCost     *float64
 }
 
 // Cliente executa requisições contra os provedores de modelo configurados.
@@ -65,9 +69,13 @@ func (c *Cliente) CompletarJSON(model dominio.ConfigModelo, systemPrompt, userPr
 		return nil, fmt.Errorf("ao interpretar o payload JSON do modelo: %w", err)
 	}
 	return &Resposta{
-		IDResposta: "",
-		Payload:    payload,
-		RawText:    text,
+		IDResposta:        "",
+		Payload:           payload,
+		RawText:           text,
+		InputTokens:       0,
+		OutputTokens:      0,
+		CachedInputTokens: 0,
+		EstimatedCost:     nil,
 	}, nil
 }
 
@@ -184,10 +192,55 @@ func (c *Cliente) completeOpenAICompatibleJSON(
 		return nil, fmt.Errorf("ao interpretar o payload JSON do modelo: %w", err)
 	}
 	return &Resposta{
-		IDResposta: strings.TrimSpace(fmt.Sprint(payload["id"])),
-		Payload:    jsonPayload,
-		RawText:    texto,
+		IDResposta:        strings.TrimSpace(fmt.Sprint(payload["id"])),
+		Payload:           jsonPayload,
+		RawText:           texto,
+		InputTokens:       extrairInteiroMapa(payload, "usage", "input_tokens"),
+		OutputTokens:      extrairInteiroMapa(payload, "usage", "output_tokens"),
+		CachedInputTokens: extrairInteiroMapa(payload, "usage", "input_tokens_details", "cached_tokens"),
+		EstimatedCost: estimarCustoTokens(
+			model.Modelo,
+			extrairInteiroMapa(payload, "usage", "input_tokens"),
+			extrairInteiroMapa(payload, "usage", "input_tokens_details", "cached_tokens"),
+			extrairInteiroMapa(payload, "usage", "output_tokens"),
+		),
 	}, nil
+}
+
+func extrairInteiroMapa(payload map[string]interface{}, caminho ...string) int {
+	if len(caminho) == 0 {
+		return 0
+	}
+	var atual interface{} = payload
+	for _, chave := range caminho {
+		mapa, ok := atual.(map[string]interface{})
+		if !ok {
+			return 0
+		}
+		valor, ok := mapa[chave]
+		if !ok {
+			return 0
+		}
+		atual = valor
+	}
+	switch valor := atual.(type) {
+	case int:
+		return valor
+	case int32:
+		return int(valor)
+	case int64:
+		return int(valor)
+	case float64:
+		return int(valor)
+	case json.Number:
+		inteiro, err := valor.Int64()
+		if err != nil {
+			return 0
+		}
+		return int(inteiro)
+	default:
+		return 0
+	}
 }
 
 // construirCorpoResponses monta o corpo padrão enviado à Responses API.
@@ -300,12 +353,18 @@ func extrairTextoResponses(payload map[string]interface{}) (string, error) {
 // aceitaTemperaturaResponses informa se o modelo aceita o parâmetro
 // temperature na Responses API.
 //
-// A API tem rejeitado explicitamente esse parâmetro para a família GPT-5.4.
-// Mantemos a regra por família GPT-5 para evitar falhas iguais em variantes
-// próximas, sem afetar modelos anteriores que continuam usando temperature.
+// A Responses API rejeita esse parâmetro para famílias reasoning recentes,
+// como GPT-5 e o-series. Mantemos o envio somente para famílias anteriores
+// que ainda aceitam temperature, como gpt-4.1.
 func aceitaTemperaturaResponses(modelo string) bool {
 	normalizado := strings.ToLower(strings.TrimSpace(modelo))
-	return !strings.HasPrefix(normalizado, "gpt-5")
+	if strings.HasPrefix(normalizado, "gpt-5") {
+		return false
+	}
+	if len(normalizado) >= 2 && normalizado[0] == 'o' && normalizado[1] >= '0' && normalizado[1] <= '9' {
+		return false
+	}
+	return true
 }
 
 // openAIHeaders monta os headers de autenticação para provedores compatíveis com OpenAI.

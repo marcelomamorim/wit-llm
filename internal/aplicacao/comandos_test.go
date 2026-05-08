@@ -18,9 +18,14 @@ func TestPrincipalAjudaListaComandosDeExperimento(t *testing.T) {
 	if !strings.Contains(output, "witup-llm :: experimentos com exception paths na JVM") {
 		t.Fatalf("expected help output to contain CLI banner, got:\n%s", output)
 	}
-	for _, command := range []string{"ingest-witup", "browse-data", "analyze-agentic", "compare-sources", "run-experiment"} {
+	for _, command := range []string{"ingest-witup", "analyze-agentic", "compare-sources", "run-phase-two", "preflight-phase-two", "consolidate-first-round"} {
 		if !strings.Contains(output, command) {
 			t.Fatalf("expected help output to mention %q, got:\n%s", command, output)
+		}
+	}
+	for _, legacyCommand := range []string{"run-experiment", "run-full-study", "benchmark"} {
+		if strings.Contains(output, legacyCommand) {
+			t.Fatalf("help output should not mention legacy command %q, got:\n%s", legacyCommand, output)
 		}
 	}
 }
