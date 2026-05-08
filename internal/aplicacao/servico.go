@@ -6,16 +6,16 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/marceloamorim/witup-llm/internal/armazenamento"
 	"github.com/marceloamorim/witup-llm/internal/artefatos"
 	"github.com/marceloamorim/witup-llm/internal/dominio"
 	"github.com/marceloamorim/witup-llm/internal/experimento"
 	"github.com/marceloamorim/witup-llm/internal/llm"
 	"github.com/marceloamorim/witup-llm/internal/metricas"
 	"github.com/marceloamorim/witup-llm/internal/registro"
+	"github.com/marceloamorim/witup-llm/internal/witup"
 )
 
-// Servico orquestra os fluxos de análise, geração, avaliação e benchmark.
+// Servico orquestra os fluxos de análise, geração, avaliação e segunda fase.
 type Servico struct {
 	completionClient ClienteComplecao
 	metricRunner     ExecutorMetricas
@@ -38,7 +38,6 @@ type ResultadoExecucao struct {
 // comparação entre fontes.
 type ResultadoExecucaoExperimento struct {
 	EspacoTrabalho       string
-	DiretorioHistorico   string
 	CaminhoAnaliseWITUP  string
 	CaminhoAnaliseLLM    string
 	CaminhoComparacao    string
@@ -54,8 +53,6 @@ type ResultadoExecucaoEstudoCompleto struct {
 	EspacoTrabalho           string
 	CaminhoExperimento       string
 	CaminhoEstudoCompleto    string
-	DiretorioGraficos        string
-	DiretorioHistorico       string
 	RelatorioExperimento     dominio.RelatorioExperimento
 	RelatorioComparacao      dominio.RelatorioComparacaoFontes
 	RelatorioEstudoCompleto  dominio.RelatorioEstudoCompleto
@@ -120,9 +117,6 @@ func (s *Servico) Analisar(cfg *dominio.ConfigAplicacao, modelKey string, worksp
 	if err := artefatos.EscreverJSON(analysisPath, report); err != nil {
 		return dominio.RelatorioAnalise{}, "", workspace, err
 	}
-	if err := registrarArtefatoNoBanco(cfg, report.IDExecucao, "analise_llm", "", "", analysisPath, report.GeradoEm, report); err != nil {
-		return dominio.RelatorioAnalise{}, "", workspace, err
-	}
 	registro.Info("pipeline", "análise direta concluída: métodos=%d artefato=%s", report.TotalMetodos, analysisPath)
 	return report, analysisPath, workspace, nil
 }
@@ -159,50 +153,18 @@ func (s *Servico) AnalisarMultiagentes(cfg *dominio.ConfigAplicacao, modelKey st
 	if err := artefatos.EscreverJSON(tracePath, traceReport); err != nil {
 		return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", workspace, err
 	}
-	if err := registrarArtefatoNoBanco(cfg, report.IDExecucao, "analise_llm_multiagente", "", string(dominio.VarianteLLMApenas), analysisPath, report.GeradoEm, report); err != nil {
-		return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", workspace, err
-	}
-	if err := registrarArtefatoNoBanco(cfg, report.IDExecucao, "rastreio_agentes", "", string(dominio.VarianteLLMApenas), tracePath, traceReport.GeradoEm, traceReport); err != nil {
-		return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", workspace, err
-	}
 	registro.Info("pipeline", "análise multiagente concluída: métodos=%d análise=%s rastreio=%s", report.TotalMetodos, analysisPath, tracePath)
 	return report, analysisPath, traceReport, tracePath, workspace, nil
 }
 
-// SincronizarBaselinesWITUP carrega para o DuckDB os arquivos originais do artigo.
-func (s *Servico) SincronizarBaselinesWITUP(cfg *dominio.ConfigAplicacao) (armazenamento.ResumoSincronizacao, error) {
-	registro.Info("pipeline", "sincronizando baselines WITUP para o DuckDB em %s", cfg.Fluxo.CaminhoDuckDB)
-	banco, err := abrirBancoAnalitico(cfg)
-	if err != nil {
-		return armazenamento.ResumoSincronizacao{}, err
-	}
-	defer banco.Fechar()
-	resumo, err := banco.SincronizarBaselines(cfg.Fluxo.RaizReplicacaoWIT, cfg.Fluxo.ArquivoBaselineWIT)
-	if err == nil {
-		registro.Info("pipeline", "sincronização concluída: encontrados=%d importados=%d atualizados=%d", resumo.ProjetosEncontrados, resumo.ProjetosImportados, resumo.ProjetosAtualizados)
-	}
-	return resumo, err
-}
-
-// IngerirWITUP lê do DuckDB uma baseline já carregada e a materializa como
-// análise canônica no workspace da execução.
+// IngerirWITUP carrega uma baseline WIT local do pacote de replicação e a
+// materializa como análise canônica no workspace da execução.
 func (s *Servico) IngerirWITUP(cfg *dominio.ConfigAplicacao, chaveProjeto string, workspace *artefatos.EspacoTrabalho) (dominio.RelatorioAnalise, string, *artefatos.EspacoTrabalho, error) {
 	registro.Info("pipeline", "carregando baseline WITUP do projeto=%s arquivo=%s", chaveProjeto, cfg.Fluxo.ArquivoBaselineWIT)
-	banco, err := abrirBancoAnalitico(cfg)
+	caminhoBaseline := witup.ResolverCaminhoBaseline(cfg.Fluxo.RaizReplicacaoWIT, chaveProjeto, cfg.Fluxo.ArquivoBaselineWIT)
+	report, err := witup.CarregarAnalise(caminhoBaseline)
 	if err != nil {
-		return dominio.RelatorioAnalise{}, "", workspace, err
-	}
-	defer banco.Fechar()
-
-	report, _, err := banco.CarregarRelatorioBaseline(chaveProjeto, cfg.Fluxo.ArquivoBaselineWIT)
-	if err != nil {
-		if _, syncErr := banco.SincronizarBaselines(cfg.Fluxo.RaizReplicacaoWIT, cfg.Fluxo.ArquivoBaselineWIT); syncErr != nil {
-			return dominio.RelatorioAnalise{}, "", workspace, syncErr
-		}
-		report, _, err = banco.CarregarRelatorioBaseline(chaveProjeto, cfg.Fluxo.ArquivoBaselineWIT)
-		if err != nil {
-			return dominio.RelatorioAnalise{}, "", workspace, err
-		}
+		return dominio.RelatorioAnalise{}, "", workspace, fmt.Errorf("ao carregar baseline WIT %q: %w", caminhoBaseline, err)
 	}
 	workspace, err = prepararEspacoTrabalho(workspace, cfg.Fluxo.DiretorioSaida, "ingest-witup-"+chaveProjeto)
 	if err != nil {
@@ -210,9 +172,6 @@ func (s *Servico) IngerirWITUP(cfg *dominio.ConfigAplicacao, chaveProjeto string
 	}
 	analysisPath := filepath.Join(workspace.Fontes, "witup-analysis.json")
 	if err := artefatos.EscreverJSON(analysisPath, report); err != nil {
-		return dominio.RelatorioAnalise{}, "", workspace, err
-	}
-	if err := registrarArtefatoNoBanco(cfg, filepath.Base(workspace.Raiz), "analise_witup", chaveProjeto, string(dominio.VarianteWITUPApenas), analysisPath, report.GeradoEm, report); err != nil {
 		return dominio.RelatorioAnalise{}, "", workspace, err
 	}
 	registro.Info("pipeline", "baseline WITUP materializada: métodos=%d artefato=%s", report.TotalMetodos, analysisPath)
@@ -246,9 +205,6 @@ func (s *Servico) ExecutarExperimento(cfg *dominio.ConfigAplicacao, chaveProjeto
 	if err := artefatos.EscreverJSON(witupPath, witupReport); err != nil {
 		return ResultadoExecucaoExperimento{}, err
 	}
-	if err := registrarArtefatoNoBanco(cfg, filepath.Base(workspace.Raiz), "analise_witup", chaveProjeto, string(dominio.VarianteWITUPApenas), witupPath, witupReport.GeradoEm, witupReport); err != nil {
-		return ResultadoExecucaoExperimento{}, err
-	}
 	registro.Info(
 		"pipeline",
 		"alvos WITUP resolvidos no checkout: baseline=%d correspondidos=%d não_encontrados=%d",
@@ -267,29 +223,11 @@ func (s *Servico) ExecutarExperimento(cfg *dominio.ConfigAplicacao, chaveProjeto
 	if err := artefatos.EscreverJSON(comparisonPath, comparison); err != nil {
 		return ResultadoExecucaoExperimento{}, err
 	}
-	if err := registrarArtefatoNoBanco(cfg, filepath.Base(workspace.Raiz), "comparacao_fontes", chaveProjeto, "", comparisonPath, comparison.GeradoEm, comparison); err != nil {
-		return ResultadoExecucaoExperimento{}, err
-	}
 
 	variants := experimento.ConstruirVariantes(witupReport, llmReport)
 	variantArtifacts, err := experimento.EscreverArtefatosVariantes(workspace, variants)
 	if err != nil {
 		return ResultadoExecucaoExperimento{}, err
-	}
-	for _, artefatoVariante := range variantArtifacts {
-		relatorioVariante := variants[artefatoVariante.Variante]
-		if err := registrarArtefatoNoBanco(
-			cfg,
-			filepath.Base(workspace.Raiz),
-			"variante",
-			chaveProjeto,
-			string(artefatoVariante.Variante),
-			artefatoVariante.CaminhoAnalise,
-			relatorioVariante.GeradoEm,
-			relatorioVariante,
-		); err != nil {
-			return ResultadoExecucaoExperimento{}, err
-		}
 	}
 
 	report := dominio.RelatorioExperimento{
@@ -306,18 +244,10 @@ func (s *Servico) ExecutarExperimento(cfg *dominio.ConfigAplicacao, chaveProjeto
 	if err := artefatos.EscreverJSON(reportPath, report); err != nil {
 		return ResultadoExecucaoExperimento{}, err
 	}
-	if err := registrarArtefatoNoBanco(cfg, report.IDExecucao, "experimento", chaveProjeto, "", reportPath, report.GeradoEm, report); err != nil {
-		return ResultadoExecucaoExperimento{}, err
-	}
-	resumoHistorico, err := exportarHistoricoParquet(cfg, report.IDExecucao, chaveProjeto)
-	if err != nil {
-		return ResultadoExecucaoExperimento{}, err
-	}
 	registro.Info("pipeline", "experimento concluído: comparação=%s variantes=%d raiz=%s", comparisonPath, len(variantArtifacts), workspace.Raiz)
 
 	return ResultadoExecucaoExperimento{
 		EspacoTrabalho:       workspace.Raiz,
-		DiretorioHistorico:   resumoHistorico.Diretorio,
 		CaminhoAnaliseWITUP:  witupPath,
 		CaminhoAnaliseLLM:    llmPath,
 		CaminhoComparacao:    comparisonPath,
@@ -329,8 +259,7 @@ func (s *Servico) ExecutarExperimento(cfg *dominio.ConfigAplicacao, chaveProjeto
 }
 
 // ExecutarEstudoCompleto roda a Parte 1 e a Parte 2 do estudo no mesmo fluxo:
-// compara expaths, gera testes por variante, avalia as suítes e consolida o
-// resultado no DuckDB.
+// compara expaths, gera testes por variante e avalia as suítes em artefatos locais.
 func (s *Servico) ExecutarEstudoCompleto(
 	cfg *dominio.ConfigAplicacao,
 	chaveProjeto string,
@@ -384,18 +313,6 @@ func (s *Servico) ExecutarEstudoCompleto(
 		if err != nil {
 			return ResultadoExecucaoEstudoCompleto{}, err
 		}
-		if err := registrarArtefatoNoBanco(
-			cfg,
-			relatorioGeracao.IDExecucao,
-			"geracao_testes_variante",
-			chaveProjeto,
-			string(artefatoVariante.Variante),
-			caminhoGeracao,
-			relatorioGeracao.GeradoEm,
-			relatorioGeracao,
-		); err != nil {
-			return ResultadoExecucaoEstudoCompleto{}, err
-		}
 
 		relatorioAvaliacao, caminhoAvaliacao, _, err := s.Avaliar(
 			cfg,
@@ -407,18 +324,6 @@ func (s *Servico) ExecutarEstudoCompleto(
 			espacoVariante,
 		)
 		if err != nil {
-			return ResultadoExecucaoEstudoCompleto{}, err
-		}
-		if err := registrarArtefatoNoBanco(
-			cfg,
-			relatorioAvaliacao.IDExecucao,
-			"avaliacao_variante",
-			chaveProjeto,
-			string(artefatoVariante.Variante),
-			caminhoAvaliacao,
-			relatorioAvaliacao.GeradoEm,
-			relatorioAvaliacao,
-		); err != nil {
 			return ResultadoExecucaoEstudoCompleto{}, err
 		}
 
@@ -462,50 +367,19 @@ func (s *Servico) ExecutarEstudoCompleto(
 	if err := artefatos.EscreverJSON(caminhoEstudo, relatorioEstudo); err != nil {
 		return ResultadoExecucaoEstudoCompleto{}, err
 	}
-	if err := registrarArtefatoNoBanco(
-		cfg,
-		relatorioEstudo.IDExecucao,
-		"estudo_completo",
-		chaveProjeto,
-		"",
-		caminhoEstudo,
-		relatorioEstudo.GeradoEm,
-		relatorioEstudo,
-	); err != nil {
-		return ResultadoExecucaoEstudoCompleto{}, err
-	}
-
-	diretorioGraficos := filepath.Join(resultadoExperimento.EspacoTrabalho, "plots")
-	bancoAnalitico, err := abrirBancoAnalitico(cfg)
-	if err != nil {
-		return ResultadoExecucaoEstudoCompleto{}, err
-	}
-	resumoGraficos, err := bancoAnalitico.GerarGraficosExecucao(relatorioEstudo.IDExecucao, diretorioGraficos)
-	_ = bancoAnalitico.Fechar()
-	if err != nil {
-		return ResultadoExecucaoEstudoCompleto{}, err
-	}
-	resumoHistorico, err := exportarHistoricoParquet(cfg, relatorioEstudo.IDExecucao, chaveProjeto)
-	if err != nil {
-		return ResultadoExecucaoEstudoCompleto{}, err
-	}
 
 	registro.Info(
 		"pipeline",
-		"estudo completo concluído: estudo=%s variantes=%d gráficos=%s histórico=%s textplot=%t",
+		"estudo completo concluído: estudo=%s variantes=%d raiz=%s",
 		caminhoEstudo,
 		len(resultadosVariantes),
-		resumoGraficos.Diretorio,
-		resumoHistorico.Diretorio,
-		resumoGraficos.UsouTextplot,
+		resultadoExperimento.EspacoTrabalho,
 	)
 
 	return ResultadoExecucaoEstudoCompleto{
 		EspacoTrabalho:           resultadoExperimento.EspacoTrabalho,
 		CaminhoExperimento:       filepath.Join(resultadoExperimento.EspacoTrabalho, "experimento.json"),
 		CaminhoEstudoCompleto:    caminhoEstudo,
-		DiretorioGraficos:        resumoGraficos.Diretorio,
-		DiretorioHistorico:       resumoHistorico.Diretorio,
 		RelatorioExperimento:     resultadoExperimento.RelatorioExperimento,
 		RelatorioComparacao:      resultadoExperimento.RelatorioComparacao,
 		RelatorioEstudoCompleto:  relatorioEstudo,

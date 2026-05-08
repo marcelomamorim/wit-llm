@@ -1,6 +1,7 @@
 package metricas
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,9 +9,15 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/marceloamorim/witup-llm/internal/dominio"
 	"github.com/marceloamorim/witup-llm/internal/registro"
+)
+
+const (
+	segundosTimeoutMetricaPadrao = 600
+	codigoSaidaTimeoutMetrica    = 124
 )
 
 // ContextoExecucao fornece placeholders usados na renderização dos comandos de métricas.
@@ -42,18 +49,140 @@ func (r *Executor) ExecutarTodas(metrics []dominio.ConfigMetrica, ctx ContextoEx
 
 // ExecutarMetrica executa uma métrica no diretório de trabalho configurado.
 func (r *Executor) ExecutarMetrica(metric dominio.ConfigMetrica, ctx ContextoExecucao) dominio.ResultadoMetrica {
-	comando := renderizarComando(metric.Comando, ctx)
-	diretorioTrabalho := ctx.RaizProjeto
-	if strings.TrimSpace(metric.DiretorioTrabalho) != "" {
-		diretorioTrabalho = filepath.Clean(filepath.Join(ctx.RaizProjeto, metric.DiretorioTrabalho))
+	tentativasConfiguradas := construirTentativas(metric)
+	tentativasExecutadas := make([]dominio.TentativaMetrica, 0, len(tentativasConfiguradas))
+	var tentativaEscolhida dominio.TentativaMetrica
+	estrategiaExecutada := ""
+
+	for _, tentativa := range tentativasConfiguradas {
+		resultadoTentativa := r.executarTentativa(tentativa, ctx)
+		tentativasExecutadas = append(tentativasExecutadas, resultadoTentativa)
+		tentativaEscolhida = resultadoTentativa
+		estrategiaExecutada = tentativa.nome
+		if resultadoTentativa.Sucesso {
+			break
+		}
 	}
 
-	cmd := exec.Command("sh", "-c", comando)
+	resultado := dominio.ResultadoMetrica{
+		Nome:                metric.Nome,
+		Tipo:                metric.Tipo,
+		Comando:             tentativaEscolhida.Comando,
+		Sucesso:             tentativaEscolhida.Sucesso,
+		CodigoSaida:         tentativaEscolhida.CodigoSaida,
+		SaidaPadrao:         tentativaEscolhida.SaidaPadrao,
+		SaidaErro:           tentativaEscolhida.SaidaErro,
+		ValorNumerico:       tentativaEscolhida.ValorNumerico,
+		NotaNormalizada:     tentativaEscolhida.NotaNormalizada,
+		Peso:                metric.Peso,
+		Descricao:           metric.Descricao,
+		EstrategiaExecutada: estrategiaExecutada,
+		Tentativas:          tentativasExecutadas,
+		TempoEsgotado:       tentativaEscolhida.TempoEsgotado,
+		TimeoutSegundos:     tentativaEscolhida.TimeoutSegundos,
+		DuracaoMillis:       tentativaEscolhida.DuracaoMillis,
+	}
+	registro.Info(
+		"metricas",
+		"métrica=%s finalizada sucesso=%t codigo=%d estratégia=%s nota=%s",
+		metric.Nome,
+		resultado.Sucesso,
+		resultado.CodigoSaida,
+		resultado.EstrategiaExecutada,
+		FormatarPontuacao(resultado.NotaNormalizada),
+	)
+	return resultado
+}
+
+type tentativaExecucaoMetrica struct {
+	nome              string
+	comando           string
+	regexValor        string
+	escala            float64
+	diretorioTrabalho string
+	saidasEsperadas   []string
+	segundosTimeout   int
+}
+
+func construirTentativas(metric dominio.ConfigMetrica) []tentativaExecucaoMetrica {
+	segundosTimeout := metric.SegundosTimeout
+	if segundosTimeout <= 0 {
+		segundosTimeout = segundosTimeoutMetricaPadrao
+	}
+	tentativas := []tentativaExecucaoMetrica{{
+		nome:              "primary",
+		comando:           metric.Comando,
+		regexValor:        metric.RegexValor,
+		escala:            metric.Escala,
+		diretorioTrabalho: metric.DiretorioTrabalho,
+		saidasEsperadas:   metric.SaidasEsperadas,
+		segundosTimeout:   segundosTimeout,
+	}}
+
+	for indice, fallback := range metric.Fallbacks {
+		nome := strings.TrimSpace(fallback.Nome)
+		if nome == "" {
+			nome = fmt.Sprintf("fallback-%d", indice+1)
+		}
+		escala := metric.Escala
+		if fallback.Escala != nil {
+			escala = *fallback.Escala
+		}
+		regexValor := metric.RegexValor
+		if strings.TrimSpace(fallback.RegexValor) != "" {
+			regexValor = fallback.RegexValor
+		}
+		diretorioTrabalho := metric.DiretorioTrabalho
+		if strings.TrimSpace(fallback.DiretorioTrabalho) != "" {
+			diretorioTrabalho = fallback.DiretorioTrabalho
+		}
+		saidasEsperadas := metric.SaidasEsperadas
+		if fallback.SaidasEsperadas != nil {
+			saidasEsperadas = fallback.SaidasEsperadas
+		}
+		timeoutFallback := segundosTimeout
+		if fallback.SegundosTimeout > 0 {
+			timeoutFallback = fallback.SegundosTimeout
+		}
+		tentativas = append(tentativas, tentativaExecucaoMetrica{
+			nome:              nome,
+			comando:           fallback.Comando,
+			regexValor:        regexValor,
+			escala:            escala,
+			diretorioTrabalho: diretorioTrabalho,
+			saidasEsperadas:   saidasEsperadas,
+			segundosTimeout:   timeoutFallback,
+		})
+	}
+
+	return tentativas
+}
+
+func (r *Executor) executarTentativa(tentativa tentativaExecucaoMetrica, ctx ContextoExecucao) dominio.TentativaMetrica {
+	comando := renderizarComando(tentativa.comando, ctx)
+	diretorioTrabalho := ctx.RaizProjeto
+	if strings.TrimSpace(tentativa.diretorioTrabalho) != "" {
+		diretorioTrabalho = filepath.Clean(filepath.Join(ctx.RaizProjeto, tentativa.diretorioTrabalho))
+	}
+
+	inicio := time.Now()
+	timeout := time.Duration(tentativa.segundosTimeout) * time.Second
+	ctxTimeout, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	progressoHeartbeat := registro.NovoProgresso(1)
+	cancelHeartbeat := registro.IniciarHeartbeat(ctxTimeout, "metricas", "metric_execution", tentativa.nome, "running", progressoHeartbeat)
+	defer cancelHeartbeat()
+
+	cmd := exec.CommandContext(ctxTimeout, "sh", "-c", comando)
 	cmd.Dir = diretorioTrabalho
-	registro.Info("metricas", "executando métrica=%s diretório=%s comando=%s", metric.Nome, diretorioTrabalho, comando)
+	configurarCancelamentoComando(cmd)
+	registro.Info("metricas", "executando tentativa=%s timeout=%s diretório=%s comando=%s", tentativa.nome, timeout, diretorioTrabalho, comando)
 	saidaPadraoBytes, err := cmd.Output()
+	progressoHeartbeat.Incrementar()
+	duracaoMillis := time.Since(inicio).Milliseconds()
 	saidaErro := ""
 	codigoSaida := 0
+	tempoEsgotado := ctxTimeout.Err() == context.DeadlineExceeded
 	if err != nil {
 		codigoSaida = 1
 		if e, ok := err.(*exec.ExitError); ok {
@@ -63,10 +192,17 @@ func (r *Executor) ExecutarMetrica(metric dominio.ConfigMetrica, ctx ContextoExe
 			saidaErro = err.Error()
 		}
 	}
+	if tempoEsgotado {
+		codigoSaida = codigoSaidaTimeoutMetrica
+		if saidaErro != "" {
+			saidaErro += "\n"
+		}
+		saidaErro += fmt.Sprintf("tempo limite da métrica excedido após %s", timeout)
+	}
 	saidaPadrao := string(saidaPadraoBytes)
 
 	if codigoSaida == 0 {
-		if err := validarSaidasEsperadas(metric.SaidasEsperadas, diretorioTrabalho); err != nil {
+		if err := validarSaidasEsperadas(tentativa.saidasEsperadas, diretorioTrabalho); err != nil {
 			codigoSaida = 1
 			if saidaErro != "" {
 				saidaErro += "\n"
@@ -75,12 +211,14 @@ func (r *Executor) ExecutarMetrica(metric dominio.ConfigMetrica, ctx ContextoExe
 		}
 	}
 
-	valorNumerico := interpretarValorNumerico(metric.RegexValor, saidaPadrao, codigoSaida == 0)
-	notaNormalizada := normalizarNota(valorNumerico, metric.Escala)
-
-	resultado := dominio.ResultadoMetrica{
-		Nome:            metric.Nome,
-		Tipo:            metric.Tipo,
+	valorNumerico := interpretarValorNumerico(tentativa.regexValor, saidaPadrao, codigoSaida == 0)
+	notaNormalizada := normalizarNota(valorNumerico, tentativa.escala)
+	if strings.TrimSpace(tentativa.regexValor) == "" && tentativa.escala > 0 {
+		valorNumerico = valorBinarioTentativa(tentativa.escala, codigoSaida == 0)
+		notaNormalizada = normalizarNota(valorNumerico, tentativa.escala)
+	}
+	return dominio.TentativaMetrica{
+		Nome:            tentativa.nome,
 		Comando:         comando,
 		Sucesso:         codigoSaida == 0,
 		CodigoSaida:     codigoSaida,
@@ -88,11 +226,22 @@ func (r *Executor) ExecutarMetrica(metric dominio.ConfigMetrica, ctx ContextoExe
 		SaidaErro:       saidaErro,
 		ValorNumerico:   valorNumerico,
 		NotaNormalizada: notaNormalizada,
-		Peso:            metric.Peso,
-		Descricao:       metric.Descricao,
+		TempoEsgotado:   tempoEsgotado,
+		TimeoutSegundos: tentativa.segundosTimeout,
+		DuracaoMillis:   duracaoMillis,
 	}
-	registro.Info("metricas", "métrica=%s finalizada sucesso=%t codigo=%d nota=%s", metric.Nome, resultado.Sucesso, resultado.CodigoSaida, FormatarPontuacao(resultado.NotaNormalizada))
-	return resultado
+}
+
+func valorBinarioTentativa(escala float64, sucesso bool) *float64 {
+	if escala <= 0 {
+		return nil
+	}
+	if sucesso {
+		valor := escala
+		return &valor
+	}
+	zero := 0.0
+	return &zero
 }
 
 // AgregarPontuacao calcula a média ponderada das métricas normalizadas.

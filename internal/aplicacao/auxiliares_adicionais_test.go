@@ -116,6 +116,23 @@ func TestFiltrarAnalisesParte2RemoveHTMLManager(t *testing.T) {
 	}
 }
 
+func TestFiltrarMetodosPorContainersRestringeAoContainerDesejado(t *testing.T) {
+	metodos := []dominio.DescritorMetodo{
+		{IDMetodo: "1", NomeContainer: "com.google.common.collect.ImmutableList"},
+		{IDMetodo: "2", NomeContainer: "com.google.common.collect.ImmutableMap"},
+	}
+
+	filtrados := filtrarMetodosPorContainers(metodos, []string{"com.google.common.collect.ImmutableList"})
+	if len(filtrados) != 1 || filtrados[0].IDMetodo != "1" {
+		t.Fatalf("filtro por container inesperado: %#v", filtrados)
+	}
+
+	todos := filtrarMetodosPorContainers(metodos, nil)
+	if len(todos) != 2 {
+		t.Fatalf("sem target_containers o filtro deveria preservar tudo: %#v", todos)
+	}
+}
+
 func TestAuxiliaresDeArquivosEFormatacao(t *testing.T) {
 	arquivos := []dominio.ArquivoTesteGerado{{CaminhoRelativo: "A.java", Conteudo: "1"}, {CaminhoRelativo: "A.java", Conteudo: "2"}, {CaminhoRelativo: "B.java", Conteudo: "3"}}
 	consolidados := consolidarArquivosGerados(arquivos)
@@ -130,13 +147,6 @@ func TestAuxiliaresDeArquivosEFormatacao(t *testing.T) {
 	}
 	if got := fallbackIDCaminho("", "m1", 2); got != "m1:2" {
 		t.Fatalf("fallback de id inesperado: %q", got)
-	}
-	if got := chaveOrdenacaoNota(nil, nil, nil); got != -1 {
-		t.Fatalf("chave de ordenação vazia inesperada: %.2f", got)
-	}
-	markdown := construirMarkdownBenchmark([]dominio.EntradaBenchmark{{Posicao: 1, ChaveModeloAnalise: "a", ChaveModeloGeracao: "g", NotaCombinada: ponteiroFloatAux(90)}})
-	if !strings.Contains(markdown, "| 1 | a->g |") {
-		t.Fatalf("markdown de benchmark inesperado: %q", markdown)
 	}
 }
 

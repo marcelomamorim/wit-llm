@@ -25,7 +25,6 @@ var (
 
 type configFluxoBruta struct {
 	DiretorioSaida     string `json:"output_dir"`
-	CaminhoDuckDB      string `json:"duckdb_path"`
 	RaizReplicacaoWIT  string `json:"replication_root"`
 	ArquivoBaselineWIT string `json:"baseline_file"`
 	SalvarPrompts      *bool  `json:"save_prompts"`
@@ -36,11 +35,12 @@ type configFluxoBruta struct {
 }
 
 type configAplicacaoBruta struct {
-	Versao   string                          `json:"version"`
-	Projeto  dominio.ConfigProjeto           `json:"project"`
-	Fluxo    configFluxoBruta                `json:"pipeline"`
-	Modelos  map[string]dominio.ConfigModelo `json:"models"`
-	Metricas []dominio.ConfigMetrica         `json:"metrics"`
+	Versao      string                          `json:"version"`
+	Projeto     dominio.ConfigProjeto           `json:"project"`
+	Fluxo       configFluxoBruta                `json:"pipeline"`
+	Modelos     map[string]dominio.ConfigModelo `json:"models"`
+	Metricas    []dominio.ConfigMetrica         `json:"metrics"`
+	SegundaFase dominio.ConfigSegundaFase       `json:"phase_two"`
 }
 
 // Carregar carrega, normaliza e valida a configuração JSON da aplicação.
@@ -86,13 +86,13 @@ func interpretarConfiguracao(conteudo []byte) (*dominio.ConfigAplicacao, error) 
 	}
 
 	cfg := &dominio.ConfigAplicacao{
-		Versao:   bruto.Versao,
-		Projeto:  bruto.Projeto,
-		Modelos:  bruto.Modelos,
-		Metricas: bruto.Metricas,
+		Versao:      bruto.Versao,
+		Projeto:     bruto.Projeto,
+		Modelos:     bruto.Modelos,
+		Metricas:    bruto.Metricas,
+		SegundaFase: bruto.SegundaFase,
 		Fluxo: dominio.ConfigFluxo{
 			DiretorioSaida:     bruto.Fluxo.DiretorioSaida,
-			CaminhoDuckDB:      bruto.Fluxo.CaminhoDuckDB,
 			RaizReplicacaoWIT:  bruto.Fluxo.RaizReplicacaoWIT,
 			ArquivoBaselineWIT: bruto.Fluxo.ArquivoBaselineWIT,
 			MaximoMetodos:      bruto.Fluxo.MaximoMetodos,
@@ -126,9 +126,6 @@ func aplicarPadroes(cfg *dominio.ConfigAplicacao) error {
 	}
 	if cfg.Fluxo.DiretorioSaida == "" {
 		cfg.Fluxo.DiretorioSaida = "generated"
-	}
-	if cfg.Fluxo.CaminhoDuckDB == "" {
-		cfg.Fluxo.CaminhoDuckDB = filepath.Join(cfg.Fluxo.DiretorioSaida, "witup-llm.duckdb")
 	}
 	if cfg.Fluxo.RaizReplicacaoWIT == "" {
 		cfg.Fluxo.RaizReplicacaoWIT = filepath.Join("resources", "wit-replication-package", "data", "output")
@@ -168,6 +165,29 @@ func aplicarPadroes(cfg *dominio.ConfigAplicacao) error {
 		if cfg.Metricas[indice].Escala == 0 {
 			cfg.Metricas[indice].Escala = 100.0
 		}
+		if cfg.Metricas[indice].SegundosTimeout == 0 {
+			cfg.Metricas[indice].SegundosTimeout = 600
+		}
+	}
+	for indice := range cfg.SegundaFase.Projetos {
+		if strings.TrimSpace(cfg.SegundaFase.Projetos[indice].Rotulo) == "" {
+			cfg.SegundaFase.Projetos[indice].Rotulo = cfg.SegundaFase.Projetos[indice].Chave
+		}
+		if len(cfg.SegundaFase.Projetos[indice].Include) == 0 {
+			cfg.SegundaFase.Projetos[indice].Include = append([]string{}, cfg.Projeto.Include...)
+		}
+		if len(cfg.SegundaFase.Projetos[indice].Exclude) == 0 {
+			cfg.SegundaFase.Projetos[indice].Exclude = append([]string{}, cfg.Projeto.Exclude...)
+		}
+		if strings.TrimSpace(cfg.SegundaFase.Projetos[indice].TestFramework) == "" {
+			cfg.SegundaFase.Projetos[indice].TestFramework = cfg.Projeto.TestFramework
+		}
+	}
+	if strings.TrimSpace(cfg.SegundaFase.TituloVisualizacao) == "" {
+		cfg.SegundaFase.TituloVisualizacao = "Segunda fase: WIT context vs geração direta"
+	}
+	if strings.TrimSpace(cfg.SegundaFase.ModoExecucao) == "" {
+		cfg.SegundaFase.ModoExecucao = dominio.ModoExecucaoSegundaFaseReparo
 	}
 	return nil
 }
@@ -180,10 +200,20 @@ func resolverCaminhos(cfg *dominio.ConfigAplicacao) error {
 	}
 	cfg.Projeto.Raiz = resolverCaminho(diretorioBase, cfg.Projeto.Raiz)
 	cfg.Fluxo.DiretorioSaida = resolverCaminho(diretorioBase, cfg.Fluxo.DiretorioSaida)
-	cfg.Fluxo.CaminhoDuckDB = resolverCaminho(diretorioBase, cfg.Fluxo.CaminhoDuckDB)
 	cfg.Fluxo.RaizReplicacaoWIT = resolverCaminho(diretorioBase, cfg.Fluxo.RaizReplicacaoWIT)
 	if strings.TrimSpace(cfg.Projeto.OverviewFile) != "" {
 		cfg.Projeto.OverviewFile = resolverCaminho(diretorioBase, cfg.Projeto.OverviewFile)
+	}
+	for indice := range cfg.SegundaFase.Projetos {
+		if strings.TrimSpace(cfg.SegundaFase.Projetos[indice].Raiz) != "" {
+			cfg.SegundaFase.Projetos[indice].Raiz = resolverCaminho(diretorioBase, cfg.SegundaFase.Projetos[indice].Raiz)
+		}
+		if strings.TrimSpace(cfg.SegundaFase.Projetos[indice].CaminhoBaseline) != "" {
+			cfg.SegundaFase.Projetos[indice].CaminhoBaseline = resolverCaminho(diretorioBase, cfg.SegundaFase.Projetos[indice].CaminhoBaseline)
+		}
+		if strings.TrimSpace(cfg.SegundaFase.Projetos[indice].OverviewFile) != "" {
+			cfg.SegundaFase.Projetos[indice].OverviewFile = resolverCaminho(diretorioBase, cfg.SegundaFase.Projetos[indice].OverviewFile)
+		}
 	}
 	return nil
 }
@@ -220,9 +250,6 @@ func validar(cfg *dominio.ConfigAplicacao) error {
 	}
 	if cfg.Fluxo.TamanhoSubconjunto < 0 {
 		return errors.New("pipeline.deep_validation_subset_size deve ser >= 0")
-	}
-	if strings.TrimSpace(cfg.Fluxo.CaminhoDuckDB) == "" {
-		return errors.New("pipeline.duckdb_path é obrigatório")
 	}
 	if strings.TrimSpace(cfg.Fluxo.RaizReplicacaoWIT) == "" {
 		return errors.New("pipeline.replication_root é obrigatório")
@@ -285,6 +312,60 @@ func validar(cfg *dominio.ConfigAplicacao) error {
 		}
 		if metrica.Escala < 0 {
 			return fmt.Errorf("%s.scale deve ser >= 0", rotulo)
+		}
+		if metrica.SegundosTimeout <= 0 {
+			return fmt.Errorf("%s.timeout_seconds deve ser > 0", rotulo)
+		}
+		for indiceFallback, fallback := range metrica.Fallbacks {
+			rotuloFallback := fmt.Sprintf("%s.fallbacks[%d]", rotulo, indiceFallback)
+			if strings.TrimSpace(fallback.Comando) == "" {
+				return fmt.Errorf("%s.command é obrigatório", rotuloFallback)
+			}
+			if fallback.Escala != nil && *fallback.Escala < 0 {
+				return fmt.Errorf("%s.scale deve ser >= 0", rotuloFallback)
+			}
+			if fallback.SegundosTimeout < 0 {
+				return fmt.Errorf("%s.timeout_seconds deve ser >= 0", rotuloFallback)
+			}
+		}
+	}
+
+	if len(cfg.SegundaFase.Projetos) > 0 {
+		switch strings.TrimSpace(cfg.SegundaFase.ModoExecucao) {
+		case dominio.ModoExecucaoSegundaFaseEstrito, dominio.ModoExecucaoSegundaFaseReparo:
+		default:
+			return fmt.Errorf("phase_two.execution_mode=%q não suportado; use %q ou %q", cfg.SegundaFase.ModoExecucao, dominio.ModoExecucaoSegundaFaseEstrito, dominio.ModoExecucaoSegundaFaseReparo)
+		}
+		chavesProjetos := map[string]bool{}
+		for indice, projeto := range cfg.SegundaFase.Projetos {
+			rotulo := fmt.Sprintf("phase_two.projects[%d]", indice)
+			if strings.TrimSpace(projeto.Chave) == "" {
+				return fmt.Errorf("%s.key é obrigatório", rotulo)
+			}
+			if chavesProjetos[projeto.Chave] {
+				return fmt.Errorf("%s.key=%q duplicado", rotulo, projeto.Chave)
+			}
+			chavesProjetos[projeto.Chave] = true
+			if strings.TrimSpace(projeto.Raiz) == "" {
+				return fmt.Errorf("%s.root é obrigatório", rotulo)
+			}
+			infoRaiz, err := os.Stat(projeto.Raiz)
+			if err != nil {
+				return fmt.Errorf("%s.root=%q: %w", rotulo, projeto.Raiz, err)
+			}
+			if !infoRaiz.IsDir() {
+				return fmt.Errorf("%s.root=%q deve ser diretório", rotulo, projeto.Raiz)
+			}
+			if strings.TrimSpace(projeto.CaminhoBaseline) == "" {
+				return fmt.Errorf("%s.wit_analysis_path é obrigatório", rotulo)
+			}
+			infoBaseline, err := os.Stat(projeto.CaminhoBaseline)
+			if err != nil {
+				return fmt.Errorf("%s.wit_analysis_path=%q: %w", rotulo, projeto.CaminhoBaseline, err)
+			}
+			if infoBaseline.IsDir() {
+				return fmt.Errorf("%s.wit_analysis_path=%q deve ser arquivo", rotulo, projeto.CaminhoBaseline)
+			}
 		}
 	}
 

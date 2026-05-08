@@ -1,27 +1,29 @@
 # Perfis de pipeline
 
-Esta pasta organiza a configuração por cenário executável usando JSON versionado.
+Esta pasta agora está focada na segunda fase do estudo.
 
-## Perfis incluídos
+## Perfil principal
 
-- `smoke-visualee.json`
-- `piloto-commons-io.json`
-- `benchmark-matriz.json`
+- `fase-dois-guava-commons.json`
+
+Esse perfil serve como base para comparar:
+
+- geração com contexto WIT;
+- geração direta sem contexto WIT;
+
+nos projetos:
+
+- Google Guava
+- Apache Commons Collections
 
 ## Como usar
 
-Exemplo de carga do baseline e experimento piloto:
-
 ```bash
-./bin/witup ingerir-witup --config pipelines/piloto-commons-io.json
-./bin/witup executar-experimento --config pipelines/piloto-commons-io.json --model openai_main --project-key commons-io
+./bin/witup executar-segunda-fase \
+  --config pipelines/fase-dois-guava-commons.json \
+  --generation-model openai_main
 ```
 
-## Ideia central
+## Observação
 
-Cada arquivo representa uma intenção de execução:
-- `smoke`: validar o fluxo rapidamente;
-- `piloto`: rodar um projeto com mais profundidade;
-- `benchmark`: comparar mais de um cenário.
-
-Essa organização mantém a CLI simples e deixa o protocolo experimental mais legível.
+Os caminhos de `root` e `wit_analysis_path` precisam ser ajustados para o seu ambiente antes da execução.

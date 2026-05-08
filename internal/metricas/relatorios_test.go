@@ -165,3 +165,226 @@ func TestCalcularReproducaoExcecoesUsaFallbackDeArquivosEClasseSimples(t *testin
 		t.Fatalf("esperava 100 de reprodução, recebi %.2f", valor)
 	}
 }
+
+func TestExtrairEstatisticasSurefireEPassRate(t *testing.T) {
+	tempDir := t.TempDir()
+	relatoriosDir := filepath.Join(tempDir, "target", "surefire-reports")
+	xmlA := `<testsuite tests="4" failures="1" errors="1" skipped="1"></testsuite>`
+	xmlB := `<testsuite tests="2" failures="0" errors="0" skipped="0"></testsuite>`
+	if err := artefatos.EscreverTexto(filepath.Join(relatoriosDir, "TEST-a.xml"), xmlA); err != nil {
+		t.Fatalf("fixture surefire A: %v", err)
+	}
+	if err := artefatos.EscreverTexto(filepath.Join(relatoriosDir, "TEST-b.xml"), xmlB); err != nil {
+		t.Fatalf("fixture surefire B: %v", err)
+	}
+
+	estatisticas, err := ExtrairEstatisticasSurefire(relatoriosDir)
+	if err != nil {
+		t.Fatalf("extrair estatísticas surefire: %v", err)
+	}
+	if estatisticas.Tests != 6 || estatisticas.Failures != 1 || estatisticas.Errors != 1 || estatisticas.Skipped != 1 {
+		t.Fatalf("estatísticas inesperadas: %#v", estatisticas)
+	}
+	if estatisticas.Aprovados() != 4 {
+		t.Fatalf("aprovados inesperados: %d", estatisticas.Aprovados())
+	}
+	if math.Abs(estatisticas.TaxaSucesso()-66.6666667) > 0.001 {
+		t.Fatalf("taxa de sucesso inesperada: %.4f", estatisticas.TaxaSucesso())
+	}
+}
+
+func TestExtrairEstatisticasGeracao(t *testing.T) {
+	tempDir := t.TempDir()
+	analysisPath := filepath.Join(tempDir, "analysis.json")
+	generationPath := filepath.Join(tempDir, "generation.json")
+	analise := dominio.RelatorioAnalise{Analises: []dominio.AnaliseMetodo{
+		{Metodo: dominio.DescritorMetodo{IDMetodo: "m1"}},
+		{Metodo: dominio.DescritorMetodo{IDMetodo: "m2"}},
+	}}
+	geracao := dominio.RelatorioGeracao{ArquivosTeste: []dominio.ArquivoTesteGerado{{
+		Conteudo: `
+import org.junit.jupiter.api.Test;
+class ExampleTest {
+    @Test
+    void cobreMetodo() {
+        assertEquals(1, 1);
+    }
+
+    @Test
+    void cobreExcecao() {
+        assertThrows(IllegalArgumentException.class, () -> foo());
+    }
+}`,
+		IDsMetodosCobertos: []string{"m1"},
+	}}}
+	if err := artefatos.EscreverJSON(analysisPath, analise); err != nil {
+		t.Fatalf("fixture analysis: %v", err)
+	}
+	if err := artefatos.EscreverJSON(generationPath, geracao); err != nil {
+		t.Fatalf("fixture generation: %v", err)
+	}
+
+	estatisticas, err := ExtrairEstatisticasGeracao(analysisPath, generationPath)
+	if err != nil {
+		t.Fatalf("extrair estatísticas de geração: %v", err)
+	}
+	if estatisticas.MetodosTeste != 2 || estatisticas.MetodosComAssertiva != 2 || estatisticas.MetodosComAssertivaExn != 1 {
+		t.Fatalf("estatísticas de geração inesperadas: %#v", estatisticas)
+	}
+	if estatisticas.MetodosAlvo != 2 || estatisticas.MetodosAlvoCobertos != 1 {
+		t.Fatalf("cobertura de métodos-alvo inesperada: %#v", estatisticas)
+	}
+	if estatisticas.TaxaMetodosAlvoCobertos() != 50 {
+		t.Fatalf("taxa de cobertura de métodos-alvo inesperada: %.2f", estatisticas.TaxaMetodosAlvoCobertos())
+	}
+	if estatisticas.TaxaTestesAssertivos() != 100 {
+		t.Fatalf("taxa de testes assertivos inesperada: %.2f", estatisticas.TaxaTestesAssertivos())
+	}
+	if estatisticas.TaxaTestesExcecao() != 50 {
+		t.Fatalf("taxa de testes de exceção inesperada: %.2f", estatisticas.TaxaTestesExcecao())
+	}
+}
+
+func TestExtrairEstatisticasGeracaoComDiagnosticosEDependencias(t *testing.T) {
+	tempDir := t.TempDir()
+	projectRoot := filepath.Join(tempDir, "project")
+	if err := artefatos.EscreverTexto(filepath.Join(projectRoot, "pom.xml"), `<project><dependencies></dependencies></project>`); err != nil {
+		t.Fatalf("fixture pom: %v", err)
+	}
+	analysisPath := filepath.Join(tempDir, "analysis.json")
+	generationPath := filepath.Join(tempDir, "generation.json")
+	analise := dominio.RelatorioAnalise{Analises: []dominio.AnaliseMetodo{{
+		Metodo: dominio.DescritorMetodo{
+			IDMetodo:      "m1",
+			NomeContainer: "sample.Example",
+			NomeMetodo:    "run",
+		},
+	}}}
+	geracao := dominio.RelatorioGeracao{ArquivosTeste: []dominio.ArquivoTesteGerado{
+		{
+			CaminhoRelativo: "src/test/java/sample/ExampleTest.java",
+			Conteudo: `package sample;
+import org.junit.jupiter.api.Test;
+class ExampleTest {
+    @Test
+    void callsTarget() {
+        new Example().run();
+        org.junit.jupiter.api.Assertions.assertEquals(1, 1);
+    }
+}`,
+			IDsMetodosCobertos: []string{"m1"},
+		},
+		{
+			CaminhoRelativo:    "src/test/java/wrong/BadTest.java",
+			Conteudo:           "```html\n<html>org.mockito.Mockito.mock(Object.class)</html>\n```",
+			IDsMetodosCobertos: []string{"m1"},
+		},
+	}}
+	if err := artefatos.EscreverJSON(analysisPath, analise); err != nil {
+		t.Fatalf("fixture analysis: %v", err)
+	}
+	if err := artefatos.EscreverJSON(generationPath, geracao); err != nil {
+		t.Fatalf("fixture generation: %v", err)
+	}
+
+	estatisticas, err := ExtrairEstatisticasGeracaoComProjeto(analysisPath, generationPath, projectRoot)
+	if err != nil {
+		t.Fatalf("extrair estatísticas de geração: %v", err)
+	}
+	if estatisticas.TaxaArquivosJavaValidos() != 50 {
+		t.Fatalf("taxa Java válido inesperada: %.2f", estatisticas.TaxaArquivosJavaValidos())
+	}
+	if estatisticas.TaxaPacotesValidos() != 50 {
+		t.Fatalf("taxa package/caminho inesperada: %.2f", estatisticas.TaxaPacotesValidos())
+	}
+	if estatisticas.TaxaArquivosComMetodoTeste() != 50 {
+		t.Fatalf("taxa @Test inesperada: %.2f", estatisticas.TaxaArquivosComMetodoTeste())
+	}
+	if estatisticas.TaxaMetodosAlvoInvocados() != 100 {
+		t.Fatalf("taxa invocação alvo inesperada: %.2f", estatisticas.TaxaMetodosAlvoInvocados())
+	}
+	if estatisticas.TaxaDependenciasProibidas() != 50 {
+		t.Fatalf("taxa dependências proibidas inesperada: %.2f", estatisticas.TaxaDependenciasProibidas())
+	}
+}
+
+func TestExtrairEstatisticasGeracaoDetectaFragilidadePorReflexao(t *testing.T) {
+	tempDir := t.TempDir()
+	analysisPath := filepath.Join(tempDir, "analysis.json")
+	generationPath := filepath.Join(tempDir, "generation.json")
+	analise := dominio.RelatorioAnalise{Analises: []dominio.AnaliseMetodo{{
+		Metodo: dominio.DescritorMetodo{
+			IDMetodo:      "m1",
+			NomeContainer: "sample.Example",
+			NomeMetodo:    "run",
+		},
+	}}}
+	geracao := dominio.RelatorioGeracao{ArquivosTeste: []dominio.ArquivoTesteGerado{
+		{
+			CaminhoRelativo: "src/test/java/sample/ExampleTest.java",
+			Conteudo: `package sample;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+class ExampleTest {
+    @Test
+    void publicBehavior() {
+        new Example().run();
+        assertEquals(1, 1);
+    }
+}`,
+			IDsMetodosCobertos: []string{"m1"},
+		},
+		{
+			CaminhoRelativo: "src/test/java/sample/ExampleInternalStateTest.java",
+			Conteudo: `package sample;
+import java.lang.reflect.Field;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+class ExampleInternalStateTest {
+    @Test
+    void inspectsPrivateField() throws Exception {
+        Field field = Example.class.getDeclaredField("explicitName");
+        field.setAccessible(true);
+        assertEquals("x", field.get(new Example()));
+    }
+}`,
+			IDsMetodosCobertos: []string{"m1"},
+		},
+		{
+			CaminhoRelativo: "src/test/java/sample/ExampleBrittleExceptionTest.java",
+			Conteudo: `package sample;
+import java.lang.reflect.Constructor;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+class ExampleBrittleExceptionTest {
+    @Test
+    void expectsInnerExceptionDirectly() throws Exception {
+        Constructor<Example> ctor = Example.class.getDeclaredConstructor(String.class);
+        ctor.setAccessible(true);
+        assertThrows(IllegalArgumentException.class, () -> ctor.newInstance("x"));
+    }
+}`,
+			IDsMetodosCobertos: []string{"m1"},
+		},
+	}}
+	if err := artefatos.EscreverJSON(analysisPath, analise); err != nil {
+		t.Fatalf("fixture analysis: %v", err)
+	}
+	if err := artefatos.EscreverJSON(generationPath, geracao); err != nil {
+		t.Fatalf("fixture generation: %v", err)
+	}
+
+	estatisticas, err := ExtrairEstatisticasGeracao(analysisPath, generationPath)
+	if err != nil {
+		t.Fatalf("extrair estatísticas de geração: %v", err)
+	}
+	if math.Abs(estatisticas.TaxaUsoReflexao()-66.6666667) > 0.001 {
+		t.Fatalf("taxa de reflexão frágil inesperada: %.4f", estatisticas.TaxaUsoReflexao())
+	}
+	if math.Abs(estatisticas.TaxaAssertThrowsFragil()-33.3333333) > 0.001 {
+		t.Fatalf("taxa de assertThrows frágil inesperada: %.4f", estatisticas.TaxaAssertThrowsFragil())
+	}
+	if math.Abs(estatisticas.TaxaAssertEstadoInterno()-33.3333333) > 0.001 {
+		t.Fatalf("taxa de assert estado interno inesperada: %.4f", estatisticas.TaxaAssertEstadoInterno())
+	}
+}

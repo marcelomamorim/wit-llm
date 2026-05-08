@@ -1,8 +1,8 @@
 site_name: witup-llm
 site_url: https://marcelomamorim.github.io/witup-llm/
 site_description: >-
-  CLI em Go para pesquisa sobre geração e validação de exception paths em projetos Java.
-  Compara abordagens de análise estática (WITUP) com Large Language Models (LLM).
+  CLI em Go para comparar geração de testes com contexto WIT versus geração direta
+  em projetos Java, com foco em Google Guava e Apache Commons Collections.
 
 repo_name: marcelomamorim/witup-llm
 repo_url: https://github.com/marcelomamorim/witup-llm
@@ -75,26 +75,34 @@ nav:
     - Referencia de Configuracao: overview/configuration.md
   - CLI e Comandos:
     - Visao Geral: cli/index.md
-    - Comandos de Analise: cli/analysis.md
-    - Experimento e Estudo: cli/experiment.md
-    - Geracao, Avaliacao e Benchmark: cli/generation.md
-    - Utilitarios: cli/utilities.md
   - Arquitetura:
     - Visao Geral: architecture/index.md
-    - Modelo de Dominio: architecture/domain-model.md
-    - Camada de Servico: architecture/service-layer.md
-    - Alinhamento WITUP: architecture/witup-alignment.md
+  - Harness:
+    - Visao Geral: harness/index.md
+    - Validacao: harness/validation.md
+    - Rodadas Pagas: harness/paid-runs.md
+    - Fluxo com Codex: harness/codex-workflow.md
+    - Padroes de Falha: harness/failure-patterns.md
+  - Design Docs:
+    - Visao Geral: design-docs/index.md
+    - Core Beliefs: design-docs/core-beliefs.md
+    - Fase 2: design-docs/phase-two-study.md
+  - Exec Plans:
+    - Visao Geral: exec-plans/index.md
+    - Template: exec-plans/template.md
+    - Tech Debt: exec-plans/tech-debt-tracker.md
   - Integracao LLM:
     - Cliente LLM: llm/client.md
-    - Orquestrador Multi-Agente: llm/multi-agent.md
-  - Armazenamento e Relatorios:
-    - Visao Geral: storage/index.md
-    - Schema e Ingestao DuckDB: storage/schema.md
-    - Views Analiticas e Visualizacao: storage/views.md
   - Catalogacao e Metricas:
     - Visao Geral: cataloging/index.md
     - Executor de Metricas: cataloging/metrics.md
-  - Testes:
-    - Visao Geral: testing/index.md
-    - Suite de Testes Go: testing/go-tests.md
+  - Qualidade:
+    - Quality Score: QUALITY_SCORE.md
+    - Reliability: RELIABILITY.md
+    - Security: SECURITY.md
+  - Referencias:
+    - Visao Geral: references/index.md
+    - WIT: references/wit-paper.md
+    - OpenAI Codex Harness: references/openai-codex-harness.md
+    - Commons IO Baseline: references/commons-io-baseline.md
   - Glossario: glossary.md

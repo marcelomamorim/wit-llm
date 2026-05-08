@@ -1,111 +1,203 @@
 # Referencia de Configuracao
 
-O `witup-llm` usa um arquivo JSON (`pipeline.json`) como configuracao central. Ele define o projeto-alvo, o fluxo experimental, os modelos LLM e as metricas de avaliacao.
+O `witup-llm` usa um arquivo JSON (`pipeline.json`) como configuracao central.
+Ele define:
+
+- o projeto Java-alvo;
+- o fluxo de execucao;
+- os modelos LLM;
+- as metricas executadas na Parte 2;
+- opcionalmente, o escopo da segunda fase do estudo.
 
 ## Estrutura Geral
 
 ```json
 {
-  "projeto": { ... },
-  "fluxo": { ... },
-  "modelos": { ... },
-  "metricas": [ ... ]
+  "version": "1",
+  "project": { ... },
+  "pipeline": { ... },
+  "models": { ... },
+  "metrics": [ ... ],
+  "phase_two": { ... }
 }
 ```
 
-## 1. Configuracao do Projeto (`ConfigProjeto`)
+## 1. Projeto (`project`)
 
-Define o projeto Java a ser analisado.
-
-| Campo | Tipo | Descricao |
-| :--- | :--- | :--- |
-| `root` | `string` | Caminho absoluto para a raiz do projeto Java |
-| `include_paths` | `[]string` | Padroes glob para incluir arquivos na analise |
-| `exclude_paths` | `[]string` | Padroes glob para excluir (ex: `**/test/**`) |
-| `build_command` | `string` | Comando para compilar o projeto (ex: `mvn compile`) |
-| `baseline_file` | `string` | Caminho para o JSON do baseline WITUP |
-
-## 2. Configuracao do Fluxo (`ConfigFluxo`)
-
-Controla os estagios do pipeline experimental.
+Define o checkout Java usado pelo fluxo atual.
 
 | Campo | Tipo | Descricao |
 | :--- | :--- | :--- |
-| `llm_mode` | `string` | Modo de analise: `direct` ou `multiagent` |
-| `duckdb_path` | `string` | Caminho para o arquivo DuckDB |
-| `replication_root` | `string` | Diretorio com os baselines WITUP |
-| `workspace_root` | `string` | Diretorio raiz para artefatos gerados |
-| `skip_analysis` | `bool` | Pular fase de analise (reusar artefatos existentes) |
-| `skip_generation` | `bool` | Pular fase de geracao de testes |
+| `root` | `string` | Raiz do projeto Java |
+| `include` | `string[]` | Subcaminhos preferidos para catalogacao |
+| `exclude` | `string[]` | Subcaminhos ignorados na copia/catalogacao |
+| `overview_file` | `string` | Arquivo de visao geral usado nos prompts |
+| `test_framework` | `string` | `infer`, `junit4` ou `junit5` |
 
-## 3. Configuracao de Modelos (`ConfigModelo`)
+## 2. Pipeline (`pipeline`)
 
-Define os provedores LLM utilizados.
-
-| Campo | Tipo | Descricao |
-| :--- | :--- | :--- |
-| `provider` | `string` | Provedor: `openai` ou `ollama` |
-| `model` | `string` | Modelo especifico (ex: `gpt-4o`, `llama3`) |
-| `base_url` | `string` | URL do endpoint da API |
-| `api_key_env` | `string` | Variavel de ambiente com a chave API |
-| `temperature` | `float` | Temperatura de amostragem (geralmente `0.0` para pesquisa) |
-| `timeout_seconds` | `int` | Timeout maximo por requisicao |
-| `max_retries` | `int` | Numero de tentativas para erros transientes |
-| `reasoning_effort` | `string` | Para modelos com raciocinio (`low`, `medium`, `high`) |
-
-## 4. Configuracao de Metricas (`ConfigMetrica`)
-
-Define como o codigo gerado e avaliado.
+Controla o comportamento geral do experimento.
 
 | Campo | Tipo | Descricao |
 | :--- | :--- | :--- |
-| `name` | `string` | Identificador unico (ex: `jacoco-line-coverage`) |
-| `kind` | `string` | Tipo: `tests`, `coverage` ou `mutation` |
-| `command` | `string` | Comando shell executado na sandbox do projeto |
-| `value_regex` | `string` | Regex para extrair o valor do resultado |
-| `expected_outputs` | `string[]` | Arquivos ou diretorios que precisam existir para a metrica ser considerada valida |
-| `weight` | `float` | Peso na pontuacao agregada |
+| `output_dir` | `string` | Diretorio-raiz dos artefatos |
+| `replication_root` | `string` | Pasta com o pacote de replicacao WIT |
+| `baseline_file` | `string` | Nome do baseline WIT no pacote legado |
+| `save_prompts` | `bool` | Salva prompts e respostas brutas |
+| `max_methods` | `int` | Limita metodos catalogados; `0` significa sem limite |
+| `judge_model` | `string` | Modelo juiz opcional |
+| `llm_mode` | `string` | `direct` ou `multiagent` |
+| `deep_validation_subset_size` | `int` | Tamanho do subconjunto para refino extra |
 
-## Mapeamento Configuracao-Entidade
+O fluxo atual gera artefatos em `JSON`, `CSV` e `HTML` diretamente no diretório
+de saída configurado.
+
+## 3. Modelos (`models`)
+
+Cada entrada descreve um endpoint LLM configurado.
+
+| Campo | Tipo | Descricao |
+| :--- | :--- | :--- |
+| `provider` | `string` | `openai_compatible` ou `ollama` |
+| `model` | `string` | Nome do modelo remoto |
+| `base_url` | `string` | URL base da API |
+| `api_key_env` | `string` | Variavel de ambiente com a chave |
+| `temperature` | `float` | Temperatura de amostragem |
+| `timeout_seconds` | `int` | Timeout da requisicao |
+| `max_retries` | `int` | Tentativas para erros transientes |
+| `reasoning_effort` | `string` | `none`, `low`, `medium`, `high`, `xhigh` |
+| `prompt_cache_retention` | `string` | Janela de retencao do cache |
+| `service_tier` | `string` | `auto`, `default`, `flex` ou `priority` |
+| `max_output_tokens` | `int` | Limite opcional de saida |
+
+## 4. Metricas (`metrics`)
+
+Cada metrica executa um comando shell na sandbox do projeto avaliado.
+
+| Campo | Tipo | Descricao |
+| :--- | :--- | :--- |
+| `name` | `string` | Identificador da metrica |
+| `kind` | `string` | Classe logica da metrica (`tests`, `coverage`, `mutation`, etc.) |
+| `command` | `string` | Comando principal |
+| `weight` | `float` | Peso na agregacao |
+| `value_regex` | `string` | Regex para extrair o valor numerico |
+| `scale` | `float` | Escala maxima para normalizacao |
+| `working_directory` | `string` | Subdiretorio dentro da sandbox |
+| `timeout_seconds` | `int` | Limite maximo por tentativa. Padrao: 600 segundos |
+| `expected_outputs` | `string[]` | Artefatos obrigatorios para considerar a metrica valida |
+| `description` | `string` | Texto descritivo da metrica |
+| `fallbacks` | `object[]` | Tentativas alternativas executadas em ordem |
+
+Os fallbacks sao importantes para a Parte 2 porque permitem reaproveitar
+artefatos de JaCoCo ou PIT quando a etapa principal gera relatorio mas termina
+com erro no processo Maven.
+
+Fallbacks herdam `timeout_seconds` da metrica principal, mas podem declarar um
+limite proprio. Uma tentativa que excede o limite fica com `timed_out=true`,
+`exit_code=124` e nao contribui com pontuacao.
+
+## 5. Segunda fase (`phase_two`)
+
+Define o novo protocolo focado em comparacao de geracao de testes com e sem
+contexto WIT.
+
+| Campo | Tipo | Descricao |
+| :--- | :--- | :--- |
+| `execution_mode` | `string` | `strict_1call` ou `repair_1retry` |
+| `visualization_title` | `string` | Titulo do dashboard HTML |
+| `projects` | `object[]` | Lista de projetos-alvo da segunda fase |
+
+`execution_mode` controla a simetria entre os cenarios:
+
+- `strict_1call`: faz exatamente uma chamada de geracao por cenario;
+- `repair_1retry`: permite no maximo um reparo adicional por cenario quando a suite falha em compilacao/execucao. Este e o padrao atual.
+
+Cada entrada em `phase_two.projects` possui:
+
+| Campo | Tipo | Descricao |
+| :--- | :--- | :--- |
+| `key` | `string` | Identificador estavel do projeto |
+| `label` | `string` | Rotulo amigavel para CSV/dashboard |
+| `root` | `string` | Checkout local do projeto |
+| `wit_analysis_path` | `string` | Baseline WIT local em JSON |
+| `overview_file` | `string` | Arquivo de contexto do projeto |
+| `include` | `string[]` | Overrides de include |
+| `exclude` | `string[]` | Overrides de exclude |
+| `test_framework` | `string` | Override do framework de testes |
+
+## Exemplo focado na segunda fase
+
+```json
+{
+  "version": "1",
+  "project": {
+    "root": "/caminho/para/guava",
+    "test_framework": "infer"
+  },
+  "pipeline": {
+    "output_dir": "./generated/fase-dois",
+    "save_prompts": true,
+    "llm_mode": "direct"
+  },
+  "models": {
+    "openai_main": {
+      "provider": "openai_compatible",
+      "model": "o4-mini-2025-04-16",
+      "base_url": "https://api.openai.com/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "reasoning_effort": "medium"
+    }
+  },
+  "metrics": [
+    {
+      "name": "unit-tests",
+      "command": "mvn -q test && /abs/path/bin/witup extrair-surefire --report-dir target/surefire-reports"
+    }
+  ],
+  "phase_two": {
+    "execution_mode": "repair_1retry",
+    "visualization_title": "Guava vs Commons Collections",
+    "projects": [
+      {
+        "key": "guava",
+        "label": "Google Guava",
+        "root": "/caminho/para/guava",
+        "wit_analysis_path": "/caminho/para/guava-wit.json"
+      },
+      {
+        "key": "commons-collections",
+        "label": "Apache Commons Collections",
+        "root": "/caminho/para/commons-collections",
+        "wit_analysis_path": "/caminho/para/commons-collections-wit.json"
+      }
+    ]
+  }
+}
+```
+
+## Saidas da segunda fase
+
+Ao executar `executar-segunda-fase`, o projeto gera:
+
+- `phase-two-study.json`
+- `csv/phase-two-summary.csv`
+- `csv/phase-two-metrics.csv`
+- `csv/phase-two-comparison.csv`
+- `dashboard.html`
+
+## Mapa rapido da execucao
 
 ```mermaid
 graph TD
-    subgraph "Espaco de Configuracao JSON"
-        C_PROJ["ConfigProjeto"]
-        C_FLUX["ConfigFluxo"]
-        C_MOD["ConfigModelo"]
-        C_MET["ConfigMetrica"]
-    end
-
-    subgraph "Espaco de Entidades de Codigo"
-        CAT["Catalogador (internal/catalogo)"]
-        CLI["Cliente (internal/llm)"]
-        MET_EX["Executor (internal/metricas)"]
-        APP["Servico (internal/aplicacao)"]
-        DUCK["BancoDuckDB (internal/armazenamento)"]
-    end
-
-    C_PROJ -- "root/include/exclude" --> CAT
-    C_FLUX -- "duckdb_path" --> DUCK
-    C_FLUX -- "llm_mode" --> APP
-    C_MOD -- "base_url/api_key" --> CLI
-    C_MET -- "command/regex" --> MET_EX
-
-    APP -- "Usa" --> CAT
-    APP -- "Usa" --> CLI
-    APP -- "Usa" --> MET_EX
-    APP -- "Usa" --> DUCK
+    CFG["pipeline.json"] --> CLI["witup executar-segunda-fase"]
+    CLI --> WIT["Carrega baseline WIT local"]
+    CLI --> CAT["Cataloga checkout local"]
+    WIT --> ALIGN["Alinha baseline ao checkout"]
+    ALIGN --> WITCTX["Gera testes com contexto WIT"]
+    ALIGN --> DIRECT["Gera testes diretamente do codigo"]
+    WITCTX --> EVAL["Avalia com metricas"]
+    DIRECT --> EVAL
+    EVAL --> JSON["phase-two-study.json"]
+    EVAL --> CSV["CSV consolidado"]
+    EVAL --> HTML["dashboard.html"]
 ```
-
-## Ciclo de Vida da Execucao
-
-Quando `executar-estudo-completo` e invocado:
-
-1. **Ingestao**: `ConfigFluxo.replication_root` carrega baselines no DuckDB
-2. **Catalogacao**: `ConfigProjeto` direciona o `Catalogador` para encontrar metodos Java
-3. **Geracao de Variantes**:
-    - **WITUP_ONLY**: Carrega de `baseline_file`
-    - **LLM_ONLY**: Chama `Cliente` usando o modelo configurado
-    - **WITUP_PLUS_LLM**: Passa contexto baseline ao `Orquestrador` (Multi-agente)
-4. **Avaliacao**: `ExecutorMetricas` executa todos os comandos de `ConfigMetrica`
-5. **Persistencia**: Resultados sao salvos em `ConfigFluxo.duckdb_path`

@@ -17,7 +17,7 @@ var (
 	// exigir precisão sintática mais forte, a próxima evolução recomendada é
 	// trocar essa estratégia por um parser dedicado, como tree-sitter Java ou um
 	// adaptador externo baseado em JavaParser.
-	regexClasse     = regexp.MustCompile(`\b(class|record|interface|enum)\s+([A-Za-z_][A-Za-z0-9_]*)`)
+	regexClasse     = regexp.MustCompile(`^\s*(?:(?:public|protected|private|abstract|final|static|sealed|non-sealed|strictfp)\s+)*(class|record|interface|enum)\s+([A-Za-z_][A-Za-z0-9_]*)\b`)
 	regexPacote     = regexp.MustCompile(`^\s*package\s+([A-Za-z0-9_.]+)\s*;`)
 	regexMetodoJava = regexp.MustCompile(`([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*(throws\s+[^\{]+)?\{`)
 )
@@ -152,16 +152,20 @@ func (c *Catalogador) ehFonteJava(path string) bool {
 	return strings.HasSuffix(path, ".java")
 }
 
-// estaExcluido aplica exclusão por segmentos para evitar lógica sensível a
-// plataforma e manter os filtros do repositório fáceis de entender.
+// estaExcluido aplica exclusão por caminhos relativos à raiz do projeto. Isso
+// evita confundir nomes de pacotes Java com diretórios auxiliares como build/.
 func (c *Catalogador) estaExcluido(path string) bool {
 	caminhoParaAnalise := path
 	if relativo, err := filepath.Rel(c.cfg.Raiz, path); err == nil && relativo != "" {
 		caminhoParaAnalise = relativo
 	}
-	segmentos := strings.Split(filepath.ToSlash(caminhoParaAnalise), "/")
-	for _, segmento := range segmentos {
-		if _, excluido := c.segmentosExcluidos[segmento]; excluido {
+	caminhoParaAnalise = filepath.ToSlash(filepath.Clean(caminhoParaAnalise))
+	for item := range c.segmentosExcluidos {
+		item = filepath.ToSlash(filepath.Clean(item))
+		if item == "." || item == "" {
+			continue
+		}
+		if caminhoParaAnalise == item || strings.HasPrefix(caminhoParaAnalise, item+"/") {
 			return true
 		}
 	}
@@ -188,7 +192,11 @@ func extrairMetodosJava(path, projectRoot string) ([]dominio.DescritorMetodo, er
 
 	nomeContainer := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	for _, line := range lines {
-		if match := regexClasse.FindStringSubmatch(line); len(match) > 2 {
+		linhaLimpa := strings.TrimSpace(line)
+		if strings.HasPrefix(linhaLimpa, "//") || strings.HasPrefix(linhaLimpa, "/*") || strings.HasPrefix(linhaLimpa, "*") {
+			continue
+		}
+		if match := regexClasse.FindStringSubmatch(linhaLimpa); len(match) > 2 {
 			nomeContainer = match[2]
 			break
 		}

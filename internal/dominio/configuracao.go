@@ -16,7 +16,6 @@ type ConfigProjeto struct {
 // ConfigFluxo controla o comportamento geral do aplicacao.
 type ConfigFluxo struct {
 	DiretorioSaida     string `json:"output_dir"`
-	CaminhoDuckDB      string `json:"duckdb_path"`
 	RaizReplicacaoWIT  string `json:"replication_root"`
 	ArquivoBaselineWIT string `json:"baseline_file"`
 	SalvarPrompts      bool   `json:"save_prompts"`
@@ -26,12 +25,35 @@ type ConfigFluxo struct {
 	TamanhoSubconjunto int    `json:"deep_validation_subset_size"`
 }
 
+// ConfigProjetoSegundaFase descreve um projeto-alvo da segunda fase do estudo.
+type ConfigProjetoSegundaFase struct {
+	Chave           string   `json:"key"`
+	Rotulo          string   `json:"label"`
+	Raiz            string   `json:"root"`
+	CaminhoBaseline string   `json:"wit_analysis_path"`
+	OverviewFile    string   `json:"overview_file"`
+	Include         []string `json:"include"`
+	Exclude         []string `json:"exclude"`
+	ContainersAlvo  []string `json:"target_containers"`
+	TestFramework   string   `json:"test_framework"`
+}
+
+// ConfigSegundaFase define o escopo da segunda fase focada em geração de testes.
+type ConfigSegundaFase struct {
+	Projetos           []ConfigProjetoSegundaFase `json:"projects"`
+	TituloVisualizacao string                     `json:"visualization_title"`
+	ModoExecucao       string                     `json:"execution_mode"`
+}
+
 // ConfigModelo define um endpoint de LLM configurado.
 type ConfigModelo struct {
 	Provedor                 string  `json:"provider"`
 	Modelo                   string  `json:"model"`
 	URLBase                  string  `json:"base_url"`
 	VariavelAmbienteChaveAPI string  `json:"api_key_env"`
+	BackendExecucao          string  `json:"execution_backend,omitempty"`
+	Endpoint                 string  `json:"endpoint,omitempty"`
+	JanelaConclusaoBatch     string  `json:"batch_completion_window,omitempty"`
 	Temperature              float64 `json:"temperature"`
 	SegundosTimeout          int     `json:"timeout_seconds"`
 	MaximoTentativas         int     `json:"max_retries"`
@@ -58,16 +80,30 @@ type OpcoesRequisicaoLLM struct {
 }
 
 // ConfigMetrica define um comando executável de métrica.
-type ConfigMetrica struct {
+type ConfigFallbackMetrica struct {
 	Nome              string   `json:"name"`
-	Tipo              string   `json:"kind"`
 	Comando           string   `json:"command"`
-	Peso              float64  `json:"weight"`
 	RegexValor        string   `json:"value_regex"`
-	Escala            float64  `json:"scale"`
+	Escala            *float64 `json:"scale,omitempty"`
 	DiretorioTrabalho string   `json:"working_directory"`
 	SaidasEsperadas   []string `json:"expected_outputs"`
+	SegundosTimeout   int      `json:"timeout_seconds,omitempty"`
 	Descricao         string   `json:"description"`
+}
+
+// ConfigMetrica define um comando executável de métrica.
+type ConfigMetrica struct {
+	Nome              string                  `json:"name"`
+	Tipo              string                  `json:"kind"`
+	Comando           string                  `json:"command"`
+	Peso              float64                 `json:"weight"`
+	RegexValor        string                  `json:"value_regex"`
+	Escala            float64                 `json:"scale"`
+	DiretorioTrabalho string                  `json:"working_directory"`
+	SaidasEsperadas   []string                `json:"expected_outputs"`
+	SegundosTimeout   int                     `json:"timeout_seconds,omitempty"`
+	Descricao         string                  `json:"description"`
+	Fallbacks         []ConfigFallbackMetrica `json:"fallbacks"`
 }
 
 // ConfigAplicacao representa a configuração raiz da aplicação.
@@ -78,4 +114,5 @@ type ConfigAplicacao struct {
 	Fluxo         ConfigFluxo             `json:"pipeline"`
 	Modelos       map[string]ConfigModelo `json:"models"`
 	Metricas      []ConfigMetrica         `json:"metrics"`
+	SegundaFase   ConfigSegundaFase       `json:"phase_two"`
 }
