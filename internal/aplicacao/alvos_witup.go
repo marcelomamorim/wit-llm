@@ -122,7 +122,97 @@ func enriquecerAnaliseWITUP(analise dominio.AnaliseMetodo, metodoCatalogado domi
 	}
 	analise.RespostaBruta["witup_method_original"] = analise.Metodo
 	analise.Metodo = metodoCatalogado
+	analise = compatibilizarExpathsWITUPComMetodoAtual(analise)
 	return analise
+}
+
+func compatibilizarExpathsWITUPComMetodoAtual(analise dominio.AnaliseMetodo) dominio.AnaliseMetodo {
+	if len(analise.CaminhosExcecao) == 0 {
+		return analise
+	}
+
+	mantidos := make([]dominio.CaminhoExcecao, 0, len(analise.CaminhosExcecao))
+	descartados := make([]string, 0)
+	for _, caminho := range analise.CaminhosExcecao {
+		if expathContradizMetodoAtual(caminho, analise.Metodo) {
+			descartados = append(descartados, caminho.IDCaminho)
+			continue
+		}
+		mantidos = append(mantidos, caminho)
+	}
+	if len(descartados) == 0 {
+		return analise
+	}
+
+	analise.CaminhosExcecao = mantidos
+	analise.ResumoMetodo = strings.TrimSpace(analise.ResumoMetodo + " Expaths incompatíveis com o checkout atual foram descartados.")
+	analise.RespostaBruta["discarded_expaths_due_to_checkout"] = descartados
+	return analise
+}
+
+func expathContradizMetodoAtual(caminho dominio.CaminhoExcecao, metodo dominio.DescritorMetodo) bool {
+	if !strings.Contains(strings.ToLower(caminho.TipoExcecao), "nullpointerexception") {
+		return false
+	}
+	if !expathSugereNulo(caminho) {
+		return false
+	}
+
+	fonte := strings.ToLower(strings.TrimSpace(metodo.Origem))
+	if fonte == "" {
+		return false
+	}
+	if fonteContemThrowExplitoPorNulo(fonte) {
+		return false
+	}
+	return fontePareceNullSafe(fonte)
+}
+
+func expathSugereNulo(caminho dominio.CaminhoExcecao) bool {
+	campos := []string{caminho.Gatilho}
+	campos = append(campos, caminho.CondicoesGuarda...)
+	for _, campo := range campos {
+		texto := strings.ToLower(strings.TrimSpace(campo))
+		if strings.Contains(texto, "== null") || strings.Contains(texto, "null ==") {
+			return true
+		}
+	}
+	return false
+}
+
+func fonteContemThrowExplitoPorNulo(fonte string) bool {
+	indicadores := []string{
+		"throw new nullpointerexception",
+		"objects.requirenonnull(",
+		"requireNonNull(",
+	}
+	for _, indicador := range indicadores {
+		if strings.Contains(fonte, strings.ToLower(indicador)) {
+			return true
+		}
+	}
+	return false
+}
+
+func fontePareceNullSafe(fonte string) bool {
+	if !strings.Contains(fonte, "return") {
+		return false
+	}
+	indicadores := []string{
+		"== null ||",
+		"!= null &&",
+		"return false",
+		"return null",
+		"optional.empty(",
+		"? false",
+		": false",
+	}
+	for _, indicador := range indicadores {
+		if strings.Contains(fonte, indicador) {
+			return true
+		}
+	}
+	return false
 }
 
 // selecionarMetodosRefino escolhe o subconjunto aprofundado pelo fluxo

@@ -1,113 +1,101 @@
 # witup-llm
 
-**CLI em Go para pesquisa sobre geração e validação de exception paths em projetos Java.**
+`witup-llm` entrou em uma fase mais enxuta do estudo: agora a comparação principal é entre **geração de testes com contexto WIT** e **geração direta sem contexto WIT**, usando dois projetos-alvo.
 
-`witup-llm` facilita a comparação entre análise estática tradicional (WITUP) e abordagens baseadas em Large Language Models (LLM) para descoberta de fluxos de tratamento de erros e geração de testes unitários.
+## Escopo atual
 
-O sistema atua como um harness experimental que gerencia catalogação de projetos, orquestração de LLM, execução de métricas (como cobertura JaCoCo e mutação PIT), e persistência analítica em DuckDB.
+- **Google Guava**
+- **Apache Commons Collections**
 
-## Objetivos da Pesquisa
+## O que a ferramenta faz agora
 
-O objetivo principal é executar um protocolo de pesquisa que compara três variantes experimentais:
+Para cada projeto:
 
-| Variante | Descrição |
-| :--- | :--- |
-| `WITUP_ONLY` | Exception paths extraídos do pacote de replicação WITUP original. |
-| `LLM_ONLY` | Exception paths descobertos exclusivamente por um LLM (modo `direct` ou `multiagent`). |
-| `WITUP_PLUS_LLM` | Conjunto refinado combinando descoberta WITUP com validação/refinamento LLM. |
+1. carrega um baseline WIT local;
+2. alinha esse baseline ao checkout atual;
+3. fixa um conjunto comum de métodos-alvo;
+4. gera testes em dois cenários:
+   - `WIT_CONTEXT`
+   - `DIRECT_TESTS`
+5. avalia as suítes com métricas Java;
+6. materializa os resultados em:
+   - `JSON`
+   - `CSV`
+   - `HTML`
 
-O protocolo avalia estas variantes em duas dimensões: a qualidade dos `expaths` gerados e a qualidade das suítes de testes unitários derivadas desses caminhos.
-
-## Arquitetura do Sistema
+## Fluxo resumido
 
 ```mermaid
-graph TD
-    subgraph "Application Core"
-        S["Servico (internal/aplicacao)"]
-    end
-
-    subgraph "Adapters (Ports)"
-        CC["ClienteComplecao (internal/llm)"]
-        EM["ExecutorMetricas (internal/metricas)"]
-        CM["CatalogoMetodos (internal/catalogo)"]
-        AA["ArmazenamentoAnalitico (internal/armazenamento)"]
-    end
-
-    subgraph "External Entities"
-        LLM["LLM Providers (OpenAI/Ollama)"]
-        Java["Java Source (.java)"]
-        DuckDB["witup-llm.duckdb"]
-        Tools["JaCoCo / PIT / Maven"]
-    end
-
-    S --> CC
-    S --> EM
-    S --> CM
-    S --> AA
-
-    CC --> LLM
-    CM --> Java
-    AA --> DuckDB
-    EM --> Tools
+graph LR
+    A["Baseline WIT local"] --> B["Alinhamento ao checkout"]
+    C["Código Java local"] --> D["Catalogação de métodos"]
+    B --> E["Métodos-alvo comuns"]
+    D --> E
+    E --> F["WIT_CONTEXT"]
+    E --> G["DIRECT_TESTS"]
+    F --> H["Avaliação com métricas"]
+    G --> H
+    H --> I["JSON + CSV + dashboard HTML"]
 ```
 
-## Subsistemas Principais
+## Artefatos finais
 
-- **Orquestração LLM**: Suporta scanning `direct` (uma chamada por método) e fluxo `multiagent` com papéis especializados como `Arqueólogo` e `Cético` para validação profunda.
-- **Catalogação de Projetos**: Scanner baseado em regex que identifica métodos Java e fornece visão geral do projeto para contexto LLM.
-- **Armazenamento Analítico**: Usa DuckDB para armazenar baselines, artefatos de execução e gráficos gerados para consolidação de estudos.
-- **Execução de Métricas**: Orquestra ferramentas externas como Maven para medir cobertura de testes (JaCoCo) e scores de mutação (PIT).
+- `phase-two-study.json`
+- `csv/phase-two-summary.csv`
+- `csv/phase-two-metrics.csv`
+- `csv/phase-two-comparison.csv`
+- `dashboard.html`
 
-## Navegação Rápida
+## Páginas recomendadas
 
 <div class="grid cards" markdown>
 
--   :rocket:{ .lg .middle } **Primeiros Passos**
+-   **Primeiros Passos**
 
     ---
 
-    Instruções para configurar Go, Java e DuckDB para rodar seu primeiro experimento.
+    Como preparar o ambiente e rodar a segunda fase.
 
-    [**Começar &rarr;**](overview/getting-started.md)
+    [**Abrir**](overview/getting-started.md)
 
--   :gear:{ .lg .middle } **Configuração**
-
-    ---
-
-    Detalhamento da estrutura `pipeline.json` e objetos de configuração.
-
-    [**Ver referência &rarr;**](overview/configuration.md)
-
--   :computer:{ .lg .middle } **Comandos CLI**
+-   **Configuração**
 
     ---
 
-    Referência completa dos comandos disponíveis.
+    Estrutura do `pipeline.json`, incluindo `phase_two.projects`.
 
-    [**Ver comandos &rarr;**](cli/index.md)
+    [**Abrir**](overview/configuration.md)
 
--   :building_construction:{ .lg .middle } **Arquitetura**
-
-    ---
-
-    Ports and Adapters, modelo de domínio e camada de serviço.
-
-    [**Explorar &rarr;**](architecture/index.md)
-
--   :robot:{ .lg .middle } **Integração LLM**
+-   **CLI**
 
     ---
 
-    Cliente OpenAI, Responses API e orquestrador multi-agente.
+    Comandos principais da fase nova.
 
-    [**Ver detalhes &rarr;**](llm/client.md)
+    [**Abrir**](cli/index.md)
 
--   :floppy_disk:{ .lg .middle } **Armazenamento**
+-   **Arquitetura**
 
     ---
 
-    Schema DuckDB, views analíticas e visualização de resultados.
+    Visão de como a segunda fase foi organizada no código.
 
-    [**Ver schema &rarr;**](storage/index.md)
+    [**Abrir**](architecture/index.md)
+
+-   **Harness**
+
+    ---
+
+    Como Codex deve navegar, validar e evoluir o projeto.
+
+    [**Abrir**](harness/index.md)
+
+-   **Exec Plans**
+
+    ---
+
+    Planos para mudanças maiores, dívida técnica e decisões em andamento.
+
+    [**Abrir**](exec-plans/index.md)
 
 </div>

@@ -56,7 +56,7 @@ func CarregarAnalise(path string) (dominio.RelatorioAnalise, error) {
 
 	metodosAgrupados := map[string]*metodoAgrupado{}
 	for _, classe := range baseline.Classes {
-		caminhoNormalizado := normalizarCaminhoArquivo(classe.Path)
+		caminhoNormalizado := normalizarCaminhoArquivoRelativo(classe.Path, baseline.Path)
 		for index, metodo := range classe.Metodos {
 			descritor := construirDescritorMetodo(caminhoNormalizado, metodo)
 			chave := descritor.Assinatura + "|" + descritor.CaminhoArquivo
@@ -199,6 +199,20 @@ func normalizarCaminhoArquivo(raw string) string {
 		}
 	}
 	return strings.TrimPrefix(valor, "/")
+}
+
+func normalizarCaminhoArquivoRelativo(raw string, raizRaw string) string {
+	valor := normalizarCaminhoComBarras(raw)
+	raiz := strings.TrimSuffix(normalizarCaminhoComBarras(raizRaw), "/")
+	if raiz != "" {
+		valorLower := strings.ToLower(valor)
+		raizLower := strings.ToLower(raiz)
+		prefixo := raizLower + "/"
+		if strings.HasPrefix(valorLower, prefixo) {
+			return strings.TrimPrefix(valor[len(raiz):], "/")
+		}
+	}
+	return normalizarCaminhoArquivo(raw)
 }
 
 // normalizarCaminhoComBarras normaliza separadores e espaços em caminhos.

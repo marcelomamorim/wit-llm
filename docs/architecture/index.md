@@ -1,63 +1,58 @@
 # Arquitetura
 
-O `witup-llm` e construido usando uma arquitetura **Ports and Adapters** (Hexagonal). Este design desacopla a logica de negocio central da infraestrutura externa como provedores LLM, sistema de arquivos e banco de dados analitico.
+A fase nova foi organizada para manter um núcleo simples:
 
-## Estrutura de Pacotes
+- carregar baseline WIT local;
+- alinhar ao checkout;
+- comparar dois cenários de geração;
+- exportar resultados em formatos legíveis.
 
-| Pacote | Papel | Entidades Chave |
-| :--- | :--- | :--- |
-| `internal/dominio` | **Camada de Dominio**: Estruturas de dados puras. Sem dependencias externas. | `DescritorMetodo`, `RelatorioAnalise`, `ConfigAplicacao` |
-| `internal/aplicacao` | **Camada de Aplicacao**: Orquestra fluxos do pipeline. Define interfaces (Ports). | `Servico`, `ClienteComplecao` (Port), `ExecutorMetricas` (Port) |
-| `internal/llm` | **Infraestrutura**: Implementa comunicacao LLM. | `Cliente`, `CompletarJSON` |
-| `internal/agentes` | **Infraestrutura**: Implementa logica multi-agente. | `Orquestrador`, `Arqueologo`, `Cetico` |
-| `internal/armazenamento` | **Infraestrutura**: Gerencia persistencia e views SQL. | `BancoDuckDB`, `RegistrarArtefatoExecucao` |
-| `internal/catalogo` | **Infraestrutura**: Escaneia codigo-fonte Java. | `Catalogador`, `Catalogar` |
-| `internal/metricas` | **Infraestrutura**: Executa Maven/JaCoCo/PIT. | `Executor`, `ExecutarTodas` |
-| `internal/artefatos` | **Cross-cutting**: Gerencia layout do `EspacoTrabalho`. | `EspacoTrabalho`, `EscreverJSON` |
+## Blocos principais
 
-## Grafo de Dependencias
+| Pacote | Responsabilidade |
+| :--- | :--- |
+| `internal/dominio` | Tipos de configuração, análise, geração, avaliação e fase dois |
+| `internal/aplicacao` | Orquestra a execução ponta a ponta |
+| `internal/catalogo` | Descobre métodos Java no checkout |
+| `internal/llm` | Cliente de completions/Responses API |
+| `internal/metricas` | Executa as métricas da Parte 2 |
+| `internal/visualizacao` | Gera o dashboard HTML |
+| `internal/witup` | Lê os artefatos WIT em JSON |
+
+## Fluxo interno
 
 ```mermaid
 graph TD
-    subgraph "Dominio & Aplicacao"
-        S["Servico (internal/aplicacao)"]
-        CC["<< interface >> ClienteComplecao"]
-        EM["<< interface >> ExecutorMetricas"]
-        FC["<< interface >> FabricaCatalogo"]
-        AA["<< interface >> ArmazenamentoAnalitico"]
-    end
+    CFG["ConfigAplicacao"] --> SVC["Servico"]
+    SVC --> WIT["internal/witup"]
+    SVC --> CAT["internal/catalogo"]
+    SVC --> LLM["internal/llm"]
+    SVC --> MET["internal/metricas"]
+    SVC --> VIS["internal/visualizacao"]
 
-    subgraph "Adaptadores de Infraestrutura"
-        LC["llm.Cliente"]
-        MX["metricas.Executor"]
-        CT["catalogo.Catalogador"]
-        DB["armazenamento.BancoDuckDB"]
-    end
-
-    S --> CC
-    S --> EM
-    S --> FC
-    S --> AA
-
-    CC -.->|"implementa"| LC
-    EM -.->|"implementa"| MX
-    FC -.->|"implementa"| CT
-    AA -.->|"implementa"| DB
+    WIT --> ALIGN["Alinhamento WIT -> checkout"]
+    CAT --> ALIGN
+    ALIGN --> WITCTX["Cenário com contexto WIT"]
+    ALIGN --> DIRECT["Cenário direto"]
+    WITCTX --> MET
+    DIRECT --> MET
+    MET --> VIS
 ```
 
-## Subsistemas Principais
+## Arquivos novos mais importantes da segunda fase
 
-### 1. Modelo de Dominio e Configuracao
-Centraliza todas as estruturas de dados usadas no pipeline. Garante que o `Servico` pode passar um `RelatorioAnalise` da fase de analise para a fase de geracao sem conhecer o formato de armazenamento subjacente.
+- [`/Users/marceloamorim/Documents/unb/witup-llm/internal/aplicacao/servico_segunda_fase.go`](/Users/marceloamorim/Documents/unb/witup-llm/internal/aplicacao/servico_segunda_fase.go)
+- [`/Users/marceloamorim/Documents/unb/witup-llm/internal/aplicacao/comandos_segunda_fase.go`](/Users/marceloamorim/Documents/unb/witup-llm/internal/aplicacao/comandos_segunda_fase.go)
+- [`/Users/marceloamorim/Documents/unb/witup-llm/internal/aplicacao/segunda_fase_exportacao.go`](/Users/marceloamorim/Documents/unb/witup-llm/internal/aplicacao/segunda_fase_exportacao.go)
+- [`/Users/marceloamorim/Documents/unb/witup-llm/internal/visualizacao/segunda_fase.go`](/Users/marceloamorim/Documents/unb/witup-llm/internal/visualizacao/segunda_fase.go)
 
-[:octicons-arrow-right-24: Modelo de Dominio](domain-model.md)
+## Decisão arquitetural importante
 
-### 2. Servico de Aplicacao e Orquestracao
-O struct `Servico` implementa os workflows primarios: `Analisar`, `AnalisarMultiagentes`, `Gerar` e `Avaliar`.
+O fluxo novo trabalha diretamente com:
 
-[:octicons-arrow-right-24: Camada de Servico](service-layer.md)
+- baselines WIT locais;
+- JSON intermediário;
+- CSV consolidado;
+- dashboard HTML.
 
-### 3. Baseline WITUP e Alinhamento
-Subsistema especializado que gerencia a ingestao de baselines JSON do WITUP e alinha ao codigo-fonte atual.
-
-[:octicons-arrow-right-24: Alinhamento WITUP](witup-alignment.md)
+Isso reduziu o acoplamento operacional da segunda fase e deixou o experimento mais fácil de explicar e reproduzir.

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestCopiarDiretorioFiltradoIgnoraSegmentosExcluidos(t *testing.T) {
+func TestCopiarDiretorioFiltradoIgnoraCaminhosExcluidosNaRaiz(t *testing.T) {
 	origem := t.TempDir()
 	destino := filepath.Join(t.TempDir(), "destino")
 
@@ -36,6 +36,36 @@ func TestCopiarDiretorioFiltradoIgnoraSegmentosExcluidos(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o755 {
 		t.Fatalf("esperava preservar permissão 0755, recebi %v", info.Mode().Perm())
+	}
+}
+
+func TestCopiarDiretorioFiltradoNaoConfundePacoteBuildComDiretorioRaizBuild(t *testing.T) {
+	origem := t.TempDir()
+	destino := filepath.Join(t.TempDir(), "destino")
+
+	if err := os.MkdirAll(filepath.Join(origem, "build", "tmp"), 0o755); err != nil {
+		t.Fatalf("mkdir build root: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(origem, "src", "main", "java", "org", "example", "build"), 0o755); err != nil {
+		t.Fatalf("mkdir java build package: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(origem, "build", "tmp", "generated.txt"), []byte("temp"), 0o644); err != nil {
+		t.Fatalf("write build artifact: %v", err)
+	}
+	javaPath := filepath.Join(origem, "src", "main", "java", "org", "example", "build", "Builder.java")
+	if err := os.WriteFile(javaPath, []byte("package org.example.build; class Builder {}"), 0o644); err != nil {
+		t.Fatalf("write java source: %v", err)
+	}
+
+	if err := CopiarDiretorioFiltrado(origem, destino, []string{"build"}); err != nil {
+		t.Fatalf("copiar diretório filtrado: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(destino, "build", "tmp", "generated.txt")); !os.IsNotExist(err) {
+		t.Fatalf("esperava build raiz ignorado, recebi err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(destino, "src", "main", "java", "org", "example", "build", "Builder.java")); err != nil {
+		t.Fatalf("esperava pacote build preservado, recebi err=%v", err)
 	}
 }
 

@@ -85,3 +85,13 @@ func TestNormalizarCaminhoArquivoTrataSegmentosWindowsSemSensibilidadeAMaiuscula
 		t.Fatalf("unexpected normalized path: %q", path)
 	}
 }
+
+func TestNormalizarCaminhoArquivoRelativoPreservaModuloMaven(t *testing.T) {
+	path := normalizarCaminhoArquivoRelativo(
+		`C:\wit-projects\httpcomponents-client\httpclient5\src\main\java\org\apache\Example.java`,
+		`C:\wit-projects\httpcomponents-client\`,
+	)
+	if path != "httpclient5/src/main/java/org/apache/Example.java" {
+		t.Fatalf("unexpected module-aware normalized path: %q", path)
+	}
+}

@@ -87,6 +87,7 @@ func TestCompletarJSONUsaResponsesAPIComPromptCacheKey(t *testing.T) {
 				Header:     http.Header{"Content-Type": []string{"application/json"}},
 				Body: io.NopCloser(strings.NewReader(`{
 					"id":"resp_123",
+					"usage":{"input_tokens":120,"input_tokens_details":{"cached_tokens":20},"output_tokens":45},
 					"output":[
 						{
 							"type":"message",
@@ -132,6 +133,12 @@ func TestCompletarJSONUsaResponsesAPIComPromptCacheKey(t *testing.T) {
 	}
 	if strings.TrimSpace(resposta.RawText) != "{\"ok\":true}" {
 		t.Fatalf("texto bruto inesperado: %q", resposta.RawText)
+	}
+	if resposta.InputTokens != 120 || resposta.CachedInputTokens != 20 || resposta.OutputTokens != 45 {
+		t.Fatalf("uso de tokens inesperado: %+v", resposta)
+	}
+	if resposta.EstimatedCost == nil || *resposta.EstimatedCost <= 0 {
+		t.Fatalf("custo estimado deveria ser positivo: %+v", resposta)
 	}
 }
 
@@ -296,6 +303,55 @@ func TestCompletarJSONMantemTemperatureParaModelosNaoGPT5(t *testing.T) {
 	}
 }
 
+func TestCompletarJSONOmiteTemperatureParaO4Mini(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test-key")
+
+	var payload map[string]interface{}
+
+	client := NovoCliente()
+	client.httpClient = &http.Client{
+		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			corpo, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("read request body: %v", err)
+			}
+			if err := json.Unmarshal(corpo, &payload); err != nil {
+				t.Fatalf("unmarshal request body: %v", err)
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(strings.NewReader(`{
+					"output":[
+						{
+							"type":"message",
+							"content":[{"type":"output_text","text":"{\"ok\":true}"}]
+						}
+					]
+				}`)),
+				Request: r,
+			}, nil
+		}),
+	}
+
+	_, err := client.CompletarJSON(dominio.ConfigModelo{
+		Provedor:                 "openai_compatible",
+		Modelo:                   "o4-mini-2025-04-16",
+		URLBase:                  "https://api.openai.com/v1",
+		VariavelAmbienteChaveAPI: "OPENAI_API_KEY",
+		SegundosTimeout:          120,
+		Temperature:              0.0,
+		EsforcoRaciocinio:        "high",
+	}, "sistema", "usuario", dominio.OpcoesRequisicaoLLM{})
+	if err != nil {
+		t.Fatalf("CompletarJSON retornou erro inesperado: %v", err)
+	}
+
+	if _, existe := payload["temperature"]; existe {
+		t.Fatalf("temperature não deveria ser enviada para o4-mini: %#v", payload)
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -325,6 +381,9 @@ func TestAuxiliaresResponses(t *testing.T) {
 	}
 	if aceitaTemperaturaResponses("gpt-5.4") {
 		t.Fatalf("gpt-5.4 não deveria aceitar temperature")
+	}
+	if aceitaTemperaturaResponses("o4-mini") {
+		t.Fatalf("o4-mini não deveria aceitar temperature")
 	}
 	if got := normalizarPromptCacheKey(strings.Repeat("x", 80)); len(got) > 64 {
 		t.Fatalf("prompt_cache_key normalizada excedeu limite: %q", got)

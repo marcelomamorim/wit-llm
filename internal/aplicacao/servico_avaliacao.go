@@ -37,6 +37,11 @@ func (s *Servico) Gerar(cfg *dominio.ConfigAplicacao, analysisReport dominio.Rel
 	strategyParts := make([]string, 0, len(grouped))
 	allFiles := make([]dominio.ArquivoTesteGerado, 0, len(grouped))
 	rawResponses := make([]map[string]interface{}, 0, len(grouped))
+	harnessInterventions := make([]string, 0)
+	totalRequests := 0
+	totalInputTokens := 0
+	totalOutputTokens := 0
+	estimatedCost := acumuladorCustoLLM{}
 
 	keys := make([]string, 0, len(grouped))
 	for key := range grouped {
@@ -59,7 +64,8 @@ func (s *Servico) Gerar(cfg *dominio.ConfigAplicacao, analysisReport dominio.Rel
 				contarCaminhosAnalises(methodsPayload),
 			)
 			systemPrompt := construirPromptGeracaoSistema(resolverFrameworkTestes(cfg.Projeto))
-			userPrompt := construirPromptGeracaoUsuario(overview, containerName, methodsPayload)
+			contextoComum := construirContextoGeracaoTestes(cfg.Projeto, containerName, extrairMetodosDasAnalises(methodsPayload))
+			userPrompt := construirPromptGeracaoUsuario(overview, containerName, methodsPayload, contextoComum)
 			response, err := s.completionClient.CompletarJSON(model, systemPrompt, userPrompt, dominio.OpcoesRequisicaoLLM{
 				PromptCacheKey: construirPromptCacheKey(identificarProjeto(cfg), "generation", containerName),
 			})
@@ -67,12 +73,17 @@ func (s *Servico) Gerar(cfg *dominio.ConfigAplicacao, analysisReport dominio.Rel
 				return dominio.RelatorioGeracao{}, "", workspace, fmt.Errorf("a geração falhou para %s (lote %d/%d): %w", containerName, indiceLote+1, len(lotes), err)
 			}
 			summary, files := normalizarRespostaGeracao(response.Payload)
-			files = adaptarArquivosTesteAoProjeto(cfg.Projeto.Raiz, files)
+			files, intervencoes := adaptarArquivosTesteAoProjetoAuditado(cfg.Projeto.Raiz, files)
 			if strings.TrimSpace(summary) != "" {
 				strategyParts = append(strategyParts, summary)
 			}
 			allFiles = append(allFiles, files...)
-			rawResponses = append(rawResponses, response.Payload)
+			harnessInterventions = append(harnessInterventions, intervencoes...)
+			rawResponses = append(rawResponses, enriquecerPayloadRespostaLLM(response.Payload, response))
+			totalRequests++
+			totalInputTokens += response.InputTokens
+			totalOutputTokens += response.OutputTokens
+			estimatedCost.adicionar(1, response.EstimatedCost)
 
 			if cfg.Fluxo.SalvarPrompts {
 				stem := fmt.Sprintf("generation-%04d-%02d-%s", i+1, indiceLote+1, artefatos.Slugificar(containerName))
@@ -106,15 +117,26 @@ func (s *Servico) Gerar(cfg *dominio.ConfigAplicacao, analysisReport dominio.Rel
 		ResumoEstrategia:     strings.TrimSpace(strings.Join(strategyParts, "\n")),
 		ArquivosTeste:        allFiles,
 		RespostasBrutas:      rawResponses,
+		IntervencoesHarness:  deduplicarStrings(harnessInterventions),
+		RequestCount:         totalRequests,
+		InputTokens:          totalInputTokens,
+		OutputTokens:         totalOutputTokens,
+		EstimatedCost:        estimatedCost.valor(),
 	}
 	generationPath := filepath.Join(workspace.Raiz, "generation.json")
 	if err := artefatos.EscreverJSON(generationPath, report); err != nil {
 		return dominio.RelatorioGeracao{}, "", workspace, err
 	}
-	if err := registrarArtefatoNoBanco(cfg, report.IDExecucao, "geracao_testes", "", "", generationPath, report.GeradoEm, report); err != nil {
-		return dominio.RelatorioGeracao{}, "", workspace, err
-	}
-	registro.Info("pipeline", "geração concluída: arquivos=%d artefato=%s", len(report.ArquivosTeste), generationPath)
+	registro.Info(
+		"pipeline",
+		"geração concluída: arquivos=%d requests=%d input_tokens=%d output_tokens=%d custo=%s artefato=%s",
+		len(report.ArquivosTeste),
+		report.RequestCount,
+		report.InputTokens,
+		report.OutputTokens,
+		formatarCustoLLM(report.EstimatedCost),
+		generationPath,
+	)
 	return report, generationPath, workspace, nil
 }
 
@@ -129,7 +151,9 @@ func (s *Servico) Avaliar(cfg *dominio.ConfigAplicacao, analysisReport dominio.R
 		}
 	}
 	analysisReport = filtrarAnalisesParte2(analysisReport)
-	generationReport.ArquivosTeste = adaptarArquivosTesteAoProjeto(cfg.Projeto.Raiz, generationReport.ArquivosTeste)
+	arquivosAdaptados, intervencoesAdaptacao := adaptarArquivosTesteAoProjetoAuditado(cfg.Projeto.Raiz, generationReport.ArquivosTeste)
+	generationReport.ArquivosTeste = arquivosAdaptados
+	generationReport.IntervencoesHarness = deduplicarStrings(append(generationReport.IntervencoesHarness, intervencoesAdaptacao...))
 	analysisPathMetricas := analysisPath
 	generationPathMetricas := generationPath
 	if analysisPathMetricas, generationPathMetricas, err = materializarArtefatosFiltradosParte2(workspace, analysisReport, generationReport); err != nil {
@@ -139,9 +163,15 @@ func (s *Servico) Avaliar(cfg *dominio.ConfigAplicacao, analysisReport dominio.R
 		return dominio.RelatorioAvaliacao{}, "", workspace, err
 	}
 
-	raizProjetoAvaliado, err := prepararSandboxAvaliacao(cfg, workspace)
+	raizProjetoAvaliado, intervencoesSandbox, err := prepararSandboxAvaliacaoAuditado(cfg, workspace)
 	if err != nil {
 		return dominio.RelatorioAvaliacao{}, "", workspace, err
+	}
+	intervencoesHarness := deduplicarStrings(append(append([]string{}, generationReport.IntervencoesHarness...), intervencoesSandbox...))
+	if len(intervencoesHarness) > 0 {
+		if err := artefatos.EscreverTexto(filepath.Join(workspace.Logs, "harness-interventions.txt"), strings.Join(intervencoesHarness, "\n")+"\n"); err != nil {
+			registro.Info("pipeline", "não foi possível persistir intervenções do harness: %v", err)
+		}
 	}
 
 	metricResults := s.metricRunner.ExecutarTodas(cfg.Metricas, metricas.ContextoExecucao{
@@ -152,11 +182,19 @@ func (s *Servico) Avaliar(cfg *dominio.ConfigAplicacao, analysisReport dominio.R
 		CaminhoGeracao:    generationPathMetricas,
 		ChaveModelo:       generationReport.ChaveModelo,
 	})
-	metricScore := metricas.AgregarPontuacao(metricResults)
+	if err := persistirLogsMetricas(workspace, metricResults); err != nil {
+		registro.Info("pipeline", "não foi possível persistir logs das métricas: %v", err)
+	}
+	registrarResumoMetricas(metricResults, workspace)
+	metricScore, auditoriaPontuacao := calcularPontuacaoAuditadaSegundaFase(metricResults, len(generationReport.ArquivosTeste))
 	registro.Info("pipeline", "métricas executadas: total=%d nota=%s", len(metricResults), metricas.FormatarPontuacao(metricScore))
 
 	var judgeEvaluation *dominio.AvaliacaoJuiz
 	var judgeScore *float64
+	judgeRequestCount := 0
+	judgeInputTokens := 0
+	judgeOutputTokens := 0
+	judgeEstimatedCost := acumuladorCustoLLM{}
 	if strings.TrimSpace(judgeModelKey) != "" {
 		judgeModel, err := getModelOrError(cfg, judgeModelKey)
 		if err != nil {
@@ -172,6 +210,11 @@ func (s *Servico) Avaliar(cfg *dominio.ConfigAplicacao, analysisReport dominio.R
 		normalized := normalizarRespostaJuiz(response.Payload)
 		judgeEvaluation = &normalized
 		judgeScore = &normalized.Nota
+		judgeRequestCount = 1
+		judgeInputTokens = response.InputTokens
+		judgeOutputTokens = response.OutputTokens
+		judgeEstimatedCost.adicionar(1, response.EstimatedCost)
+		judgeEvaluation.RespostaBruta = enriquecerPayloadRespostaLLM(judgeEvaluation.RespostaBruta, response)
 		if cfg.Fluxo.SalvarPrompts {
 			if err := artefatos.EscreverTexto(filepath.Join(workspace.Prompts, "judge.txt"), judgePrompt); err != nil {
 				return dominio.RelatorioAvaliacao{}, "", workspace, err
@@ -180,29 +223,49 @@ func (s *Servico) Avaliar(cfg *dominio.ConfigAplicacao, analysisReport dominio.R
 				return dominio.RelatorioAvaliacao{}, "", workspace, err
 			}
 		}
+		registro.Info(
+			"pipeline",
+			"juiz concluído: requests=%d input_tokens=%d output_tokens=%d custo=%s",
+			judgeRequestCount,
+			judgeInputTokens,
+			judgeOutputTokens,
+			formatarCustoLLM(judgeEstimatedCost.valor()),
+		)
 	}
 
 	combined := metricas.CombinarPontuacoes(metricScore, judgeScore)
 	report := dominio.RelatorioAvaliacao{
-		IDExecucao:         filepath.Base(workspace.Raiz),
-		ChaveModelo:        generationReport.ChaveModelo,
-		GeradoEm:           dominio.HorarioUTC(),
-		CaminhoAnalise:     analysisPath,
-		CaminhoGeracao:     generationPath,
-		ResultadosMetricas: metricResults,
-		NotaMetricas:       metricScore,
-		ChaveModeloJuiz:    judgeModelKey,
-		AvaliacaoJuiz:      judgeEvaluation,
-		NotaCombinada:      combined,
+		IDExecucao:          filepath.Base(workspace.Raiz),
+		ChaveModelo:         generationReport.ChaveModelo,
+		GeradoEm:            dominio.HorarioUTC(),
+		CaminhoAnalise:      analysisPath,
+		CaminhoGeracao:      generationPath,
+		ResultadosMetricas:  metricResults,
+		NotaMetricas:        metricScore,
+		AuditoriaPontuacao:  auditoriaPontuacao,
+		ChaveModeloJuiz:     judgeModelKey,
+		AvaliacaoJuiz:       judgeEvaluation,
+		NotaCombinada:       combined,
+		IntervencoesHarness: intervencoesHarness,
+		RequestCount:        judgeRequestCount,
+		InputTokens:         judgeInputTokens,
+		OutputTokens:        judgeOutputTokens,
+		EstimatedCost:       judgeEstimatedCost.valor(),
 	}
 	evaluationPath := filepath.Join(workspace.Raiz, "evaluation.json")
 	if err := artefatos.EscreverJSON(evaluationPath, report); err != nil {
 		return dominio.RelatorioAvaliacao{}, "", workspace, err
 	}
-	if err := registrarArtefatoNoBanco(cfg, report.IDExecucao, "avaliacao", "", "", evaluationPath, report.GeradoEm, report); err != nil {
-		return dominio.RelatorioAvaliacao{}, "", workspace, err
-	}
-	registro.Info("pipeline", "avaliação concluída: nota_final=%s artefato=%s", metricas.FormatarPontuacao(report.NotaCombinada), evaluationPath)
+	registro.Info(
+		"pipeline",
+		"avaliação concluída: nota_final=%s judge_requests=%d judge_input_tokens=%d judge_output_tokens=%d judge_custo=%s artefato=%s",
+		metricas.FormatarPontuacao(report.NotaCombinada),
+		report.RequestCount,
+		report.InputTokens,
+		report.OutputTokens,
+		formatarCustoLLM(report.EstimatedCost),
+		evaluationPath,
+	)
 	return report, evaluationPath, workspace, nil
 }
 
@@ -210,23 +273,29 @@ func (s *Servico) Avaliar(cfg *dominio.ConfigAplicacao, analysisReport dominio.R
 // gerada para que as métricas não misturem testes originais e testes sintetizados.
 // Isso preserva o invariante #5: a Parte 2 avalia em sandbox isolada.
 func prepararSandboxAvaliacao(cfg *dominio.ConfigAplicacao, workspace *artefatos.EspacoTrabalho) (string, error) {
+	raiz, _, err := prepararSandboxAvaliacaoAuditado(cfg, workspace)
+	return raiz, err
+}
+
+func prepararSandboxAvaliacaoAuditado(cfg *dominio.ConfigAplicacao, workspace *artefatos.EspacoTrabalho) (string, []string, error) {
 	raizSandbox := filepath.Join(os.TempDir(), "witup-llm-evaluation", filepath.Base(workspace.Raiz))
 	if err := os.RemoveAll(raizSandbox); err != nil {
-		return "", fmt.Errorf("ao limpar sandbox de avaliação %q: %w", raizSandbox, err)
+		return "", nil, fmt.Errorf("ao limpar sandbox de avaliação %q: %w", raizSandbox, err)
 	}
 	if err := artefatos.CopiarDiretorioFiltrado(cfg.Projeto.Raiz, raizSandbox, cfg.Projeto.Exclude); err != nil {
-		return "", fmt.Errorf("ao copiar o projeto para a sandbox de avaliação: %w", err)
+		return "", nil, fmt.Errorf("ao copiar o projeto para a sandbox de avaliação: %w", err)
 	}
-	if err := os.RemoveAll(filepath.Join(raizSandbox, "src", "test")); err != nil {
-		return "", fmt.Errorf("ao limpar testes originais da sandbox de avaliação: %w", err)
+	if err := removerDiretoriosTestesOriginais(raizSandbox); err != nil {
+		return "", nil, fmt.Errorf("ao limpar testes originais da sandbox de avaliação: %w", err)
 	}
 	if err := artefatos.CopiarDiretorioNoDestino(workspace.Testes, raizSandbox); err != nil {
-		return "", fmt.Errorf("ao injetar os testes gerados na sandbox de avaliação: %w", err)
+		return "", nil, fmt.Errorf("ao injetar os testes gerados na sandbox de avaliação: %w", err)
 	}
-	if err := prepararProjetoMavenParaAvaliacao(raizSandbox, resolverFrameworkTestes(cfg.Projeto)); err != nil {
-		return "", fmt.Errorf("ao preparar o projeto Maven na sandbox de avaliação: %w", err)
+	intervencoes, err := prepararProjetoMavenParaAvaliacao(raizSandbox, resolverFrameworkTestes(cfg.Projeto))
+	if err != nil {
+		return "", nil, fmt.Errorf("ao preparar o projeto Maven na sandbox de avaliação: %w", err)
 	}
-	return raizSandbox, nil
+	return raizSandbox, intervencoes, nil
 }
 
 // materializarSuiteGeradaNoWorkspace reidrata os arquivos da geração quando a
@@ -262,22 +331,121 @@ func materializarArtefatosFiltradosParte2(workspace *artefatos.EspacoTrabalho, a
 	return analysisPath, generationPath, nil
 }
 
+func persistirLogsMetricas(workspace *artefatos.EspacoTrabalho, metricResults []dominio.ResultadoMetrica) error {
+	if workspace == nil {
+		return nil
+	}
+	for _, resultado := range metricResults {
+		base := filepath.Join(workspace.Logs, "metrics", artefatos.Slugificar(resultado.Nome))
+		if strings.TrimSpace(resultado.SaidaPadrao) != "" {
+			if err := artefatos.EscreverTexto(base+".stdout.log", resultado.SaidaPadrao); err != nil {
+				return err
+			}
+		}
+		if strings.TrimSpace(resultado.SaidaErro) != "" {
+			if err := artefatos.EscreverTexto(base+".stderr.log", resultado.SaidaErro); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func registrarResumoMetricas(metricResults []dominio.ResultadoMetrica, workspace *artefatos.EspacoTrabalho) {
+	for _, resultado := range metricResults {
+		registro.Info(
+			"pipeline",
+			"métrica=%s sucesso=%t exit=%d nota=%s",
+			resultado.Nome,
+			resultado.Sucesso,
+			resultado.CodigoSaida,
+			metricas.FormatarPontuacao(resultado.NotaNormalizada),
+		)
+		if resultado.Sucesso {
+			continue
+		}
+		if resumo := resumirSaidaLog(resultado.SaidaPadrao); resumo != "" {
+			registro.Info("pipeline", "métrica=%s stdout-resumo=%s", resultado.Nome, resumo)
+		}
+		if resumo := resumirSaidaLog(resultado.SaidaErro); resumo != "" {
+			registro.Info("pipeline", "métrica=%s stderr-resumo=%s", resultado.Nome, resumo)
+		}
+		if workspace != nil {
+			registro.Info(
+				"pipeline",
+				"métrica=%s logs=%s",
+				resultado.Nome,
+				filepath.Join(workspace.Logs, "metrics", artefatos.Slugificar(resultado.Nome)),
+			)
+		}
+	}
+}
+
+func resumirSaidaLog(texto string) string {
+	texto = strings.TrimSpace(texto)
+	if texto == "" {
+		return ""
+	}
+	linhas := strings.Split(texto, "\n")
+	resumidas := make([]string, 0, 4)
+	for _, linha := range linhas {
+		linha = strings.TrimSpace(linha)
+		if linha == "" {
+			continue
+		}
+		resumidas = append(resumidas, linha)
+		if len(resumidas) == 4 {
+			break
+		}
+	}
+	return strings.Join(resumidas, " | ")
+}
+
 // prepararProjetoMavenParaAvaliacao remove extensões e plugins de release que
 // não participam da execução das métricas, mas podem impedir builds locais da
 // sandbox por exigirem credenciais ou repositórios extras.
-func prepararProjetoMavenParaAvaliacao(raizSandbox string, frameworkProjeto string) error {
-	caminhoPOM := filepath.Join(raizSandbox, "pom.xml")
+func prepararProjetoMavenParaAvaliacao(raizSandbox string, frameworkProjeto string) ([]string, error) {
+	caminhosPOM, err := localizarPOMsMaven(raizSandbox)
+	if err != nil {
+		return nil, err
+	}
+	if len(caminhosPOM) == 0 {
+		return nil, nil
+	}
+
+	intervencoes := make([]string, 0)
+	for _, caminhoPOM := range caminhosPOM {
+		relativo, err := filepath.Rel(raizSandbox, caminhoPOM)
+		if err != nil {
+			relativo = caminhoPOM
+		}
+		atuais, err := prepararPOMMavenParaAvaliacao(caminhoPOM, raizSandbox, frameworkProjeto)
+		if err != nil {
+			return nil, fmt.Errorf("ao preparar %s: %w", relativo, err)
+		}
+		intervencoes = append(intervencoes, atuais...)
+	}
+	return deduplicarStrings(intervencoes), nil
+}
+
+func prepararPOMMavenParaAvaliacao(caminhoPOM string, raizSandbox string, frameworkProjeto string) ([]string, error) {
 	dados, err := os.ReadFile(caminhoPOM)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return nil, nil
 		}
-		return fmt.Errorf("ao ler pom.xml da sandbox: %w", err)
+		return nil, fmt.Errorf("ao ler pom.xml da sandbox: %w", err)
 	}
 
 	conteudoOriginal := string(dados)
 	conteudoAjustado := conteudoOriginal
-	conteudoAjustado = substituirTagXML(conteudoAjustado, "packaging", "jar")
+	intervencoes := make([]string, 0)
+	if pomEhAgregadorMaven(conteudoOriginal) {
+		intervencoes = append(intervencoes, "sandbox_kept_aggregator_packaging_pom")
+	} else {
+		conteudoAjustado = substituirTagXML(conteudoAjustado, "packaging", "jar")
+	}
+	conteudoAjustado = removerTagXML(conteudoAjustado, "defaultGoal")
 	conteudoAjustado = ajustarNivelCompilacaoMaven(conteudoAjustado)
 	for _, artifactID := range []string{
 		"nexus-staging-maven-plugin",
@@ -285,27 +453,120 @@ func prepararProjetoMavenParaAvaliacao(raizSandbox string, frameworkProjeto stri
 		"maven-release-plugin",
 		"maven-plugin-plugin",
 		"license-maven-plugin",
+		"apache-rat-plugin",
+		"maven-checkstyle-plugin",
+		"spotbugs-maven-plugin",
+		"maven-pmd-plugin",
+		"japicmp-maven-plugin",
 	} {
 		conteudoAjustado = removerPluginMaven(conteudoAjustado, artifactID)
 	}
 	conteudoAjustado = removerBlocoXML(conteudoAjustado, "distributionManagement")
+	conteudoAjustado = garantirPropriedadesSkipMaven(conteudoAjustado)
 	if testesGeradosUsamJUnitJupiter(raizSandbox) && !pomSuportaJUnitJupiter(conteudoAjustado) {
 		conteudoAjustado = garantirDependenciasJUnitJupiter(conteudoAjustado)
 		conteudoAjustado = garantirPluginSurefireCompativelJUnit5(conteudoAjustado)
+		intervencoes = append(intervencoes, "sandbox_added_junit_jupiter")
 		registro.Info("pipeline", "sandbox de avaliação adaptada para compilar/executar testes JUnit 5 sobre projeto %s", frameworkProjeto)
+	}
+	if testesGeradosUsamJUnitJupiter(raizSandbox) {
+		antesPIT := conteudoAjustado
+		conteudoAjustado = garantirPluginPITCompativelJUnit5(conteudoAjustado)
+		if conteudoAjustado != antesPIT {
+			intervencoes = append(intervencoes, "sandbox_added_pitest_junit5")
+		}
 	}
 	if testesGeradosUsamMockito(raizSandbox) && !pomSuportaMockito(conteudoAjustado) {
 		conteudoAjustado = garantirDependenciasMockito(conteudoAjustado)
+		intervencoes = append(intervencoes, "sandbox_added_mockito")
 		registro.Info("pipeline", "sandbox de avaliação adaptada para compilar testes que usam Mockito")
 	}
 
 	if conteudoAjustado == conteudoOriginal {
-		return nil
+		return deduplicarStrings(intervencoes), nil
+	}
+	if len(intervencoes) == 0 {
+		intervencoes = append(intervencoes, "sandbox_sanitized_pom")
 	}
 	if err := os.WriteFile(caminhoPOM, []byte(conteudoAjustado), 0o644); err != nil {
-		return fmt.Errorf("ao reescrever pom.xml sanitizado na sandbox: %w", err)
+		return nil, fmt.Errorf("ao reescrever pom.xml sanitizado na sandbox: %w", err)
+	}
+	return deduplicarStrings(intervencoes), nil
+}
+
+func localizarPOMsMaven(raizSandbox string) ([]string, error) {
+	caminhos := make([]string, 0)
+	err := filepath.Walk(raizSandbox, func(caminho string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info == nil {
+			return nil
+		}
+		if info.IsDir() {
+			nome := info.Name()
+			if nome == ".git" || nome == "target" || nome == "build" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if info.Name() == "pom.xml" {
+			caminhos = append(caminhos, caminho)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ao localizar POMs Maven na sandbox: %w", err)
+	}
+	sort.Slice(caminhos, func(i, j int) bool {
+		profundidadeI := strings.Count(filepath.ToSlash(caminhos[i]), "/")
+		profundidadeJ := strings.Count(filepath.ToSlash(caminhos[j]), "/")
+		if profundidadeI == profundidadeJ {
+			return caminhos[i] < caminhos[j]
+		}
+		return profundidadeI < profundidadeJ
+	})
+	return caminhos, nil
+}
+
+func removerDiretoriosTestesOriginais(raizSandbox string) error {
+	diretorios := make([]string, 0)
+	err := filepath.Walk(raizSandbox, func(caminho string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info == nil || !info.IsDir() {
+			return nil
+		}
+		nome := info.Name()
+		if nome == ".git" || nome == "target" || nome == "build" {
+			return filepath.SkipDir
+		}
+		normalizado := filepath.ToSlash(caminho)
+		if strings.HasSuffix(normalizado, "/src/test") || normalizado == filepath.ToSlash(filepath.Join(raizSandbox, "src", "test")) {
+			diretorios = append(diretorios, caminho)
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	sort.Slice(diretorios, func(i, j int) bool {
+		return len(diretorios[i]) > len(diretorios[j])
+	})
+	for _, dir := range diretorios {
+		if err := os.RemoveAll(dir); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func pomEhAgregadorMaven(conteudo string) bool {
+	return strings.Contains(conteudo, "<packaging>pom</packaging>") &&
+		strings.Contains(conteudo, "<modules>") &&
+		strings.Contains(conteudo, "</modules>")
 }
 
 // garantirDependenciasJUnitJupiter injeta as dependências mínimas de API e
@@ -390,6 +651,70 @@ func garantirPluginSurefireCompativelJUnit5(conteudo string) string {
 	return conteudo
 }
 
+// garantirPluginPITCompativelJUnit5 injeta o plugin do PIT para JUnit 5 quando
+// os testes gerados usam Jupiter.
+func garantirPluginPITCompativelJUnit5(conteudo string) string {
+	blocoPlugin := `
+      <plugin>
+        <groupId>org.pitest</groupId>
+        <artifactId>pitest-maven</artifactId>
+        <version>1.23.0</version>
+        <dependencies>
+          <dependency>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-junit5-plugin</artifactId>
+            <version>1.2.2</version>
+          </dependency>
+        </dependencies>
+      </plugin>`
+
+	if strings.Contains(conteudo, "<artifactId>pitest-maven</artifactId>") {
+		if strings.Contains(conteudo, "<artifactId>pitest-junit5-plugin</artifactId>") {
+			return conteudo
+		}
+		regexPlugins := regexp.MustCompile(`(?s)<plugin>.*?<artifactId>\s*pitest-maven\s*</artifactId>.*?</plugin>`)
+		return regexPlugins.ReplaceAllStringFunc(conteudo, func(bloco string) string {
+			if strings.Contains(bloco, "<artifactId>pitest-junit5-plugin</artifactId>") {
+				return bloco
+			}
+			if strings.Contains(bloco, "</dependencies>") {
+				dep := `
+          <dependency>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-junit5-plugin</artifactId>
+            <version>1.2.2</version>
+          </dependency>`
+				return strings.Replace(bloco, "</dependencies>", dep+"\n        </dependencies>", 1)
+			}
+			if strings.Contains(bloco, "</plugin>") {
+				deps := `
+        <dependencies>
+          <dependency>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-junit5-plugin</artifactId>
+            <version>1.2.2</version>
+          </dependency>
+        </dependencies>`
+				return strings.Replace(bloco, "</plugin>", deps+"\n      </plugin>", 1)
+			}
+			return bloco
+		})
+	}
+
+	if strings.Contains(conteudo, "</plugins>") {
+		return strings.Replace(conteudo, "</plugins>", blocoPlugin+"\n    </plugins>", 1)
+	}
+	if strings.Contains(conteudo, "</build>") {
+		novoBloco := fmt.Sprintf("    <plugins>%s\n    </plugins>\n  </build>", blocoPlugin)
+		return strings.Replace(conteudo, "</build>", novoBloco, 1)
+	}
+	if strings.Contains(conteudo, "</project>") {
+		novoBloco := fmt.Sprintf("  <build>\n    <plugins>%s\n    </plugins>\n  </build>\n</project>", blocoPlugin)
+		return strings.Replace(conteudo, "</project>", novoBloco, 1)
+	}
+	return conteudo
+}
+
 // removerPluginMaven elimina plugins específicos do POM quando a execução de
 // avaliação precisa ignorar etapas de release/deploy.
 func removerPluginMaven(conteudo, artifactID string) string {
@@ -407,6 +732,12 @@ func removerPluginMaven(conteudo, artifactID string) string {
 // ou execução dos testes durante a avaliação.
 func removerBlocoXML(conteudo, nome string) string {
 	padrao := fmt.Sprintf(`(?s)<%s>\s*.*?</%s>`, regexp.QuoteMeta(nome), regexp.QuoteMeta(nome))
+	return regexp.MustCompile(padrao).ReplaceAllString(conteudo, "")
+}
+
+// removerTagXML elimina uma tag simples do documento quando ela está presente.
+func removerTagXML(conteudo, nomeTag string) string {
+	padrao := fmt.Sprintf(`(?s)<%s>\s*.*?\s*</%s>`, regexp.QuoteMeta(nomeTag), regexp.QuoteMeta(nomeTag))
 	return regexp.MustCompile(padrao).ReplaceAllString(conteudo, "")
 }
 
@@ -430,6 +761,38 @@ func ajustarNivelCompilacaoMaven(conteudo string) string {
 		regex := regexp.MustCompile(padrao)
 		replacement := fmt.Sprintf("<%s>1.8</%s>", tag, tag)
 		conteudo = regex.ReplaceAllString(conteudo, replacement)
+	}
+	return conteudo
+}
+
+// garantirPropriedadesSkipMaven injeta propriedades que desligam etapas de
+// release/compliance irrelevantes para a medição da suíte gerada.
+func garantirPropriedadesSkipMaven(conteudo string) string {
+	propriedades := map[string]string{
+		"rat.skip":           "true",
+		"checkstyle.skip":    "true",
+		"pmd.skip":           "true",
+		"spotbugs.skip":      "true",
+		"japicmp.skip":       "true",
+		"maven.javadoc.skip": "true",
+		"skipITs":            "true",
+		"enforcer.skip":      "true",
+	}
+
+	for nome, valor := range propriedades {
+		if strings.Contains(conteudo, "<"+nome+">") {
+			conteudo = substituirTagXML(conteudo, nome, valor)
+			continue
+		}
+		bloco := fmt.Sprintf("    <%s>%s</%s>\n", nome, valor, nome)
+		if strings.Contains(conteudo, "</properties>") {
+			conteudo = strings.Replace(conteudo, "</properties>", bloco+"  </properties>", 1)
+			continue
+		}
+		if strings.Contains(conteudo, "</project>") {
+			novoBloco := fmt.Sprintf("  <properties>\n%s  </properties>\n</project>", bloco)
+			conteudo = strings.Replace(conteudo, "</project>", novoBloco, 1)
+		}
 	}
 	return conteudo
 }

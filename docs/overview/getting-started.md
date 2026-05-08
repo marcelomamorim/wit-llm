@@ -1,81 +1,75 @@
 # Primeiros Passos
 
-## Pre-requisitos
+## Pré-requisitos
 
-| Ferramenta | Versao Minima | Proposito |
+| Ferramenta | Versão mínima | Uso |
 | :--- | :--- | :--- |
-| **Go** | 1.23+ | Compilacao do binario `witup` |
-| **Java JDK** | 11+ | Compilacao e execucao dos projetos-alvo |
-| **Maven** | 3.6+ | Build e execucao de testes Java |
-| **DuckDB CLI** | 0.9+ | (Opcional) Consultas ad-hoc no banco analitico |
+| Go | 1.24+ | Compilar a CLI |
+| Java | 11+ | Compilar e executar os projetos Java |
+| Maven | 3.6+ | Rodar testes, JaCoCo e PIT |
+| Git | atual | Clonar e manter os projetos-alvo |
 
-## Instalacao
+Além disso, você vai precisar de:
 
-### Compilacao do Binario
+- `OPENAI_API_KEY`
+- checkout local de `guava`
+- checkout local de `commons-collections`
+- um baseline WIT em JSON para cada um dos dois projetos
+
+## Compilação
 
 ```bash
-# Clone o repositorio
 git clone https://github.com/marcelomamorim/witup-llm.git
 cd witup-llm
-
-# Compile o binario
-go build -o bin/witup cmd/witup/main.go
+go build -o bin/witup ./cmd/witup
 ```
 
-### Verificacao
+## Limpeza do workspace
+
+Antes de uma nova rodada:
 
 ```bash
-# Verificar conectividade com LLM
-export OPENAI_API_KEY="sua-chave-aqui"
-./bin/witup sondar --config pipeline.example.json
-```
-
-## Configuracao Rapida
-
-Copie o arquivo de exemplo e ajuste para seu ambiente:
-
-```bash
-cp pipeline.example.json meu-pipeline.json
-```
-
-Edite `meu-pipeline.json` para configurar:
-
-- **Projeto-alvo**: Caminho para o projeto Java a ser analisado
-- **Modelo LLM**: Chave API, modelo, temperatura
-- **Metricas**: Comandos Maven, JaCoCo e PIT
-
-Veja a [Referencia de Configuracao](configuration.md) para detalhes completos.
-
-## Executando o Piloto
-
-O projeto inclui um script para executar o piloto completo com o projeto `visualee`:
-
-```bash
-# Limpar artefatos anteriores
 ./scripts/limpar-projeto.sh --confirmar
-
-# Exportar chave da API
-export OPENAI_API_KEY="sua-chave"
-
-# Executar piloto completo
-./scripts/executar-visualee-piloto.sh
 ```
 
-O piloto executa automaticamente:
+## Execução recomendada
 
-1. Clone do projeto `visualee`
-2. Checkout no commit do artigo
-3. Carga do baseline WITUP no DuckDB
-4. Parte 1 (comparacao de ExPaths)
-5. Parte 2 (geracao e avaliacao de testes)
-6. Consolidacao e geracao de graficos
-
-### Acompanhamento
+O caminho mais simples é usar o script dedicado:
 
 ```bash
-# Monitorar logs em tempo real
-tail -f generated/piloto-visualee/logs/cli.log
+export OPENAI_API_KEY="sua-chave"
+export GUAVA_ROOT="/caminho/para/guava"
+export GUAVA_WIT_ANALYSIS="/caminho/para/guava-wit.json"
+export COMMONS_COLLECTIONS_ROOT="/caminho/para/commons-collections"
+export COMMONS_COLLECTIONS_WIT_ANALYSIS="/caminho/para/commons-collections-wit.json"
 
-# Visualizar resultados no DuckDB
-./bin/witup visualizar-dados --config generated/configs/piloto-visualee.runtime.json
+./scripts/executar-segunda-fase.sh
 ```
+
+## Execução manual
+
+Se você quiser rodar sem o script:
+
+```bash
+./bin/witup executar-segunda-fase \
+  --config pipelines/fase-dois-guava-commons.json \
+  --generation-model openai_main
+```
+
+## O que sai no final
+
+- `phase-two-study.json`
+- `csv/phase-two-summary.csv`
+- `csv/phase-two-metrics.csv`
+- `csv/phase-two-comparison.csv`
+- `dashboard.html`
+
+## Quando algo der errado
+
+Os pontos mais comuns para revisar são:
+
+1. caminho do checkout Java;
+2. caminho do baseline WIT;
+3. `OPENAI_API_KEY`;
+4. disponibilidade de `mvn` ou `mvnw`;
+5. compatibilidade do projeto com JaCoCo e PIT.

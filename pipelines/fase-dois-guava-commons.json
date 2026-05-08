@@ -1,0 +1,197 @@
+{
+  "version": "1",
+  "project": {
+    "root": "/absolute/path/to/guava",
+    "include": ["src/main/java", "."],
+    "exclude": [".git", "target", "build", "generated", "tests"],
+    "test_framework": "infer"
+  },
+  "pipeline": {
+    "output_dir": "./generated/fase-dois",
+    "save_prompts": true,
+    "max_methods": 0,
+    "llm_mode": "direct",
+    "deep_validation_subset_size": 0,
+    "judge_model": "openai_judge"
+  },
+  "models": {
+    "openai_main": {
+      "provider": "openai_compatible",
+      "model": "o4-mini-2025-04-16",
+      "base_url": "https://api.openai.com/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "timeout_seconds": 180,
+      "max_retries": 2,
+      "reasoning_effort": "medium",
+      "prompt_cache_retention": "24h",
+      "service_tier": "auto",
+      "max_output_tokens": 0
+    },
+    "openai_judge": {
+      "provider": "openai_compatible",
+      "model": "o4-mini-2025-04-16",
+      "base_url": "https://api.openai.com/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "timeout_seconds": 180,
+      "max_retries": 2,
+      "reasoning_effort": "medium",
+      "prompt_cache_retention": "24h",
+      "service_tier": "auto",
+      "max_output_tokens": 0
+    }
+  },
+  "metrics": [
+    {
+      "name": "test-compilation",
+      "kind": "build",
+      "command": "sh -lc 'if [ -x ./mvnw ]; then ./mvnw -q -DskipTests test-compile; else mvn -q -DskipTests test-compile; fi'",
+      "weight": 0.5,
+      "scale": 100.0,
+      "working_directory": ".",
+      "description": "Compila a suíte gerada antes de executar o restante das métricas"
+    },
+    {
+      "name": "unit-tests",
+      "kind": "tests",
+      "command": "sh -lc 'if [ -x ./mvnw ]; then ./mvnw -q test; else mvn -q test; fi' && /absolute/path/to/witup-llm/bin/witup extrair-surefire --report-dir target/surefire-reports",
+      "weight": 1.0,
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\\\.[0-9]+)?)",
+      "scale": 100.0,
+      "working_directory": ".",
+      "expected_outputs": ["target/surefire-reports"],
+      "description": "Executa a suíte unitária gerada"
+    },
+    {
+      "name": "test-pass-rate",
+      "kind": "tests",
+      "command": "sh -lc 'if [ -x ./mvnw ]; then ./mvnw -q test; else mvn -q test; fi' && /absolute/path/to/witup-llm/bin/witup extrair-surefire --report-dir target/surefire-reports --kind pass-rate",
+      "weight": 0.8,
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\.[0-9]+)?)",
+      "scale": 100.0,
+      "working_directory": ".",
+      "expected_outputs": ["target/surefire-reports"],
+      "description": "Percentual de testes aprovados via Surefire"
+    },
+    {
+      "name": "target-method-coverage",
+      "kind": "generation_static",
+      "command": "/absolute/path/to/witup-llm/bin/witup extrair-geracao --analysis {analysis_path} --generation {generation_path} --kind target-method-coverage",
+      "weight": 0.8,
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\.[0-9]+)?)",
+      "scale": 100.0,
+      "working_directory": ".",
+      "description": "Percentual de métodos-alvo com pelo menos um teste associado"
+    },
+    {
+      "name": "assertive-tests-rate",
+      "kind": "generation_static",
+      "command": "/absolute/path/to/witup-llm/bin/witup extrair-geracao --analysis {analysis_path} --generation {generation_path} --kind assertive-tests-rate",
+      "weight": 0.6,
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\.[0-9]+)?)",
+      "scale": 100.0,
+      "working_directory": ".",
+      "description": "Percentual de métodos de teste com pelo menos uma assertiva"
+    },
+    {
+      "name": "exception-assertion-rate",
+      "kind": "generation_static",
+      "command": "/absolute/path/to/witup-llm/bin/witup extrair-geracao --analysis {analysis_path} --generation {generation_path} --kind exception-assertion-rate",
+      "weight": 0.6,
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\.[0-9]+)?)",
+      "scale": 100.0,
+      "working_directory": ".",
+      "description": "Percentual de testes focados em assertivas de exceção"
+    },
+    {
+      "name": "jacoco-line",
+      "kind": "coverage",
+      "command": "sh -lc 'if [ -x ./mvnw ]; then ./mvnw -q test org.jacoco:jacoco-maven-plugin:0.8.12:report; else mvn -q test org.jacoco:jacoco-maven-plugin:0.8.12:report; fi' && /absolute/path/to/witup-llm/bin/witup extrair-jacoco --xml target/site/jacoco/jacoco.xml --counter LINE",
+      "weight": 1.0,
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\\\.[0-9]+)?)",
+      "scale": 100.0,
+      "working_directory": ".",
+      "expected_outputs": ["target/site/jacoco/jacoco.xml"],
+      "description": "Cobertura de linhas via JaCoCo",
+      "fallbacks": [
+        {
+          "name": "reuse-jacoco-report",
+          "command": "[ -f target/site/jacoco/jacoco.xml ] && /absolute/path/to/witup-llm/bin/witup extrair-jacoco --xml target/site/jacoco/jacoco.xml --counter LINE",
+          "expected_outputs": ["target/site/jacoco/jacoco.xml"],
+          "description": "Reaproveita um relatório JaCoCo já gerado pelo projeto"
+        },
+        {
+          "name": "explicit-jacoco-agent",
+          "command": "sh -lc 'if [ -x ./mvnw ]; then ./mvnw -q org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.12:report; else mvn -q org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.12:report; fi' && /absolute/path/to/witup-llm/bin/witup extrair-jacoco --xml target/site/jacoco/jacoco.xml --counter LINE",
+          "expected_outputs": ["target/site/jacoco/jacoco.xml"],
+          "description": "Injeta o agente JaCoCo apenas quando o projeto não o configura"
+        }
+      ]
+    },
+    {
+      "name": "jacoco-branch",
+      "kind": "coverage",
+      "command": "sh -lc 'if [ -x ./mvnw ]; then ./mvnw -q test org.jacoco:jacoco-maven-plugin:0.8.12:report; else mvn -q test org.jacoco:jacoco-maven-plugin:0.8.12:report; fi' && /absolute/path/to/witup-llm/bin/witup extrair-jacoco --xml target/site/jacoco/jacoco.xml --counter BRANCH",
+      "weight": 1.0,
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\\\.[0-9]+)?)",
+      "scale": 100.0,
+      "working_directory": ".",
+      "expected_outputs": ["target/site/jacoco/jacoco.xml"],
+      "description": "Cobertura de branches via JaCoCo",
+      "fallbacks": [
+        {
+          "name": "reuse-jacoco-report",
+          "command": "[ -f target/site/jacoco/jacoco.xml ] && /absolute/path/to/witup-llm/bin/witup extrair-jacoco --xml target/site/jacoco/jacoco.xml --counter BRANCH",
+          "expected_outputs": ["target/site/jacoco/jacoco.xml"],
+          "description": "Reaproveita um relatório JaCoCo já gerado pelo projeto"
+        },
+        {
+          "name": "explicit-jacoco-agent",
+          "command": "sh -lc 'if [ -x ./mvnw ]; then ./mvnw -q org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.12:report; else mvn -q org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.12:report; fi' && /absolute/path/to/witup-llm/bin/witup extrair-jacoco --xml target/site/jacoco/jacoco.xml --counter BRANCH",
+          "expected_outputs": ["target/site/jacoco/jacoco.xml"],
+          "description": "Injeta o agente JaCoCo apenas quando o projeto não o configura"
+        }
+      ]
+    },
+    {
+      "name": "pit-mutation",
+      "kind": "mutation",
+      "command": "sh -lc 'if [ -x ./mvnw ]; then ./mvnw -q -DtimestampedReports=false -DoutputFormats=XML org.pitest:pitest-maven:1.23.0:mutationCoverage; else mvn -q -DtimestampedReports=false -DoutputFormats=XML org.pitest:pitest-maven:1.23.0:mutationCoverage; fi' && /absolute/path/to/witup-llm/bin/witup extrair-pit --report-dir target/pit-reports",
+      "weight": 1.2,
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\\\.[0-9]+)?)",
+      "scale": 100.0,
+      "working_directory": ".",
+      "expected_outputs": ["target/pit-reports/mutations.xml"],
+      "description": "Mutation score via PIT",
+      "fallbacks": [
+        {
+          "name": "reuse-pit-report",
+          "command": "find target/pit-reports -name mutations.xml -print -quit | grep -q . && /absolute/path/to/witup-llm/bin/witup extrair-pit --report-dir target/pit-reports",
+          "expected_outputs": ["target/pit-reports/mutations.xml"],
+          "description": "Reaproveita um relatório PIT que já tenha sido gerado antes da falha"
+        }
+      ]
+    }
+  ],
+  "phase_two": {
+    "execution_mode": "repair_1retry",
+    "visualization_title": "Segunda fase: Google Guava vs Apache Commons Collections",
+    "projects": [
+      {
+        "key": "guava",
+        "label": "Google Guava",
+        "root": "/absolute/path/to/guava",
+        "wit_analysis_path": "/absolute/path/to/guava-wit.json",
+        "overview_file": "/absolute/path/to/guava/README.md",
+        "test_framework": "infer"
+      },
+      {
+        "key": "commons-collections",
+        "label": "Apache Commons Collections",
+        "root": "/absolute/path/to/commons-collections",
+        "wit_analysis_path": "/absolute/path/to/commons-collections-wit.json",
+        "overview_file": "/absolute/path/to/commons-collections/README.md",
+        "test_framework": "infer"
+      }
+    ]
+  }
+}

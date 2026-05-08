@@ -11,7 +11,7 @@ func TestNovoEspacoTrabalhoESerializacaoHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("novo espaço de trabalho: %v", err)
 	}
-	for _, caminho := range []string{espaco.Raiz, espaco.Prompts, espaco.Respostas, espaco.Testes, espaco.Fontes, espaco.Comparacoes, espaco.Variantes, espaco.Rastreios} {
+	for _, caminho := range []string{espaco.Raiz, espaco.Logs, espaco.Prompts, espaco.Respostas, espaco.Testes, espaco.Fontes, espaco.Comparacoes, espaco.Variantes, espaco.Rastreios} {
 		if !strings.HasPrefix(caminho, espaco.Raiz) {
 			t.Fatalf("esperava subdiretório do workspace, recebi %q", caminho)
 		}

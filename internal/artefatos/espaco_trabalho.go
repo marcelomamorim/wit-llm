@@ -15,6 +15,7 @@ import (
 // pacotes.
 type EspacoTrabalho struct {
 	Raiz        string
+	Logs        string
 	Prompts     string
 	Respostas   string
 	Testes      string
@@ -33,6 +34,7 @@ func NovoEspacoTrabalho(outputRoot, runID string) (*EspacoTrabalho, error) {
 	root := filepath.Join(outputRoot, runID)
 	w := &EspacoTrabalho{
 		Raiz:        root,
+		Logs:        filepath.Join(root, "logs"),
 		Prompts:     filepath.Join(root, "prompts"),
 		Respostas:   filepath.Join(root, "responses"),
 		Testes:      filepath.Join(root, "generated-tests"),
@@ -43,6 +45,7 @@ func NovoEspacoTrabalho(outputRoot, runID string) (*EspacoTrabalho, error) {
 	}
 	for _, p := range []string{
 		w.Raiz,
+		w.Logs,
 		w.Prompts,
 		w.Respostas,
 		w.Testes,

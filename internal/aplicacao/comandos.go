@@ -1,7 +1,6 @@
 package aplicacao
 
 import (
-	"errors"
 	"fmt"
 	"os"
 )
@@ -25,22 +24,20 @@ func Principal(argv []string) int {
 		return executarSonda(args)
 	case "ingerir-witup", "ingest-witup":
 		return executarIngestaoWITUP(args, servico)
-	case "visualizar-dados", "browse-data":
-		return executarVisualizacaoDados(args)
 	case "analisar", "analyze":
 		return executarAnalise(args, servico)
 	case "analisar-multiagentes", "analyze-agentic":
 		return executarAnaliseMultiagentes(args, servico)
 	case "comparar-fontes", "compare-sources":
 		return executarComparacaoFontes(args)
-	case "consolidar-estudo", "consolidate-study":
-		return executarConsolidacaoEstudo(args)
 	case "extrair-jacoco":
 		return executarExtracaoJacoco(args)
 	case "extrair-pit":
 		return executarExtracaoPIT(args)
 	case "extrair-surefire":
 		return executarExtracaoSurefire(args)
+	case "extrair-geracao":
+		return executarExtracaoGeracao(args)
 	case "medir-reproducao-excecoes":
 		return executarReproducaoExcecoes(args)
 	case "gerar", "generate":
@@ -49,12 +46,18 @@ func Principal(argv []string) int {
 		return executarAvaliacao(args, servico)
 	case "executar", "run":
 		return executarTudo(args, servico)
-	case "executar-experimento", "run-experiment":
-		return executarExperimento(args, servico)
-	case "executar-estudo-completo", "run-full-study":
-		return executarEstudoCompleto(args, servico)
-	case "executar-benchmark", "benchmark":
-		return executarBenchmark(args, servico)
+	case "executar-segunda-fase", "run-phase-two":
+		return executarSegundaFase(args, servico)
+	case "preflight-segunda-fase", "preflight-phase-two":
+		return executarPreflightSegundaFase(args, servico)
+	case "preparar-batch-segunda-fase", "prepare-phase-two-batch":
+		return executarPreparacaoBatchSegundaFase(args, servico)
+	case "submeter-openai-batch", "submit-openai-batch":
+		return executarSubmissaoOpenAIBatch(args)
+	case "coletar-openai-batch", "collect-openai-batch":
+		return executarColetaOpenAIBatch(args)
+	case "consolidar-estatisticas-primeira-rodada", "consolidate-first-round":
+		return executarConsolidacaoEstatisticasPrimeiraRodada(args)
 	case "ajuda", "help", "-h", "--help":
 		printBannerIfEnabled(argv)
 		imprimirUso()
@@ -76,45 +79,29 @@ func imprimirUso() {
 	fmt.Println("Comandos:")
 	fmt.Println("  modelos               Lista os modelos configurados")
 	fmt.Println("  sondar                Testa conectividade e autenticação do modelo")
-	fmt.Println("  ingerir-witup         Carrega as baselines do artigo para o DuckDB")
-	fmt.Println("  visualizar-dados      Abre uma interface web para consultar o DuckDB")
+	fmt.Println("  ingerir-witup         Materializa uma baseline WIT local como análise canônica")
 	fmt.Println("  analisar              Analisa métodos e extrai caminhos de exceção")
 	fmt.Println("  analisar-multiagentes Executa a análise LLM baseada em multiagentes")
 	fmt.Println("  comparar-fontes       Compara artefatos canônicos do WITUP e da LLM")
-	fmt.Println("  consolidar-estudo     Registra no DuckDB o resumo completo do estudo")
 	fmt.Println("  extrair-jacoco        Extrai uma métrica numérica de um relatório JaCoCo")
 	fmt.Println("  extrair-pit           Extrai o mutation score do relatório PIT")
-	fmt.Println("  extrair-surefire      Soma os testes executados a partir dos relatórios do Surefire")
+	fmt.Println("  extrair-surefire      Extrai métricas dos relatórios do Surefire")
+	fmt.Println("  extrair-geracao       Extrai métricas estáticas do generation.json")
 	fmt.Println("  medir-reproducao-excecoes Mede a reprodução de expaths nos testes gerados")
 	fmt.Println("  gerar                 Gera testes a partir de um relatório de análise")
 	fmt.Println("  avaliar               Executa métricas e, opcionalmente, avaliação por juiz")
 	fmt.Println("  executar              Executa analisar -> gerar -> avaliar")
-	fmt.Println("  executar-experimento  Prepara WITUP_ONLY, LLM_ONLY e WITUP_PLUS_LLM")
-	fmt.Println("  executar-estudo-completo Executa Parte 1 + Parte 2 e consolida o estudo")
-	fmt.Println("  executar-benchmark    Executa cenários de benchmark acoplados ou matriciais")
+	fmt.Println("  executar-segunda-fase Executa a fase 2 focada em contexto WIT vs geração direta")
+	fmt.Println("  preflight-segunda-fase Valida ambiente, baselines e alinhamento antes da fase 2")
+	fmt.Println("  preparar-batch-segunda-fase Gera JSONL Batch para a geração WIT vs direta")
+	fmt.Println("  submeter-openai-batch Submete um JSONL à Batch API da OpenAI")
+	fmt.Println("  coletar-openai-batch Consulta um batch e baixa outputs/erros quando disponíveis")
+	fmt.Println("  consolidar-estatisticas-primeira-rodada Consolida deltas pareados da rodada estatística")
 	fmt.Println("  ajuda                 Exibe esta mensagem")
 	fmt.Println("")
 	fmt.Println("Aliases compatíveis:")
-	fmt.Println("  models, probe, ingest-witup, browse-data, analyze, analyze-agentic, compare-sources, consolidate-study")
-	fmt.Println("  generate, evaluate, run, run-experiment, run-full-study, benchmark, help")
-}
-
-type listaStringsFlag struct {
-	valores []string
-}
-
-// String renderiza os valores recebidos pelo flag como lista separada por vírgulas.
-func (f *listaStringsFlag) String() string {
-	return juntarComVirgula(f.valores)
-}
-
-// Set acumula valores repetidos em flags multiuso.
-func (f *listaStringsFlag) Set(valor string) error {
-	if valor == "" {
-		return errors.New("valor vazio")
-	}
-	f.valores = append(f.valores, valor)
-	return nil
+	fmt.Println("  models, probe, ingest-witup, analyze, analyze-agentic, compare-sources")
+	fmt.Println("  generate, evaluate, run, run-phase-two, preflight-phase-two, prepare-phase-two-batch, submit-openai-batch, collect-openai-batch, consolidate-first-round, help")
 }
 
 // juntarComVirgula concatena uma lista de strings em um texto legível para CLI.

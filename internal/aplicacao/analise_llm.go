@@ -129,12 +129,6 @@ func (s *Servico) executarBranchLLMExperimento(
 		if err := artefatos.EscreverJSON(caminhoAnalise, report); err != nil {
 			return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", err
 		}
-		if err := registrarArtefatoNoBanco(cfg, report.IDExecucao, "analise_llm_experimento", "", string(dominio.VarianteLLMApenas), caminhoAnalise, report.GeradoEm, report); err != nil {
-			return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", err
-		}
-		if err := registrarArtefatoNoBanco(cfg, report.IDExecucao, "analise_llm_direta", "", string(dominio.VarianteLLMApenas), caminhoAnalise, report.GeradoEm, report); err != nil {
-			return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", err
-		}
 		return report, caminhoAnalise, dominio.RelatorioRastreioAgente{}, "", nil
 	case dominio.ModoLLMMultiagente:
 		return s.executarBranchLLMMultiagente(cfg, modelKey, witupReport, metodosAlvo, visaoGeral, workspace)
@@ -162,9 +156,6 @@ func (s *Servico) executarBranchLLMMultiagente(
 	if err := artefatos.EscreverJSON(caminhoDireto, relatorioDireto); err != nil {
 		return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", err
 	}
-	if err := registrarArtefatoNoBanco(cfg, relatorioDireto.IDExecucao, "analise_llm_direta", "", string(dominio.VarianteLLMApenas), caminhoDireto, relatorioDireto.GeradoEm, relatorioDireto); err != nil {
-		return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", err
-	}
 
 	comparacaoPreliminar := experimento.ConstruirRelatorioComparacao("witup-aligned", witupReport, caminhoDireto, relatorioDireto)
 	metodosRefino := selecionarMetodosRefino(witupReport, relatorioDireto, comparacaoPreliminar, cfg.Fluxo.TamanhoSubconjunto)
@@ -172,9 +163,6 @@ func (s *Servico) executarBranchLLMMultiagente(
 		relatorioDireto.Estrategia = "llm_direct_without_refinement"
 		caminhoFinal := filepath.Join(workspace.Fontes, "llm-analysis.json")
 		if err := artefatos.EscreverJSON(caminhoFinal, relatorioDireto); err != nil {
-			return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", err
-		}
-		if err := registrarArtefatoNoBanco(cfg, relatorioDireto.IDExecucao, "analise_llm_experimento", "", string(dominio.VarianteLLMApenas), caminhoFinal, relatorioDireto.GeradoEm, relatorioDireto); err != nil {
 			return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", err
 		}
 		return relatorioDireto, caminhoFinal, dominio.RelatorioRastreioAgente{}, "", nil
@@ -201,15 +189,6 @@ func (s *Servico) executarBranchLLMMultiagente(
 	}
 	caminhoRastreio := filepath.Join(workspace.Rastreios, "agent-trace-report.json")
 	if err := artefatos.EscreverJSON(caminhoRastreio, rastreio); err != nil {
-		return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", err
-	}
-	if err := registrarArtefatoNoBanco(cfg, relatorioFinal.IDExecucao, "analise_llm_experimento", "", string(dominio.VarianteLLMApenas), caminhoFinal, relatorioFinal.GeradoEm, relatorioFinal); err != nil {
-		return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", err
-	}
-	if err := registrarArtefatoNoBanco(cfg, relatorioFinal.IDExecucao, "analise_llm_multiagente", "", string(dominio.VarianteLLMApenas), caminhoFinal, relatorioFinal.GeradoEm, relatorioFinal); err != nil {
-		return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", err
-	}
-	if err := registrarArtefatoNoBanco(cfg, relatorioFinal.IDExecucao, "rastreio_agentes", "", string(dominio.VarianteLLMApenas), caminhoRastreio, rastreio.GeradoEm, rastreio); err != nil {
 		return dominio.RelatorioAnalise{}, "", dominio.RelatorioRastreioAgente{}, "", err
 	}
 	return relatorioFinal, caminhoFinal, rastreio, caminhoRastreio, nil

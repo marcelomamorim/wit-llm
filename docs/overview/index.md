@@ -1,44 +1,57 @@
 # Visao Geral
 
-O `witup-llm` e uma ferramenta de pesquisa que automatiza a descoberta de exception paths (ExPaths) em projetos Java e compara abordagens de analise estatica (WITUP) com Large Language Models.
+A fase atual do `witup-llm` compara duas estratégias de geração de testes unitários:
 
-## Contexto da Pesquisa
+- **WIT_CONTEXT**: o baseline WIT entra como contexto para a geração;
+- **DIRECT_TESTS**: os testes são pedidos diretamente ao modelo, sem contexto WIT.
 
-O projeto surge da necessidade de avaliar se LLMs podem complementar ou superar ferramentas tradicionais de analise estatica na identificacao de fluxos de excecao em codigo Java. O baseline de referencia vem do artigo WITUP (publicado no EMSE), e o sistema executa um protocolo experimental com tres variantes.
+## Por que essa mudança
 
-## Pipeline do Sistema
+A fase anterior misturava vários objetivos experimentais, três variantes de expaths e uma camada analítica extra. Para a nova etapa, o foco foi reduzido para uma pergunta mais clara:
+
+> usar o contexto WIT realmente melhora a qualidade dos testes em relação à geração direta?
+
+## Projetos-alvo
+
+- Google Guava
+- Apache Commons Collections
+
+## Unidade de comparação
+
+Os dois cenários são avaliados sobre o **mesmo conjunto de métodos-alvo** por projeto. Isso evita comparar estratégias em subconjuntos diferentes do código.
+
+## Pipeline da segunda fase
 
 ```mermaid
-graph LR
-    A["Ingestao WITUP"] --> B["Catalogacao Java"]
-    B --> C["Analise LLM"]
-    C --> D["Comparacao Estrutural"]
-    D --> E["Geracao de Testes"]
-    E --> F["Avaliacao (JaCoCo/PIT)"]
-    F --> G["Consolidacao DuckDB"]
+graph TD
+    A["Baseline WIT local"] --> B["Alinhamento ao checkout"]
+    C["Catalogação do checkout"] --> B
+    B --> D["Métodos-alvo comuns"]
+    D --> E["Geração com contexto WIT"]
+    D --> F["Geração direta"]
+    E --> G["Avaliação"]
+    F --> G
+    G --> H["JSON"]
+    G --> I["CSV"]
+    G --> J["Dashboard HTML"]
 ```
 
-### Etapas Principais
+## Métricas principais
 
-1. **Ingestao do Baseline**: Carrega dados do pacote de replicacao WITUP no DuckDB.
-2. **Catalogacao**: Scanner baseado em regex identifica metodos Java elegiveis.
-3. **Analise**: Executa descoberta de ExPaths via LLM (modo `direct` ou `multiagent`).
-4. **Comparacao**: Compara ExPaths WITUP vs LLM usando metricas estruturais (Jaccard, precisao, recall).
-5. **Geracao de Testes**: Produz suites JUnit a partir dos ExPaths identificados.
-6. **Avaliacao**: Executa testes em sandbox isolada, mede cobertura (JaCoCo) e mutacao (PIT).
-7. **Consolidacao**: Persiste resultados no DuckDB para consulta reprodutivel.
+- `test-compilation`
+- `unit-tests`
+- `test-pass-rate`
+- `target-method-coverage`
+- `assertive-tests-rate`
+- `exception-assertion-rate`
+- `jacoco-line`
+- `jacoco-branch`
+- `pit-mutation`
 
-## Variantes Experimentais
+## Saída esperada
 
-| Variante | Fonte dos ExPaths | Descricao |
-| :--- | :--- | :--- |
-| `WITUP_ONLY` | Baseline estatico | Dados do pacote de replicacao original |
-| `LLM_ONLY` | LLM independente | Descoberta exclusiva por modelo de linguagem |
-| `WITUP_PLUS_LLM` | Hibrido | Baseline WITUP + refinamento/descoberta LLM |
+Ao final da execução, o projeto produz um pacote legível para análise:
 
-## Hipoteses de Pesquisa
-
-- **H1 (Descoberta)**: O LLM consegue descobrir ExPaths comparaveis ao WITUP?
-- **H2 (Precisao)**: Qual a precisao estrutural dos ExPaths gerados pelo LLM?
-- **H3 (Aumento)**: A combinacao WITUP+LLM supera cada abordagem isolada?
-- **H4 (Complexidade)**: Como o desempenho varia com a complexidade do codigo?
+- um relatório consolidado em JSON;
+- tabelas CSV para comparação;
+- um dashboard HTML estático para apresentação.
