@@ -66,6 +66,12 @@ func TestExecutarMetricaCapturaSaidaECodigoDeErro(t *testing.T) {
 	if ok.NotaNormalizada == nil || *ok.NotaNormalizada != 87.5 {
 		t.Fatalf("nota normalizada inesperada: %#v", ok.NotaNormalizada)
 	}
+	if ok.EstrategiaExecutada != "primary" {
+		t.Fatalf("estratégia esperada primary, recebi %q", ok.EstrategiaExecutada)
+	}
+	if len(ok.Tentativas) != 1 {
+		t.Fatalf("esperava uma tentativa primária, recebi %d", len(ok.Tentativas))
+	}
 
 	falha := executor.ExecutarMetrica(dominio.ConfigMetrica{
 		Nome:       "pit",
@@ -82,6 +88,71 @@ func TestExecutarMetricaCapturaSaidaECodigoDeErro(t *testing.T) {
 	}
 	if falha.NotaNormalizada != nil {
 		t.Fatalf("não esperava nota normalizada em falha: %#v", falha.NotaNormalizada)
+	}
+	if len(falha.Tentativas) != 1 {
+		t.Fatalf("esperava uma tentativa em falha sem fallback, recebi %d", len(falha.Tentativas))
+	}
+}
+
+func TestExecutarMetricaCancelaPorTimeout(t *testing.T) {
+	executor := NovoExecutor()
+	ctx := ContextoExecucao{RaizProjeto: t.TempDir()}
+
+	resultado := executor.ExecutarMetrica(dominio.ConfigMetrica{
+		Nome:            "timeout",
+		Comando:         "sleep 3",
+		Escala:          100,
+		Peso:            1,
+		SegundosTimeout: 1,
+	}, ctx)
+	if resultado.Sucesso {
+		t.Fatalf("esperava falha por timeout, recebi %#v", resultado)
+	}
+	if !resultado.TempoEsgotado || resultado.CodigoSaida != codigoSaidaTimeoutMetrica {
+		t.Fatalf("timeout não registrado corretamente: %#v", resultado)
+	}
+	if resultado.TimeoutSegundos != 1 || resultado.DuracaoMillis <= 0 {
+		t.Fatalf("metadados de timeout inesperados: %#v", resultado)
+	}
+	if len(resultado.Tentativas) != 1 || !resultado.Tentativas[0].TempoEsgotado {
+		t.Fatalf("tentativa deveria registrar timeout: %#v", resultado.Tentativas)
+	}
+}
+
+func TestExecutarMetricaPontuaComandoBinarioSemRegex(t *testing.T) {
+	executor := NovoExecutor()
+	ctx := ContextoExecucao{RaizProjeto: t.TempDir()}
+
+	sucesso := executor.ExecutarMetrica(dominio.ConfigMetrica{
+		Nome:    "test-compilation",
+		Comando: "true",
+		Escala:  100,
+		Peso:    1,
+	}, ctx)
+	if !sucesso.Sucesso {
+		t.Fatalf("esperava sucesso na métrica binária: %#v", sucesso)
+	}
+	if sucesso.ValorNumerico == nil || *sucesso.ValorNumerico != 100 {
+		t.Fatalf("valor binário inesperado em sucesso: %#v", sucesso.ValorNumerico)
+	}
+	if sucesso.NotaNormalizada == nil || *sucesso.NotaNormalizada != 100 {
+		t.Fatalf("nota binária inesperada em sucesso: %#v", sucesso.NotaNormalizada)
+	}
+
+	falha := executor.ExecutarMetrica(dominio.ConfigMetrica{
+		Nome:    "test-compilation",
+		Comando: "exit 3",
+		Escala:  100,
+		Peso:    1,
+	}, ctx)
+	if falha.Sucesso {
+		t.Fatalf("esperava falha na métrica binária: %#v", falha)
+	}
+	if falha.ValorNumerico == nil || *falha.ValorNumerico != 0 {
+		t.Fatalf("valor binário inesperado em falha: %#v", falha.ValorNumerico)
+	}
+	if falha.NotaNormalizada == nil || *falha.NotaNormalizada != 0 {
+		t.Fatalf("nota binária inesperada em falha: %#v", falha.NotaNormalizada)
 	}
 }
 
@@ -278,5 +349,83 @@ func TestExecutarMetricaPontuaComArtefatoEsperadoPresente(t *testing.T) {
 	}
 	if resultado.ValorNumerico == nil || *resultado.ValorNumerico != 88.2 {
 		t.Fatalf("valor numérico inesperado: %#v", resultado.ValorNumerico)
+	}
+}
+
+func TestExecutarMetricaUsaFallbackQuandoPrimariaFalha(t *testing.T) {
+	raiz := t.TempDir()
+	relatorio := filepath.Join(raiz, "target", "pit-reports", "mutations.xml")
+	if err := os.MkdirAll(filepath.Dir(relatorio), 0o755); err != nil {
+		t.Fatalf("mkdir pit: %v", err)
+	}
+	if err := os.WriteFile(relatorio, []byte("<mutations/>"), 0o644); err != nil {
+		t.Fatalf("write pit: %v", err)
+	}
+
+	executor := NovoExecutor()
+	ctx := ContextoExecucao{RaizProjeto: raiz}
+	escalaFallback := 100.0
+	resultado := executor.ExecutarMetrica(dominio.ConfigMetrica{
+		Nome:       "pit-mutation",
+		Comando:    "echo boom 1>&2; exit 9",
+		RegexValor: `WITUP_METRIC=([0-9.]+)`,
+		Escala:     100,
+		Peso:       1,
+		Fallbacks: []dominio.ConfigFallbackMetrica{
+			{
+				Nome:            "reuse-report",
+				Comando:         "printf 'WITUP_METRIC=42.0'",
+				SaidasEsperadas: []string{"target/pit-reports/mutations.xml"},
+				Escala:          &escalaFallback,
+			},
+		},
+	}, ctx)
+	if !resultado.Sucesso {
+		t.Fatalf("esperava sucesso via fallback, recebi %#v", resultado)
+	}
+	if resultado.EstrategiaExecutada != "reuse-report" {
+		t.Fatalf("esperava fallback reuse-report, recebi %q", resultado.EstrategiaExecutada)
+	}
+	if resultado.ValorNumerico == nil || *resultado.ValorNumerico != 42.0 {
+		t.Fatalf("valor do fallback inesperado: %#v", resultado.ValorNumerico)
+	}
+	if len(resultado.Tentativas) != 2 {
+		t.Fatalf("esperava duas tentativas, recebi %d", len(resultado.Tentativas))
+	}
+	if resultado.Tentativas[0].Sucesso {
+		t.Fatalf("a tentativa primária deveria falhar: %#v", resultado.Tentativas[0])
+	}
+	if !resultado.Tentativas[1].Sucesso {
+		t.Fatalf("o fallback deveria suceder: %#v", resultado.Tentativas[1])
+	}
+}
+
+func TestExecutarMetricaFalhaQuandoFallbackTambemFalha(t *testing.T) {
+	executor := NovoExecutor()
+	ctx := ContextoExecucao{RaizProjeto: t.TempDir()}
+	resultado := executor.ExecutarMetrica(dominio.ConfigMetrica{
+		Nome:       "pit-mutation",
+		Comando:    "echo primary 1>&2; exit 3",
+		RegexValor: `WITUP_METRIC=([0-9.]+)`,
+		Escala:     100,
+		Peso:       1,
+		Fallbacks: []dominio.ConfigFallbackMetrica{
+			{
+				Nome:    "reuse-report",
+				Comando: "echo fallback 1>&2; exit 4",
+			},
+		},
+	}, ctx)
+	if resultado.Sucesso {
+		t.Fatalf("esperava falha com fallback também falhando: %#v", resultado)
+	}
+	if resultado.CodigoSaida != 4 {
+		t.Fatalf("esperava código da última tentativa 4, recebi %d", resultado.CodigoSaida)
+	}
+	if resultado.EstrategiaExecutada != "reuse-report" {
+		t.Fatalf("estratégia final inesperada: %q", resultado.EstrategiaExecutada)
+	}
+	if len(resultado.Tentativas) != 2 {
+		t.Fatalf("esperava duas tentativas registradas, recebi %d", len(resultado.Tentativas))
 	}
 }

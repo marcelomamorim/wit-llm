@@ -17,22 +17,51 @@ var regexTipoQualificado = regexp.MustCompile(`\b(?:[a-z_][\w]*\.)+[A-Z][A-Za-z0
 // antes de persisti-la ou reavaliá-la. O objetivo é reduzir erros recorrentes
 // de compatibilidade com a API real do projeto alvo.
 func adaptarArquivosTesteAoProjeto(raizProjeto string, arquivos []dominio.ArquivoTesteGerado) []dominio.ArquivoTesteGerado {
+	adaptados, _ := adaptarArquivosTesteAoProjetoAuditado(raizProjeto, arquivos)
+	return adaptados
+}
+
+func adaptarArquivosTesteAoProjetoAuditado(raizProjeto string, arquivos []dominio.ArquivoTesteGerado) ([]dominio.ArquivoTesteGerado, []string) {
 	if len(arquivos) == 0 {
-		return arquivos
+		return arquivos, nil
+	}
+	if !projetoPermiteRewritersLegados(raizProjeto) {
+		return arquivos, nil
 	}
 	indice := indexarTiposProjeto(raizProjeto)
 	constantesDependencyType := carregarConstantesEnumProjeto(raizProjeto, indice["DependencyType"])
 
 	adaptados := make([]dominio.ArquivoTesteGerado, 0, len(arquivos))
+	intervencoes := make([]string, 0)
 	for _, arquivo := range arquivos {
 		if deveExcluirArquivoTesteParte2(arquivo) {
+			intervencoes = append(intervencoes, "legacy_visualee_excluded:"+strings.TrimSpace(arquivo.CaminhoRelativo))
 			continue
 		}
 		ajustado := arquivo
 		ajustado.Conteudo = adaptarConteudoTesteAoProjeto(arquivo.CaminhoRelativo, arquivo.Conteudo, indice, constantesDependencyType)
+		if ajustado.Conteudo != arquivo.Conteudo {
+			intervencoes = append(intervencoes, "legacy_visualee_rewrite:"+strings.TrimSpace(arquivo.CaminhoRelativo))
+		}
 		adaptados = append(adaptados, ajustado)
 	}
-	return adaptados
+	return adaptados, deduplicarStrings(intervencoes)
+}
+
+func projetoPermiteRewritersLegados(raizProjeto string) bool {
+	if strings.TrimSpace(raizProjeto) == "" {
+		return false
+	}
+	candidatos := []string{
+		filepath.Join(raizProjeto, "src", "main", "java", "de", "strullerbaumann", "visualee"),
+		filepath.Join(raizProjeto, "src", "main", "java", "de", "strullerbaumann", "visualee", "source", "entity", "JavaSourceFactory.java"),
+	}
+	for _, candidato := range candidatos {
+		if _, err := os.Stat(candidato); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func deveExcluirArquivoTesteParte2(arquivo dominio.ArquivoTesteGerado) bool {

@@ -8,7 +8,7 @@ O `Executor` em `internal/metricas` e responsavel por medir qualidade, corretude
 graph TD
     A["Servico.Avaliar()"] -- "chama" --> B["Executor.ExecutarTodas()"]
     B -- "itera" --> C["Executor.ExecutarMetrica()"]
-    C -- "executa" --> D["exec.Command()"]
+    C -- "executa com timeout" --> D["exec.CommandContext()"]
     D -- "retorna" --> E["Saida Padrao"]
     E -- "regex/parser" --> F["ResultadoMetrica"]
     F -- "agregado por" --> G["AgregarPontuacao()"]
@@ -17,7 +17,13 @@ graph TD
 ## Metodos de Extracao
 
 ### 1. Extracao por Regex
-Se `RegexExtracao` esta definido na `ConfigMetrica`, o executor busca o primeiro match na saida do comando. Usado para extrair contagens de testes ou tempos de execucao.
+Se `value_regex` esta definido na `ConfigMetrica`, o executor busca o primeiro
+match na saida do comando. Usado para extrair contagens de testes ou tempos de
+execucao.
+
+Cada tentativa respeita `timeout_seconds`. Quando omitido, o padrao e 600
+segundos. Fallbacks herdam esse valor da metrica principal, mas podem
+sobrescrever com um limite proprio.
 
 ### 2. Parsing JaCoCo XML
 `ExtrairCoberturaJaCoCo` parseia `jacoco.xml` e calcula:

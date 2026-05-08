@@ -1,11 +1,9 @@
 package aplicacao
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/marceloamorim/witup-llm/internal/artefatos"
 	"github.com/marceloamorim/witup-llm/internal/dominio"
 )
 
@@ -25,60 +23,14 @@ func TestPrincipalSemArgumentosEComandoDesconhecido(t *testing.T) {
 	}
 }
 
-func TestListaStringsFlagAceitaValoresERejeitaVazio(t *testing.T) {
-	var flag listaStringsFlag
-	if err := flag.Set("um"); err != nil {
-		t.Fatalf("set um: %v", err)
-	}
-	if err := flag.Set("dois"); err != nil {
-		t.Fatalf("set dois: %v", err)
-	}
-	if got := flag.String(); got != "um, dois" {
-		t.Fatalf("string inesperada: %q", got)
-	}
-	if err := flag.Set(""); err == nil {
-		t.Fatalf("esperava erro para valor vazio")
-	}
-}
-
-func TestExecutarVisualizacaoDadosValidaArgsEEndereco(t *testing.T) {
-	_, stderr, codigo := capturarSaidas(t, func() int {
-		return executarVisualizacaoDados(nil)
-	})
-	if codigo != 2 || !strings.Contains(stderr, "--config") {
-		t.Fatalf("validação de visualizar-dados inesperada codigo=%d stderr=%q", codigo, stderr)
-	}
-
-	_, stderr, codigo = capturarSaidas(t, func() int {
-		return executarVisualizacaoDados([]string{"--config", filepath.Join(t.TempDir(), "nao-existe.json")})
-	})
-	if codigo != 1 || !strings.Contains(stderr, "erro:") {
-		t.Fatalf("config inválida deveria falhar codigo=%d stderr=%q", codigo, stderr)
-	}
-}
-
-func TestExecutarConsolidacaoEstudoValidaArgsERelatorio(t *testing.T) {
-	_, stderr, codigo := capturarSaidas(t, func() int {
-		return executarConsolidacaoEstudo(nil)
-	})
-	if codigo != 2 || !strings.Contains(stderr, "--config e --summary") {
-		t.Fatalf("validação inesperada codigo=%d stderr=%q", codigo, stderr)
-	}
-
-	cfg := configBaseTeste(t)
-	configPath := escreverConfigTeste(t, cfg)
-	summaryPath := filepath.Join(t.TempDir(), "summary.json")
-	if err := artefatos.EscreverJSON(summaryPath, map[string]interface{}{
-		"project_key":  "sample",
-		"generated_at": dominio.HorarioUTC(),
-	}); err != nil {
-		t.Fatalf("fixture summary: %v", err)
-	}
-	_, stderr, codigo = capturarSaidas(t, func() int {
-		return executarConsolidacaoEstudo([]string{"--config", configPath, "--summary", summaryPath})
-	})
-	if codigo != 1 || !strings.Contains(stderr, "run_id") {
-		t.Fatalf("relatório inválido deveria falhar codigo=%d stderr=%q", codigo, stderr)
+func TestPrincipalRejeitaComandosLegadosRemovidosDaCLI(t *testing.T) {
+	for _, comando := range []string{"executar-experimento", "run-experiment", "executar-estudo-completo", "run-full-study", "executar-benchmark", "benchmark"} {
+		stdout, stderr, codigo := capturarSaidas(t, func() int {
+			return Principal([]string{comando})
+		})
+		if codigo != 2 || !strings.Contains(stderr, "comando desconhecido") {
+			t.Fatalf("comando legado %q deveria ser rejeitado codigo=%d stdout=%q stderr=%q", comando, codigo, stdout, stderr)
+		}
 	}
 }
 
@@ -118,9 +70,9 @@ func TestExecutarHandlersObrigatoriosRetornamCodigoDois(t *testing.T) {
 		{"geracao", func() int { return executarGeracao(nil, NovoServico(nil, nil)) }},
 		{"avaliacao", func() int { return executarAvaliacao(nil, NovoServico(nil, nil)) }},
 		{"run", func() int { return executarTudo(nil, NovoServico(nil, nil)) }},
-		{"experimento", func() int { return executarExperimento(nil, NovoServico(nil, nil)) }},
-		{"estudo-completo", func() int { return executarEstudoCompleto(nil, NovoServico(nil, nil)) }},
-		{"benchmark", func() int { return executarBenchmark(nil, NovoServico(nil, nil)) }},
+		{"segunda-fase", func() int { return executarSegundaFase(nil, NovoServico(nil, nil)) }},
+		{"preflight-segunda-fase", func() int { return executarPreflightSegundaFase(nil, NovoServico(nil, nil)) }},
+		{"estatisticas-primeira-rodada", func() int { return executarConsolidacaoEstatisticasPrimeiraRodada(nil) }},
 		{"ingestao", func() int { return executarIngestaoWITUP(nil, NovoServico(nil, nil)) }},
 		{"jacoco", func() int { return executarExtracaoJacoco(nil) }},
 		{"pit", func() int { return executarExtracaoPIT(nil) }},

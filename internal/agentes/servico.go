@@ -120,11 +120,19 @@ func (o *Orquestrador) analisarProjeto(
 	salvarPrompts bool,
 	espaco *artefatos.EspacoTrabalho,
 ) (contextoProjetoCompartilhado, []dominio.EtapaRastreioAgente, error) {
+	promptSistemaArqueologo, err := construirPromptSistemaArqueologoProjeto()
+	if err != nil {
+		return contextoProjetoCompartilhado{}, nil, err
+	}
+	promptUsuarioArqueologo, err := construirPromptUsuarioArqueologoProjeto(visaoGeral, metodos)
+	if err != nil {
+		return contextoProjetoCompartilhado{}, nil, err
+	}
 	resultadoArqueologo, err := o.executarPapel(
 		model,
 		dominio.PapelAgenteArqueologo,
-		construirPromptSistemaArqueologoProjeto(),
-		construirPromptUsuarioArqueologoProjeto(visaoGeral, metodos),
+		promptSistemaArqueologo,
+		promptUsuarioArqueologo,
 		dominio.OpcoesRequisicaoLLM{
 			PromptCacheKey:  construirChaveCacheAgente("project", string(dominio.PapelAgenteArqueologo)),
 			PreservarEstado: true,
@@ -136,11 +144,19 @@ func (o *Orquestrador) analisarProjeto(
 		return contextoProjetoCompartilhado{}, nil, err
 	}
 
+	promptSistemaDependencias, err := construirPromptSistemaDependenciasProjeto()
+	if err != nil {
+		return contextoProjetoCompartilhado{}, nil, err
+	}
+	promptUsuarioDependencias, err := construirPromptUsuarioDependenciasProjeto(visaoGeral, metodos, resultadoArqueologo.saida)
+	if err != nil {
+		return contextoProjetoCompartilhado{}, nil, err
+	}
 	resultadoDependencias, err := o.executarPapel(
 		model,
 		dominio.PapelAgenteDependencias,
-		construirPromptSistemaDependenciasProjeto(),
-		construirPromptUsuarioDependenciasProjeto(visaoGeral, metodos, resultadoArqueologo.saida),
+		promptSistemaDependencias,
+		promptUsuarioDependencias,
 		dominio.OpcoesRequisicaoLLM{
 			PromptCacheKey:     construirChaveCacheAgente("project", string(dominio.PapelAgenteDependencias)),
 			PreviousResponseID: resultadoArqueologo.idResposta,
@@ -175,11 +191,19 @@ func (o *Orquestrador) analisarMetodo(
 ) (dominio.RastreioAgenteMetodo, dominio.AnaliseMetodo, error) {
 	respostaContexto := o.resolverRespostaContextoMetodo(metodo, contextoProjeto.IDRespostaDepend)
 
+	promptSistemaExtrator, err := construirPromptSistemaExtrator()
+	if err != nil {
+		return dominio.RastreioAgenteMetodo{}, dominio.AnaliseMetodo{}, err
+	}
+	promptUsuarioExtrator, err := construirPromptUsuarioExtrator(metodo)
+	if err != nil {
+		return dominio.RastreioAgenteMetodo{}, dominio.AnaliseMetodo{}, err
+	}
 	resultadoExtrator, err := o.executarPapelPorMetodo(
 		model,
 		dominio.PapelAgenteExtrator,
-		construirPromptSistemaExtrator(),
-		construirPromptUsuarioExtrator(metodo),
+		promptSistemaExtrator,
+		promptUsuarioExtrator,
 		dominio.OpcoesRequisicaoLLM{
 			PromptCacheKey:     construirChaveCacheAgente(metodo.IDMetodo, string(dominio.PapelAgenteExtrator)),
 			PreviousResponseID: respostaContexto,
@@ -194,11 +218,19 @@ func (o *Orquestrador) analisarMetodo(
 		return dominio.RastreioAgenteMetodo{}, dominio.AnaliseMetodo{}, err
 	}
 
+	promptSistemaCetico, err := construirPromptSistemaCetico()
+	if err != nil {
+		return dominio.RastreioAgenteMetodo{}, dominio.AnaliseMetodo{}, err
+	}
+	promptUsuarioCetico, err := construirPromptUsuarioCetico(metodo, resultadoExtrator.saida)
+	if err != nil {
+		return dominio.RastreioAgenteMetodo{}, dominio.AnaliseMetodo{}, err
+	}
 	resultadoCetico, err := o.executarPapelPorMetodo(
 		model,
 		dominio.PapelAgenteCetico,
-		construirPromptSistemaCetico(),
-		construirPromptUsuarioCetico(metodo, resultadoExtrator.saida),
+		promptSistemaCetico,
+		promptUsuarioCetico,
 		dominio.OpcoesRequisicaoLLM{
 			PromptCacheKey:     construirChaveCacheAgente(metodo.IDMetodo, string(dominio.PapelAgenteCetico)),
 			PreviousResponseID: resultadoExtrator.idResposta,

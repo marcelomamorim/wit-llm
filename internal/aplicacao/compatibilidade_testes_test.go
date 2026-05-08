@@ -67,6 +67,29 @@ public class ExaminerJPAExamineDetailTest {
 	}
 }
 
+func TestAdaptarArquivosTesteAoProjetoNaoAplicaRewritersLegadosForaDoVisualee(t *testing.T) {
+	raizProjeto := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(raizProjeto, "src/main/java/com/example"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	original := `package com.example;
+public class JavaSourceFactoryTest {
+  void sample() { new JavaSourceFactory(); }
+}`
+	arquivos := []dominio.ArquivoTesteGerado{{
+		CaminhoRelativo: "src/test/java/com/example/JavaSourceFactoryTest.java",
+		Conteudo:        original,
+	}}
+
+	adaptados, intervencoes := adaptarArquivosTesteAoProjetoAuditado(raizProjeto, arquivos)
+	if len(intervencoes) != 0 {
+		t.Fatalf("não esperava intervenções fora do VisualEE: %#v", intervencoes)
+	}
+	if len(adaptados) != 1 || adaptados[0].Conteudo != original {
+		t.Fatalf("rewriter legado não deveria alterar projeto não VisualEE: %#v", adaptados)
+	}
+}
+
 func TestAdaptarArquivosTesteAoProjetoReescreveJavaSourceFactoryProblematico(t *testing.T) {
 	raizProjeto := projetoVisualeeFake(t)
 	arquivos := []dominio.ArquivoTesteGerado{{

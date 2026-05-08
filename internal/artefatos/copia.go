@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// CopiarDiretorioFiltrado replica uma árvore de diretórios ignorando segmentos
-// específicos do caminho relativo.
+// CopiarDiretorioFiltrado replica uma árvore de diretórios ignorando caminhos
+// relativos explicitamente excluídos a partir da raiz copiada.
 func CopiarDiretorioFiltrado(origem, destino string, segmentosExcluidos []string) error {
 	info, err := os.Stat(origem)
 	if err != nil {
@@ -40,7 +40,7 @@ func CopiarDiretorioFiltrado(origem, destino string, segmentosExcluidos []string
 		if relativo == "." {
 			return os.MkdirAll(destino, 0o755)
 		}
-		if contemSegmentoExcluido(relativo, excluidos) {
+		if contemCaminhoExcluido(relativo, excluidos) {
 			if entrada.IsDir() {
 				return filepath.SkipDir
 			}
@@ -102,12 +102,16 @@ func CopiarDiretorioNoDestino(origem, destino string) error {
 	})
 }
 
-// contemSegmentoExcluido informa se algum segmento do caminho relativo faz
-// parte da lista de diretórios que devem ser ignorados.
-func contemSegmentoExcluido(relativo string, excluidos map[string]struct{}) bool {
-	partes := strings.Split(filepath.Clean(relativo), string(filepath.Separator))
-	for _, parte := range partes {
-		if _, ok := excluidos[parte]; ok {
+// contemCaminhoExcluido informa se o caminho relativo corresponde a um item
+// explicitamente ignorado na raiz do checkout ou a um subcaminho dele.
+func contemCaminhoExcluido(relativo string, excluidos map[string]struct{}) bool {
+	relativo = filepath.ToSlash(filepath.Clean(relativo))
+	for item := range excluidos {
+		item = filepath.ToSlash(filepath.Clean(item))
+		if item == "." || item == "" {
+			continue
+		}
+		if relativo == item || strings.HasPrefix(relativo, item+"/") {
 			return true
 		}
 	}

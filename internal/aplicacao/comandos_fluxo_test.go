@@ -51,6 +51,9 @@ func escreverConfigTeste(t *testing.T, cfg dominio.ConfigAplicacao) string {
 		"models":   cfg.Modelos,
 		"metrics":  cfg.Metricas,
 	}
+	if len(cfg.SegundaFase.Projetos) > 0 || cfg.SegundaFase.TituloVisualizacao != "" {
+		payload["phase_two"] = cfg.SegundaFase
+	}
 	if err := artefatos.EscreverJSON(caminho, payload); err != nil {
 		t.Fatalf("escrever config: %v", err)
 	}
@@ -101,7 +104,6 @@ func configBaseTeste(t *testing.T) dominio.ConfigAplicacao {
 		},
 		Fluxo: dominio.ConfigFluxo{
 			DiretorioSaida:     filepath.Join(raizProjeto, "generated"),
-			CaminhoDuckDB:      filepath.Join(raizProjeto, "generated", "witup.duckdb"),
 			RaizReplicacaoWIT:  filepath.Join(raizProjeto, "replication"),
 			ArquivoBaselineWIT: "wit.json",
 			SalvarPrompts:      true,
@@ -163,9 +165,15 @@ func TestExecutarExtracoesDeMetricas(t *testing.T) {
 	if codigo != 0 || strings.TrimSpace(stdout) != "WITUP_METRIC=7" {
 		t.Fatalf("resultado surefire inesperado codigo=%d stdout=%q", codigo, stdout)
 	}
+	stdout, _, codigo = capturarSaidas(t, func() int {
+		return executarExtracaoSurefire([]string{"--report-dir", surefireDir, "--kind", "pass-rate"})
+	})
+	if codigo != 0 || strings.TrimSpace(stdout) != "WITUP_METRIC=100.00" {
+		t.Fatalf("resultado surefire pass-rate inesperado codigo=%d stdout=%q", codigo, stdout)
+	}
 
 	analise := dominio.RelatorioAnalise{Analises: []dominio.AnaliseMetodo{{Metodo: dominio.DescritorMetodo{IDMetodo: "m1"}, CaminhosExcecao: []dominio.CaminhoExcecao{{TipoExcecao: "IllegalArgumentException"}}}}}
-	geracao := dominio.RelatorioGeracao{ArquivosTeste: []dominio.ArquivoTesteGerado{{Conteudo: "assertThrows(IllegalArgumentException.class, () -> subject.run());", IDsMetodosCobertos: []string{"m1"}}}}
+	geracao := dominio.RelatorioGeracao{ArquivosTeste: []dominio.ArquivoTesteGerado{{Conteudo: "@Test\nvoid reproduz() { assertThrows(IllegalArgumentException.class, () -> subject.run()); }", IDsMetodosCobertos: []string{"m1"}}}}
 	analysisPath := filepath.Join(tempDir, "analysis.json")
 	generationPath := filepath.Join(tempDir, "generation.json")
 	if err := artefatos.EscreverJSON(analysisPath, analise); err != nil {
@@ -173,6 +181,18 @@ func TestExecutarExtracoesDeMetricas(t *testing.T) {
 	}
 	if err := artefatos.EscreverJSON(generationPath, geracao); err != nil {
 		t.Fatalf("generation fixture: %v", err)
+	}
+	stdout, _, codigo = capturarSaidas(t, func() int {
+		return executarExtracaoGeracao([]string{"--analysis", analysisPath, "--generation", generationPath, "--kind", "target-method-coverage"})
+	})
+	if codigo != 0 || strings.TrimSpace(stdout) != "WITUP_METRIC=100.00" {
+		t.Fatalf("resultado geração alvo inesperado codigo=%d stdout=%q", codigo, stdout)
+	}
+	stdout, _, codigo = capturarSaidas(t, func() int {
+		return executarExtracaoGeracao([]string{"--analysis", analysisPath, "--generation", generationPath, "--kind", "exception-assertion-rate"})
+	})
+	if codigo != 0 || strings.TrimSpace(stdout) != "WITUP_METRIC=100.00" {
+		t.Fatalf("resultado geração exceção inesperado codigo=%d stdout=%q", codigo, stdout)
 	}
 	stdout, _, codigo = capturarSaidas(t, func() int {
 		return executarReproducaoExcecoes([]string{"--analysis", analysisPath, "--generation", generationPath})
@@ -220,7 +240,7 @@ func TestExecutarIngestaoWITUPSobrescreveBaselineEMaterializaProjeto(t *testing.
 	if codigo != 0 || stderr != "" {
 		t.Fatalf("ingestão inesperada codigo=%d stderr=%q", codigo, stderr)
 	}
-	if !strings.Contains(stdout, "Projetos importados") || !strings.Contains(stdout, "Projeto materializado") {
+	if !strings.Contains(stdout, "Raiz de replicação") || !strings.Contains(stdout, "Projeto materializado") {
 		t.Fatalf("saída de ingestão inesperada: %q", stdout)
 	}
 }

@@ -588,6 +588,49 @@ func TestPrepararSandboxAvaliacaoSanitizaPomParaMetricas(t *testing.T) {
 	}
 }
 
+func TestPrepararSandboxAvaliacaoPreservaPacoteBuildDoCodigoFonte(t *testing.T) {
+	tempDir := t.TempDir()
+	projetoRaiz := filepath.Join(tempDir, "projeto")
+	if err := os.MkdirAll(filepath.Join(projetoRaiz, "src/main/java/org/apache/commons/io/build"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(projetoRaiz, "build/tmp"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projetoRaiz, "pom.xml"), []byte("<project/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projetoRaiz, "src/main/java/org/apache/commons/io/build/AbstractStreamBuilder.java"), []byte("package org.apache.commons.io.build; class AbstractStreamBuilder {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projetoRaiz, "build/tmp/generated.txt"), []byte("temp"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &dominio.ConfigAplicacao{
+		Projeto: dominio.ConfigProjeto{
+			Raiz:    projetoRaiz,
+			Exclude: []string{".git", "target", "build"},
+		},
+		Fluxo: dominio.ConfigFluxo{DiretorioSaida: filepath.Join(tempDir, "generated")},
+	}
+	workspace, err := artefatos.NovoEspacoTrabalho(cfg.Fluxo.DiretorioSaida, "sandbox-build-package")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raizSandbox, err := prepararSandboxAvaliacao(cfg, workspace)
+	if err != nil {
+		t.Fatalf("prepararSandboxAvaliacao falhou: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(raizSandbox, "build/tmp/generated.txt")); !os.IsNotExist(err) {
+		t.Fatalf("esperava build/ raiz removido da sandbox, recebi err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(raizSandbox, "src/main/java/org/apache/commons/io/build/AbstractStreamBuilder.java")); err != nil {
+		t.Fatalf("esperava pacote Java build preservado, recebi err=%v", err)
+	}
+}
+
 func TestPrepararSandboxAvaliacaoInjetaSuporteJunitJupiterQuandoTestesGeradosPrecisam(t *testing.T) {
 	tempDir := t.TempDir()
 	projetoRaiz := filepath.Join(tempDir, "projeto")
@@ -694,6 +737,182 @@ func TestConstruirPromptGeracaoSistemaParaJUnit4VedaJupiter(t *testing.T) {
 	if !strings.Contains(prompt, "org.junit.jupiter") {
 		t.Fatalf("prompt deveria orientar a evitar Jupiter: %s", prompt)
 	}
+	if !strings.Contains(prompt, "checagem estática mental") {
+		t.Fatalf("prompt deveria exigir revisão de compilação/execução: %s", prompt)
+	}
+}
+
+func TestConstruirPromptGeracaoUsuarioExplicaCamposDoRelatorioWIT(t *testing.T) {
+	prompt := construirPromptGeracaoUsuario("overview", "sample.Example", []dominio.AnaliseMetodo{{
+		Metodo: dominio.DescritorMetodo{
+			IDMetodo:       "sample.Example:run:10",
+			CaminhoArquivo: "src/main/java/sample/Example.java",
+			NomeContainer:  "sample.Example",
+			NomeMetodo:     "run",
+			Assinatura:     "sample.Example.run(java.lang.String)",
+			Origem:         "public void run(String value) { if (value == null) throw new NullPointerException(); }",
+		},
+		ResumoMetodo: "resume",
+		CaminhosExcecao: []dominio.CaminhoExcecao{{
+			IDCaminho:       "path-1",
+			TipoExcecao:     "java.lang.NullPointerException",
+			Gatilho:         "value == null",
+			CondicoesGuarda: []string{"value == null"},
+			Confianca:       0.72,
+			Evidencias:      []string{"Objects.requireNonNull(value)"},
+		}},
+	}})
+
+	for _, esperado := range []string{
+		"Como interpretar o relatório WIT abaixo",
+		"O que é WIT",
+		"técnica de análise estática",
+		"O que são expaths",
+		"segurança significa redução do risco de bugs",
+		"method_summary",
+		"expath.confidence",
+		"expath.evidence",
+		"method.source_code",
+		"checkout_compatibility_notes",
+		"trate o relatório WIT como contexto auxiliar",
+		"priorize o código atual",
+		"revise mentalmente cada teste",
+		"revelar bugs reais e proteger contra regressões futuras",
+		"só use assertThrows quando o código atual realmente sustentar a exceção",
+		"extrato heurístico do baseline",
+		"derive os testes apenas do código atual em method.source_code",
+		"Contexto técnico comum aos dois cenários",
+		"cada teste deve invocar explicitamente o método-alvo",
+	} {
+		if !strings.Contains(prompt, esperado) {
+			t.Fatalf("prompt deveria conter %q:\n%s", esperado, prompt)
+		}
+	}
+}
+
+func TestCompactarAnalisesParaGeracaoIncluiCodigoAtualENotasDeCompatibilidade(t *testing.T) {
+	compartilhado := compactarAnalisesParaGeracao([]dominio.AnaliseMetodo{{
+		Metodo: dominio.DescritorMetodo{
+			IDMetodo:       "sample.Example:run:10",
+			CaminhoArquivo: "src/main/java/sample/Example.java",
+			NomeContainer:  "sample.Example",
+			NomeMetodo:     "run",
+			Assinatura:     "sample.Example.run(java.lang.String)",
+			Origem:         "public boolean run(String value) { return value == null; }",
+		},
+		ResumoMetodo: "resume",
+		RespostaBruta: map[string]interface{}{
+			"discarded_expaths_due_to_checkout": []string{"path-1"},
+		},
+	}})
+
+	if len(compartilhado) != 1 {
+		t.Fatalf("esperava um item compactado, recebi %d", len(compartilhado))
+	}
+	method, ok := compartilhado[0]["method"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("payload do método inesperado: %#v", compartilhado[0]["method"])
+	}
+	if method["source_code"] != "public boolean run(String value) { return value == null; }" {
+		t.Fatalf("source_code inesperado: %#v", method["source_code"])
+	}
+	notas, ok := compartilhado[0]["checkout_compatibility_notes"].([]string)
+	if !ok {
+		t.Fatalf("notas de compatibilidade inesperadas: %#v", compartilhado[0]["checkout_compatibility_notes"])
+	}
+	if len(notas) != 1 || !strings.Contains(notas[0], "path-1") {
+		t.Fatalf("notas de compatibilidade inesperadas: %#v", notas)
+	}
+}
+
+func TestConstruirPromptGeracaoDiretaUsuarioExigeCompatibilidadeComCheckoutAtual(t *testing.T) {
+	prompt := construirPromptGeracaoDiretaUsuario("overview", "sample.Example", []dominio.DescritorMetodo{{
+		IDMetodo:       "sample.Example:run:10",
+		CaminhoArquivo: "src/main/java/sample/Example.java",
+		NomeContainer:  "sample.Example",
+		NomeMetodo:     "run",
+		Assinatura:     "sample.Example.run(java.lang.String)",
+		Origem:         "public boolean run(String value) { return value == null; }",
+	}})
+
+	for _, esperado := range []string{
+		"revise mentalmente cada teste",
+		"só use assertThrows quando o código atual realmente sustentar a exceção",
+		"não compile ou não passe no checkout atual",
+		"revelem bugs e protejam contra regressões futuras",
+		"não recebe WIT nem expaths",
+		"Contexto técnico comum aos dois cenários",
+		"cada teste deve invocar explicitamente o método-alvo",
+	} {
+		if !strings.Contains(prompt, esperado) {
+			t.Fatalf("prompt direto deveria conter %q:\n%s", esperado, prompt)
+		}
+	}
+}
+
+func TestConstruirPromptReparoUsuarioExplicaReparoUnicoEUsaLogsDeFalha(t *testing.T) {
+	analysis := dominio.RelatorioAnalise{Analises: []dominio.AnaliseMetodo{{
+		Metodo: dominio.DescritorMetodo{
+			IDMetodo:       "sample.Example:run:10",
+			CaminhoArquivo: "src/main/java/sample/Example.java",
+			NomeContainer:  "sample.Example",
+			NomeMetodo:     "run",
+			Assinatura:     "sample.Example.run(java.lang.String)",
+			Origem:         "public boolean run(String value) { return value == null; }",
+		},
+		RespostaBruta: map[string]interface{}{
+			"discarded_expaths_due_to_checkout": []string{"path-1"},
+		},
+	}}}
+	generation := dominio.RelatorioGeracao{
+		ArquivosTeste: []dominio.ArquivoTesteGerado{{
+			CaminhoRelativo:    "src/test/java/sample/ExampleTest.java",
+			Conteudo:           "class ExampleTest {}",
+			IDsMetodosCobertos: []string{"sample.Example:run:10"},
+		}},
+	}
+	evaluation := dominio.RelatorioAvaliacao{
+		ResultadosMetricas: []dominio.ResultadoMetrica{{
+			Nome:        "unit-tests",
+			Sucesso:     false,
+			SaidaPadrao: "Expected java.lang.NullPointerException to be thrown",
+		}},
+	}
+
+	prompt := construirPromptReparoUsuario("overview", analysis, generation, evaluation)
+	for _, esperado := range []string{
+		"única tentativa de reparo",
+		"Arquivos de teste atuais",
+		"Falhas e sinais da primeira avaliação",
+		"Expected java.lang.NullPointerException to be thrown",
+		"checkout_compatibility_notes",
+	} {
+		if !strings.Contains(prompt, esperado) {
+			t.Fatalf("prompt de reparo deveria conter %q:\n%s", esperado, prompt)
+		}
+	}
+}
+
+func TestConstruirPromptJuizExigeRespostaEmPortugues(t *testing.T) {
+	systemPrompt := construirPromptJuizSistema()
+	if !strings.Contains(systemPrompt, "português do Brasil") {
+		t.Fatalf("prompt sistêmico do juiz deveria exigir português: %s", systemPrompt)
+	}
+
+	userPrompt := construirPromptJuizUsuario(
+		dominio.RelatorioAnalise{Analises: []dominio.AnaliseMetodo{{ResumoMetodo: "ok"}}},
+		dominio.RelatorioGeracao{ResumoEstrategia: "estratégia"},
+		[]dominio.ResultadoMetrica{{Nome: "test-compilation", Sucesso: true}},
+	)
+	for _, esperado := range []string{
+		"escreva verdict, strengths, weaknesses, risks e recommended_next_actions em português do Brasil",
+		"falhas de compilação ou execução",
+		"utilidade científica da suíte",
+	} {
+		if !strings.Contains(userPrompt, esperado) {
+			t.Fatalf("prompt do juiz deveria conter %q:\n%s", esperado, userPrompt)
+		}
+	}
 }
 
 // TestPrepararSandboxAvaliacaoMultiModulo verifica o cenário de projeto Maven
@@ -728,15 +947,59 @@ func TestPrepararSandboxAvaliacaoMultiModulo(t *testing.T) {
 		t.Fatalf("prepararSandboxAvaliacao falhou: %v", err)
 	}
 
-	// src/test no nível raiz deve ter sido removido, mas testes em submódulos
-	// persistem porque prepararSandboxAvaliacao remove apenas src/test de primeiro nível.
-	// Isso é um trade-off documentado: projetos multi-módulo podem precisar de
-	// configuração de exclude adicional.
 	if _, err := os.Stat(filepath.Join(raizSandbox, "modulo-a/src/main/java")); err != nil {
 		t.Fatalf("submódulo fonte deveria estar preservado: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(raizSandbox, "modulo-a/src/test")); !os.IsNotExist(err) {
+		t.Fatalf("testes originais de submódulos devem ser removidos para não contaminar métricas, err=%v", err)
+	}
 	if _, err := os.Stat(raizSandbox); err != nil {
 		t.Fatalf("sandbox deveria existir: %v", err)
+	}
+}
+
+func TestHarnessMavenPreservaPackagingPOMDeAgregador(t *testing.T) {
+	tempDir := t.TempDir()
+	rootPOM := filepath.Join(tempDir, "pom.xml")
+	modulePOM := filepath.Join(tempDir, "module-a", "pom.xml")
+	if err := artefatos.EscreverTexto(rootPOM, `<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>sample</groupId>
+  <artifactId>root</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+  <modules>
+    <module>module-a</module>
+  </modules>
+</project>`); err != nil {
+		t.Fatalf("fixture root pom: %v", err)
+	}
+	if err := artefatos.EscreverTexto(modulePOM, `<project>
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>sample</groupId>
+    <artifactId>root</artifactId>
+    <version>1.0.0</version>
+  </parent>
+  <artifactId>module-a</artifactId>
+  <packaging>jar</packaging>
+</project>`); err != nil {
+		t.Fatalf("fixture module pom: %v", err)
+	}
+
+	intervencoes, err := prepararProjetoMavenParaAvaliacao(tempDir, "junit5")
+	if err != nil {
+		t.Fatalf("preparar projeto Maven: %v", err)
+	}
+	rootAtualizado, err := os.ReadFile(rootPOM)
+	if err != nil {
+		t.Fatalf("ler root pom atualizado: %v", err)
+	}
+	if !strings.Contains(string(rootAtualizado), "<packaging>pom</packaging>") {
+		t.Fatalf("root POM agregador não deveria ser convertido para jar:\n%s", string(rootAtualizado))
+	}
+	if !strings.Contains(strings.Join(intervencoes, ";"), "sandbox_kept_aggregator_packaging_pom") {
+		t.Fatalf("intervenções deveriam registrar preservação do packaging pom, recebi %#v", intervencoes)
 	}
 }
 

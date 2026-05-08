@@ -147,3 +147,86 @@ public class Example {
 		t.Fatalf("expected 1 Java method even with root under generated/, got %d", len(methods))
 	}
 }
+
+func TestCatalogarNaoConfundeComentarioComDeclaracaoDeClasse(t *testing.T) {
+	tempDir := t.TempDir()
+	sourceDir := filepath.Join(tempDir, "src", "main", "java", "org", "apache", "commons", "io")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	javaFile := filepath.Join(sourceDir, "IOCase.java")
+	javaSource := `package org.apache.commons.io;
+
+/**
+ * This comment mentions enum captures in prose and must not define the container name.
+ */
+public enum IOCase {
+    SYSTEM;
+
+    public static IOCase forName(final String name) {
+        return SYSTEM;
+    }
+}`
+	if err := os.WriteFile(javaFile, []byte(javaSource), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cataloger := NovoCatalogador(dominio.ConfigProjeto{
+		Raiz:    tempDir,
+		Include: []string{"src/main/java"},
+	})
+	methods, err := cataloger.Catalogar()
+	if err != nil {
+		t.Fatalf("Catalog returned unexpected error: %v", err)
+	}
+	if len(methods) != 1 {
+		t.Fatalf("expected 1 Java method, got %d", len(methods))
+	}
+	if methods[0].NomeContainer != "org.apache.commons.io.IOCase" {
+		t.Fatalf("unexpected container name: %s", methods[0].NomeContainer)
+	}
+}
+
+func TestCatalogarNaoExcluiPacoteBuildNoCodigoFonte(t *testing.T) {
+	tempDir := t.TempDir()
+	sourceDir := filepath.Join(tempDir, "src", "main", "java", "org", "example", "build")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rootBuildDir := filepath.Join(tempDir, "build", "tmp")
+	if err := os.MkdirAll(rootBuildDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	javaFile := filepath.Join(sourceDir, "Builder.java")
+	javaSource := `package org.example.build;
+
+public class Builder {
+    public String value() {
+        return "ok";
+    }
+}`
+	if err := os.WriteFile(javaFile, []byte(javaSource), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rootBuildDir, "Generated.java"), []byte("class Generated {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cataloger := NovoCatalogador(dominio.ConfigProjeto{
+		Raiz:    tempDir,
+		Include: []string{"src/main/java", "."},
+		Exclude: []string{"build"},
+	})
+	methods, err := cataloger.Catalogar()
+	if err != nil {
+		t.Fatalf("Catalog returned unexpected error: %v", err)
+	}
+	if len(methods) != 1 {
+		t.Fatalf("expected 1 Java method from package build, got %d", len(methods))
+	}
+	if methods[0].NomeContainer != "org.example.build.Builder" {
+		t.Fatalf("unexpected container name: %s", methods[0].NomeContainer)
+	}
+}
