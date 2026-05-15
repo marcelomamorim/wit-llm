@@ -27,6 +27,7 @@ var retryableStatus = map[int]bool{
 	502: true,
 	503: true,
 	504: true,
+	522: true,
 }
 
 // Resposta encapsula o payload JSON parseado e o texto bruto devolvido pela LLM.

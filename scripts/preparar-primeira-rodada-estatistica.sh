@@ -14,7 +14,7 @@ CANDIDATE_CONFIG="$ROUND_DIR/candidate.runtime.json"
 CANDIDATE_MANIFEST="$ROUND_DIR/candidate-manifest.csv"
 ALIGNMENT_PREFLIGHT_LOG="$ROUND_DIR/alignment-preflight.log"
 MAVEN_REPO_LOCAL="${MAVEN_REPO_LOCAL:-$ROOT_DIR/generated/m2-repo}"
-MAVEN_PROFILE_ARGS="${MAVEN_PROFILE_ARGS:--P!java14+}"
+MAVEN_PROFILE_ARGS="${MAVEN_PROFILE_ARGS:--P!java14+ -Denforcer.skip=true}"
 
 STATISTICAL_SEED="${STATISTICAL_SEED:-20260429}"
 FINAL_SLICES_PER_PROJECT="${SLICES_PER_PROJECT:-15}"
@@ -39,12 +39,12 @@ HTTPCLIENT_WIT="${HTTPCLIENT_WIT:-$ROOT_DIR/resources/wit-replication-package/da
 
 PDFBOX_ROOT="${PDFBOX_ROOT:-$ROOT_DIR/generated/repos/pdfbox}"
 PDFBOX_URL="${PDFBOX_URL:-https://github.com/apache/pdfbox.git}"
-PDFBOX_COMMIT="${PDFBOX_COMMIT:-01bce4dde73db7b434a58c82dc79057a20460fd8}"
+PDFBOX_COMMIT="${PDFBOX_COMMIT:-01bce4dde73d3f82a04734ca5673c580db758c19}"
 PDFBOX_WIT="${PDFBOX_WIT:-$ROOT_DIR/resources/wit-replication-package/data/output/pdfbox/wit_filtered.json}"
 
 COMMONS_LANG_ROOT="${COMMONS_LANG_ROOT:-$ROOT_DIR/generated/repos/commons-lang}"
 COMMONS_LANG_URL="${COMMONS_LANG_URL:-https://github.com/apache/commons-lang.git}"
-COMMONS_LANG_COMMIT="${COMMONS_LANG_COMMIT:-90e0a9bb234658b5b845f0db7ec923422002a1d7}"
+COMMONS_LANG_COMMIT="${COMMONS_LANG_COMMIT:-90e0a9bb234683abb502a6b61f36848bb4d65aa6}"
 COMMONS_LANG_WIT="${COMMONS_LANG_WIT:-$ROOT_DIR/resources/wit-replication-package/data/output/commons-lang/wit_filtered.json}"
 
 COMMONS_IO_ROOT="${COMMONS_IO_ROOT:-$ROOT_DIR/generated/repos/commons-io}"
@@ -54,7 +54,7 @@ COMMONS_IO_WIT="${COMMONS_IO_WIT:-$ROOT_DIR/resources/wit-replication-package/da
 
 SPRING_DATA_COMMONS_ROOT="${SPRING_DATA_COMMONS_ROOT:-$ROOT_DIR/generated/repos/spring-data-commons}"
 SPRING_DATA_COMMONS_URL="${SPRING_DATA_COMMONS_URL:-https://github.com/spring-projects/spring-data-commons.git}"
-SPRING_DATA_COMMONS_COMMIT="${SPRING_DATA_COMMONS_COMMIT:-4acd3b70033633943aa2645e4875ac1e1dd1040b}"
+SPRING_DATA_COMMONS_COMMIT="${SPRING_DATA_COMMONS_COMMIT:-4acd3b700336063b5a43a0f9ec3a12fdf5106a8d}"
 SPRING_DATA_COMMONS_WIT="${SPRING_DATA_COMMONS_WIT:-$ROOT_DIR/resources/wit-replication-package/data/output/spring-data-commons/wit_filtered.json}"
 
 COMMONS_TEXT_ROOT="${COMMONS_TEXT_ROOT:-$ROOT_DIR/generated/repos/commons-text}"
@@ -79,6 +79,24 @@ H2DATABASE_WIT="${H2DATABASE_WIT:-$ROOT_DIR/resources/wit-replication-package/da
 
 log() {
   printf '[primeira-rodada/preparar] %s\n' "$*"
+}
+
+configure_java17() {
+  if [[ -x /usr/libexec/java_home ]]; then
+    local java17_home
+    if java17_home="$(/usr/libexec/java_home -v 17 2>/dev/null)" && [[ -n "$java17_home" ]]; then
+      export JAVA_HOME="$java17_home"
+      export PATH="$JAVA_HOME/bin:$PATH"
+      log "usando JAVA_HOME=$JAVA_HOME"
+      return 0
+    fi
+  fi
+  if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/java" ]]; then
+    export PATH="$JAVA_HOME/bin:$PATH"
+    log "usando JAVA_HOME=$JAVA_HOME"
+    return 0
+  fi
+  log "aviso: Java 17 não detectado automaticamente; usando java disponível no PATH"
 }
 
 ensure_git_checkout() {
@@ -108,7 +126,7 @@ ensure_git_checkout() {
       exit 1
     fi
     log "atualizando $target_dir para commit $repo_commit"
-    if ! git cat-file -e "$repo_commit^{commit}" >/dev/null 2>&1; then
+    if ! git cat-file -e "$repo_commit^{tree}" >/dev/null 2>&1; then
       git fetch --depth 1 origin "$repo_commit" >/dev/null 2>&1 || git fetch origin "$repo_commit" >/dev/null 2>&1
     fi
     git checkout --detach "$repo_commit" >/dev/null
@@ -183,6 +201,9 @@ for baseline in "$JACKSON_WIT" "$PDFBOX_WIT" "$HTTPCLIENT_WIT" "$COMMONS_LANG_WI
     exit 1
   fi
 done
+
+configure_java17
+export MAVEN_REPO_LOCAL MAVEN_PROFILE_ARGS
 
 mkdir -p "$CONFIG_DIR" "$ROUND_DIR" "$BASELINE_DIR" "$OVERVIEW_DIR" "$ROOT_DIR/bin" "$MAVEN_REPO_LOCAL"
 
@@ -296,23 +317,13 @@ projects = [
         "seed_offset": 4000,
     },
     {
-        "key": "spring-data-commons",
-        "label": "Spring Data Commons",
-        "root": Path(os.environ["SPRING_DATA_COMMONS_ROOT"]),
-        "baseline": Path(os.environ["SPRING_DATA_COMMONS_WIT"]),
-        "commit": os.environ["SPRING_DATA_COMMONS_COMMIT"],
-        "overview": Path(os.environ["SPRING_DATA_COMMONS_OVERVIEW"]),
-        "seed_offset": 5000,
-    },
-    {
         "key": "commons-text",
         "label": "Apache Commons Text",
         "root": Path(os.environ["COMMONS_TEXT_ROOT"]),
         "baseline": Path(os.environ["COMMONS_TEXT_WIT"]),
         "commit": os.environ["COMMONS_TEXT_COMMIT"],
         "overview": Path(os.environ["COMMONS_TEXT_OVERVIEW"]),
-        "seed_offset": 6000,
-        "fallback": True,
+        "seed_offset": 5000,
     },
     {
         "key": "byte-buddy",
@@ -321,8 +332,7 @@ projects = [
         "baseline": Path(os.environ["BYTE_BUDDY_WIT"]),
         "commit": os.environ["BYTE_BUDDY_COMMIT"],
         "overview": Path(os.environ["BYTE_BUDDY_OVERVIEW"]),
-        "seed_offset": 7000,
-        "fallback": True,
+        "seed_offset": 6000,
     },
     {
         "key": "poi",
@@ -331,7 +341,7 @@ projects = [
         "baseline": Path(os.environ["POI_WIT"]),
         "commit": os.environ["POI_COMMIT"],
         "overview": Path(os.environ["POI_OVERVIEW"]),
-        "seed_offset": 8000,
+        "seed_offset": 7000,
         "fallback": True,
     },
     {
@@ -341,7 +351,18 @@ projects = [
         "baseline": Path(os.environ["H2DATABASE_WIT"]),
         "commit": os.environ["H2DATABASE_COMMIT"],
         "overview": Path(os.environ["H2DATABASE_OVERVIEW"]),
+        "seed_offset": 8000,
+        "fallback": True,
+    },
+    {
+        "key": "spring-data-commons",
+        "label": "Spring Data Commons",
+        "root": Path(os.environ["SPRING_DATA_COMMONS_ROOT"]),
+        "baseline": Path(os.environ["SPRING_DATA_COMMONS_WIT"]),
+        "commit": os.environ["SPRING_DATA_COMMONS_COMMIT"],
+        "overview": Path(os.environ["SPRING_DATA_COMMONS_OVERVIEW"]),
         "seed_offset": 9000,
+        "skip_article_main": True,
         "fallback": True,
     },
 ]
@@ -438,6 +459,9 @@ manifest_rows = []
 phase_projects = []
 selected_project_count = 0
 for project in projects:
+    if project.get("skip_article_main"):
+        print(f"aviso: {project['key']} fora da rodada principal do artigo por risco de build/reprodutibilidade", file=sys.stderr)
+        continue
     with project["baseline"].open("r", encoding="utf-8") as handle:
         baseline = json.load(handle)
     commit = baseline.get("commitHash", "")
@@ -452,7 +476,7 @@ for project in projects:
     rng.shuffle(candidates)
     if len(candidates) < slices_per_project:
         message = f"{project['key']} tem somente {len(candidates)} candidatos com arquivo fonte local; esperado {slices_per_project}"
-        if project.get("fallback") or selected_project_count >= 6:
+        if project.get("fallback"):
             print(f"aviso: fallback ignorado: {message}", file=sys.stderr)
             continue
         print(f"aviso: primário será substituído se houver fallback: {message}", file=sys.stderr)
@@ -463,11 +487,9 @@ for project in projects:
         manifest_rows.append(row)
         phase_projects.append(phase_project)
     selected_project_count += 1
-    if selected_project_count >= 6:
-        break
 
-if selected_project_count != 6:
-    print(f"erro: esperado selecionar 6 projetos, mas selecionei {selected_project_count}", file=sys.stderr)
+if selected_project_count < 6:
+    print(f"erro: esperado selecionar ao menos 6 projetos candidatos, mas selecionei {selected_project_count}", file=sys.stderr)
     sys.exit(1)
 
 manifest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -814,17 +836,22 @@ for row in rows:
 final_rows = []
 final_projects = []
 pending_writes = []
+selected_sources = []
+target_project_count = 6
 for source_key in source_projects:
+    if len(selected_sources) >= target_project_count:
+        break
     candidates = [row for row in rows if row["source_project_key"] == source_key]
     candidates.sort(key=lambda row: int(row["slice_index"]))
     aligned = [row for row in candidates if status.get(row["slice_key"]) == 1]
     if len(aligned) < final_count:
         print(
-            f"erro: {source_key} possui somente {len(aligned)} candidatos alinháveis; esperado {final_count}. "
-            f"Aumente CANDIDATE_SLICES_PER_PROJECT.",
+            f"aviso: {source_key} possui somente {len(aligned)} candidatos alinháveis; "
+            f"esperado {final_count}. Usando fallback determinístico.",
             file=sys.stderr,
         )
-        sys.exit(1)
+        continue
+    selected_sources.append(source_key)
     for index, row in enumerate(aligned[:final_count], start=1):
         old_key = row["slice_key"]
         old_path = Path(row["baseline_slice"])
@@ -843,6 +870,14 @@ for source_key in source_projects:
         project["wit_analysis_path"] = str(new_path)
         final_projects.append(project)
         pending_writes.append((new_path, old_content))
+
+if len(selected_sources) != target_project_count:
+    print(
+        f"erro: apenas {len(selected_sources)} projetos atingiram {final_count} slices alinháveis; "
+        f"esperado {target_project_count}. Projetos selecionados: {', '.join(selected_sources)}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 for path, content in pending_writes:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -863,6 +898,7 @@ with runtime_config.open("w", encoding="utf-8") as handle:
 print(f"manifest={manifest_path}")
 print(f"runtime_config={runtime_config}")
 print(f"final_slices={len(final_rows)}")
+print(f"selected_projects={','.join(selected_sources)}")
 PY
 
 log "manifesto estatístico: $MANIFEST"

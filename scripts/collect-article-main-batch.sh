@@ -22,15 +22,17 @@ log() {
 heartbeat_loop() {
   local started_at="$1"
   local status_file="$2"
+  local metadata_file="$3"
   while true; do
-    local now elapsed status
+    local now elapsed status progress
     now="$(date +%s)"
     elapsed="$((now - started_at))s"
     status="unknown"
     if [[ -f "$status_file" ]]; then
       status="$(cat "$status_file")"
     fi
-    printf 'heartbeat etapa=batch_collect elapsed=%s projeto=all progresso=0/%s status=%s batch_id=%s\n' "$elapsed" "$EXPECTED_REQUESTS" "$status" "$BATCH_ID"
+    progress="$(extract_progress "$metadata_file")"
+    printf 'heartbeat etapa=batch_collect elapsed=%s projeto=all progresso=%s status=%s batch_id=%s\n' "$elapsed" "$progress" "$status" "$BATCH_ID"
     sleep "$HEARTBEAT_INTERVAL_SECONDS"
   done
 }
@@ -48,6 +50,24 @@ except Exception:
 PY
 }
 
+extract_progress() {
+  local metadata="$1"
+  python3 - "$metadata" "$EXPECTED_REQUESTS" <<'PY'
+import json, sys
+path = sys.argv[1]
+fallback_total = sys.argv[2]
+try:
+    with open(path, "r", encoding="utf-8") as handle:
+        metadata = json.load(handle)
+    counts = metadata.get("request_counts") or {}
+    total = int(counts.get("total") or fallback_total)
+    done = int(counts.get("completed") or 0) + int(counts.get("failed") or 0)
+    print(f"{done}/{total}")
+except Exception:
+    print(f"0/{fallback_total}")
+PY
+}
+
 if [[ -z "$RUN_DIR" || -z "$BATCH_ID" ]]; then
   printf 'erro: informe RUN_DIR e BATCH_ID.\n' >&2
   exit 1
@@ -56,6 +76,7 @@ fi
 mkdir -p "$RUN_DIR"
 STATUS_FILE="$RUN_DIR/batch_collect_status.txt"
 METADATA_FILE="$RUN_DIR/openai_batch_metadata.json"
+ERROR_LOG="$RUN_DIR/batch_collect_errors.log"
 printf 'starting\n' > "$STATUS_FILE"
 
 log "RUN_DIR=$RUN_DIR"
@@ -68,23 +89,38 @@ log "heartbeat_interval=${HEARTBEAT_INTERVAL_SECONDS}s poll_interval=${BATCH_POL
 log "metadata=$METADATA_FILE"
 log "responses=$RUN_DIR/responses_openai_batch_generation.jsonl"
 log "errors=$RUN_DIR/errors_openai_batch_generation.jsonl"
+log "collect_errors=$ERROR_LOG"
 
 STARTED_AT="$(date +%s)"
-heartbeat_loop "$STARTED_AT" "$STATUS_FILE" &
+heartbeat_loop "$STARTED_AT" "$STATUS_FILE" "$METADATA_FILE" &
 HEARTBEAT_PID="$!"
 trap 'kill "$HEARTBEAT_PID" 2>/dev/null || true' EXIT
 
 while true; do
+  set +e
   "$BIN" coletar-openai-batch \
     --config "$RUNTIME_CONFIG" \
     --model "$GENERATION_MODEL" \
     --batch-id "$BATCH_ID" \
-    --output-dir "$RUN_DIR"
+    --output-dir "$RUN_DIR" 2> >(tee -a "$ERROR_LOG" >&2)
+  COLLECT_STATUS=$?
+  set -e
+
+  if [[ "$COLLECT_STATUS" -ne 0 ]]; then
+    CURRENT_STATUS="$(cat "$STATUS_FILE" 2>/dev/null || printf 'unknown')"
+    printf '%s\n' "$CURRENT_STATUS" > "$STATUS_FILE"
+    log "coleta falhou temporariamente exit=$COLLECT_STATUS; mantendo status=$CURRENT_STATUS e tentando novamente em ${BATCH_POLL_INTERVAL_SECONDS}s"
+    if [[ "$WAIT_FOR_COMPLETION" != "sim" ]]; then
+      exit "$COLLECT_STATUS"
+    fi
+    sleep "$BATCH_POLL_INTERVAL_SECONDS"
+    continue
+  fi
 
   STATUS="$(extract_status "$METADATA_FILE")"
   printf '%s\n' "$STATUS" > "$STATUS_FILE"
   case "$STATUS" in
-    completed|failed|expired|cancelled|cancelling)
+    completed|failed|expired|cancelled)
       break
       ;;
   esac
@@ -96,4 +132,4 @@ done
 
 kill "$HEARTBEAT_PID" 2>/dev/null || true
 trap - EXIT
-log "status_final=$(cat "$STATUS_FILE")"
+log "status_final=$(cat "$STATUS_FILE") progresso=$(extract_progress "$METADATA_FILE")"

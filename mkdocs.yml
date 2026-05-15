@@ -1,11 +1,11 @@
-site_name: witup-llm
-site_url: https://marcelomamorim.github.io/witup-llm/
+site_name: wit-llm
+site_url: https://marcelomamorim.github.io/wit-llm/
 site_description: >-
-  CLI em Go para comparar geração de testes com contexto WIT versus geração direta
-  em projetos Java, com foco em Google Guava e Apache Commons Collections.
+  CLI em Go para estudar geração de testes Java com LLMs, contexto WIT
+  e avaliação de impacto no OpenJDK/JDK.
 
-repo_name: marcelomamorim/witup-llm
-repo_url: https://github.com/marcelomamorim/witup-llm
+repo_name: marcelomamorim/wit-llm
+repo_url: https://github.com/marcelomamorim/wit-llm
 
 theme:
   name: material
@@ -73,6 +73,8 @@ nav:
     - Introducao: overview/index.md
     - Primeiros Passos: overview/getting-started.md
     - Referencia de Configuracao: overview/configuration.md
+  - Estudos:
+    - Impacto Global no JDK: studies/jdk-global-impact.md
   - CLI e Comandos:
     - Visao Geral: cli/index.md
   - Arquitetura:

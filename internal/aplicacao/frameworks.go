@@ -12,6 +12,7 @@ const (
 	frameworkInfer  = "infer"
 	frameworkJUnit4 = "junit4"
 	frameworkJUnit5 = "junit5"
+	frameworkJTReg  = "jtreg"
 )
 
 // resolverFrameworkTestes devolve o framework de testes efetivo para o projeto.
@@ -35,6 +36,8 @@ func normalizarFrameworkTestes(framework string) string {
 		return frameworkJUnit4
 	case "jupiter", "junit5", "junit-5", "junit_5":
 		return frameworkJUnit5
+	case "jtreg", "jdk", "openjdk":
+		return frameworkJTReg
 	default:
 		return normalizado
 	}
