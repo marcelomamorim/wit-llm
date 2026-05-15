@@ -14,9 +14,30 @@ BIN="$ROOT_DIR/bin/witup"
 EXPECTED_PROJECTS="${EXPECTED_PROJECTS:-6}"
 EXPECTED_SLICES="${EXPECTED_SLICES:-120}"
 EXPECTED_REQUESTS="${EXPECTED_REQUESTS:-240}"
+ARTICLE_REPREPARE="${ARTICLE_REPREPARE:-sim}"
+MAVEN_REPO_LOCAL="${MAVEN_REPO_LOCAL:-$ROOT_DIR/generated/m2-repo}"
+MAVEN_PROFILE_ARGS="${MAVEN_PROFILE_ARGS:--P!java14+ -Denforcer.skip=true}"
 
 log() {
   printf '[article-main/prepare] %s\n' "$*"
+}
+
+configure_java17() {
+  if [[ -x /usr/libexec/java_home ]]; then
+    local java17_home
+    if java17_home="$(/usr/libexec/java_home -v 17 2>/dev/null)" && [[ -n "$java17_home" ]]; then
+      export JAVA_HOME="$java17_home"
+      export PATH="$JAVA_HOME/bin:$PATH"
+      log "JAVA_HOME=$JAVA_HOME"
+      return 0
+    fi
+  fi
+  if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/java" ]]; then
+    export PATH="$JAVA_HOME/bin:$PATH"
+    log "JAVA_HOME=$JAVA_HOME"
+    return 0
+  fi
+  log "aviso: Java 17 não detectado automaticamente; usando java disponível no PATH"
 }
 
 log_context() {
@@ -25,16 +46,20 @@ log_context() {
   log "generation_model=$GENERATION_MODEL"
   log "backend=batch endpoint=/v1/responses"
   log "expected_projects=$EXPECTED_PROJECTS expected_slices=$EXPECTED_SLICES expected_requests=$EXPECTED_REQUESTS"
+  log "maven_repo_local=$MAVEN_REPO_LOCAL"
+  log "maven_profile_args=$MAVEN_PROFILE_ARGS"
   log "runtime_config=$RUNTIME_CONFIG"
   log "requests_jsonl=$REQUESTS_JSONL"
   log "preflight_log=$PREFLIGHT_LOG"
 }
 
 mkdir -p "$RUN_DIR"
+configure_java17
+export MAVEN_REPO_LOCAL MAVEN_PROFILE_ARGS
 log_context
 
-if [[ ! -f "$RUNTIME_CONFIG" ]]; then
-  log "configuração runtime não encontrada; preparando configuração acadêmica a partir do harness estatístico existente"
+if [[ "$ARTICLE_REPREPARE" == "sim" || ! -f "$RUNTIME_CONFIG" ]]; then
+  log "preparando configuração acadêmica a partir do harness estatístico existente"
   ROUND_DIR="$EXPERIMENT_ROOT/preparation" \
     RUNTIME_CONFIG="$RUNTIME_CONFIG" \
     SLICES_PER_PROJECT="${SLICES_PER_PROJECT:-20}" \
@@ -42,6 +67,8 @@ if [[ ! -f "$RUNTIME_CONFIG" ]]; then
     OPENAI_EXECUTION_BACKEND="batch" \
     OPENAI_ENDPOINT="/v1/responses" \
     OPENAI_BATCH_COMPLETION_WINDOW="24h" \
+    MAVEN_REPO_LOCAL="$MAVEN_REPO_LOCAL" \
+    MAVEN_PROFILE_ARGS="$MAVEN_PROFILE_ARGS" \
     "$ROOT_DIR/scripts/preparar-primeira-rodada-estatistica.sh"
 fi
 

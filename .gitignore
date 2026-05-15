@@ -54,6 +54,8 @@ coverage.out
 resources/*
 !resources/README.md
 /AGENTS.md
-/docs/
+/docs/*
+!/docs/studies/
+!/docs/studies/**
 /ARCHITECTURE.md
 requirements-docs.txt

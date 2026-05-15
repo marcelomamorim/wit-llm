@@ -52,11 +52,16 @@ func construirContextoGeracaoTestes(cfg dominio.ConfigProjeto, containerName str
 	imports := extrairImportsJavaContexto(conteudoFonte)
 	nomeClasseSimples := nomeSimplesContainer(containerName)
 	caminhoTesteSugerido := caminhoTesteSugeridoContexto(moduloRelativo, pacoteFonte, nomeClasseSimples)
+	raizTesteSugerida := caminhoFonteTesteContexto(moduloRelativo)
+	if normalizarFrameworkTestes(framework) == frameworkJTReg {
+		raizTesteSugerida = "test/jdk"
+		caminhoTesteSugerido = caminhoTesteSugeridoJTRegContexto(pacoteFonte, nomeClasseSimples)
+	}
 
 	return map[string]interface{}{
 		"test_framework":                 framework,
 		"maven_module":                   moduloRelativo,
-		"recommended_test_source_root":   caminhoFonteTesteContexto(moduloRelativo),
+		"recommended_test_source_root":   raizTesteSugerida,
 		"recommended_test_package":       pacoteFonte,
 		"recommended_relative_test_path": caminhoTesteSugerido,
 		"source_file":                    filepath.ToSlash(caminhoFonteRelativo),
@@ -76,6 +81,20 @@ func construirContextoGeracaoTestes(cfg dominio.ConfigProjeto, containerName str
 		"target_class_excerpt": truncarContextoClasse(conteudoFonte),
 		"target_methods":       compactarMetodosContextoComum(metodos),
 	}
+}
+
+func caminhoTesteSugeridoJTRegContexto(pacoteFonte, nomeClasseSimples string) string {
+	pacote := strings.Trim(strings.ReplaceAll(pacoteFonte, ".", "/"), "/")
+	if pacote == "" {
+		pacote = "witup/generated"
+	} else {
+		pacote = "witup/generated/" + pacote
+	}
+	classe := strings.TrimSpace(nomeClasseSimples)
+	if classe == "" {
+		classe = "Generated"
+	}
+	return filepath.ToSlash(filepath.Join("test", "jdk", pacote, classe+"WitupTest.java"))
 }
 
 func primeiroMetodoComArquivo(metodos []dominio.DescritorMetodo) dominio.DescritorMetodo {

@@ -1,50 +1,62 @@
-# witup-llm
+# wit-llm
 
-`witup-llm` entrou em uma fase mais enxuta do estudo: agora a comparação principal é entre **geração de testes com contexto WIT** e **geração direta sem contexto WIT**, usando dois projetos-alvo.
+`wit-llm` e uma CLI em Go para estudar geracao de testes Java com LLMs. O foco atual e comparar testes gerados com **contexto WIT** contra testes gerados diretamente do codigo, medindo o impacto em um projeto real de grande porte: o OpenJDK/JDK.
 
 ## Escopo atual
 
-- **Google Guava**
-- **Apache Commons Collections**
+- Projeto alvo: **OpenJDK/JDK**
+- Analise estatica: **What Is Thrown (WIT)**
+- Geracao: `WIT_CONTEXT` vs `DIRECT_TESTS`
+- Execucao: `jtreg`
+- Cobertura: **JCov**
 
 ## O que a ferramenta faz agora
 
-Para cada projeto:
+Para o JDK:
 
-1. carrega um baseline WIT local;
-2. alinha esse baseline ao checkout atual;
-3. fixa um conjunto comum de métodos-alvo;
+1. carrega o `wit_filtered.json` do WIT;
+2. alinha os metodos WIT ao checkout do OpenJDK;
+3. seleciona um conjunto comum de metodos-alvo;
 4. gera testes em dois cenários:
    - `WIT_CONTEXT`
    - `DIRECT_TESTS`
-5. avalia as suítes com métricas Java;
-6. materializa os resultados em:
+5. integra os testes gerados na suite `jtreg`;
+6. mede cobertura estrutural com JCov;
+7. calcula metricas de excecao;
+8. materializa os resultados em:
    - `JSON`
    - `CSV`
-   - `HTML`
+   - `Markdown`
 
 ## Fluxo resumido
 
 ```mermaid
 graph LR
-    A["Baseline WIT local"] --> B["Alinhamento ao checkout"]
-    C["Código Java local"] --> D["Catalogação de métodos"]
-    B --> E["Métodos-alvo comuns"]
+    A["WIT filtrado do JDK"] --> B["Alinhamento ao checkout OpenJDK"]
+    C["Codigo Java local"] --> D["Catalogacao de metodos"]
+    B --> E["Metodos-alvo comuns"]
     D --> E
     E --> F["WIT_CONTEXT"]
     E --> G["DIRECT_TESTS"]
-    F --> H["Avaliação com métricas"]
+    F --> H["Testes jtreg gerados"]
     G --> H
-    H --> I["JSON + CSV + dashboard HTML"]
+    H --> I["Execucao jtreg + JCov"]
+    I --> J["Cobertura + metricas de excecao"]
+    J --> K["JSON + CSV + Markdown"]
 ```
 
-## Artefatos finais
+## Resultado preliminar JDK 200
 
-- `phase-two-study.json`
-- `csv/phase-two-summary.csv`
-- `csv/phase-two-metrics.csv`
-- `csv/phase-two-comparison.csv`
-- `dashboard.html`
+Na rodada atual com 200 metodos-alvo do JDK:
+
+- `WIT_CONTEXT` melhorou cobertura de linhas em **+3.09 p.p.** contra o baseline.
+- `DIRECT_TESTS` melhorou cobertura de linhas em **+3.36 p.p.** contra o baseline.
+- `WIT_CONTEXT` alcancou **17/17 classes-alvo**.
+- `DIRECT_TESTS` alcancou **16/17 classes-alvo**.
+- `WIT_CONTEXT` gerou verificacoes explicitas de excecao em **94%** dos metodos.
+- `DIRECT_TESTS` gerou verificacoes explicitas de excecao em **59%** dos metodos.
+
+Veja a pagina [Impacto Global no JDK](studies/jdk-global-impact.md) para os detalhes.
 
 ## Páginas recomendadas
 
@@ -54,7 +66,7 @@ graph LR
 
     ---
 
-    Como preparar o ambiente e rodar a segunda fase.
+    Como preparar o ambiente, compilar a CLI e rodar o fluxo JDK.
 
     [**Abrir**](overview/getting-started.md)
 
@@ -62,7 +74,7 @@ graph LR
 
     ---
 
-    Estrutura do `pipeline.json`, incluindo `phase_two.projects`.
+    Estrutura do `pipeline.json` e modelos de LLM.
 
     [**Abrir**](overview/configuration.md)
 
@@ -70,7 +82,7 @@ graph LR
 
     ---
 
-    Comandos principais da fase nova.
+    Comandos principais para Batch, JDK e metricas.
 
     [**Abrir**](cli/index.md)
 
@@ -78,7 +90,7 @@ graph LR
 
     ---
 
-    Visão de como a segunda fase foi organizada no código.
+    Visao de como WIT, LLM, Batch, jtreg e JCov se conectam.
 
     [**Abrir**](architecture/index.md)
 

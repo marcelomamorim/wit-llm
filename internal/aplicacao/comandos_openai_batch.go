@@ -140,3 +140,36 @@ func executarColetaOpenAIBatch(args []string) int {
 	fmt.Printf("Diretório de saída    : %s\n", *outputDir)
 	return 0
 }
+
+func executarAvaliacaoBatchSegundaFase(args []string, service *Servico) int {
+	fs := flag.NewFlagSet("evaluate-phase-two-batch", flag.ContinueOnError)
+	configPath := fs.String("config", "", "Caminho para o arquivo de configuração JSON")
+	modelKey := fs.String("generation-model", "", "Chave do modelo configurado para geração")
+	responsesPath := fs.String("responses", "", "Arquivo JSONL de respostas Batch")
+	errorsPath := fs.String("errors", "", "Arquivo JSONL de erros Batch")
+	outputDir := fs.String("output-dir", "", "Diretório da rodada acadêmica")
+	runStamp := fs.String("run-stamp", "", "Carimbo UTC usado nos artefatos acadêmicos")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *configPath == "" || *modelKey == "" || *responsesPath == "" || *outputDir == "" {
+		fmt.Fprintln(os.Stderr, "erro: --config, --generation-model, --responses e --output-dir são obrigatórios")
+		return 2
+	}
+	cfg, err := configuracao.Carregar(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "erro: %v\n", err)
+		return 1
+	}
+	report, reportPath, err := service.AvaliarBatchSegundaFase(cfg, *modelKey, *responsesPath, *errorsPath, *outputDir, *runStamp)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "erro: %v\n", err)
+		return 1
+	}
+	fmt.Printf("Relatório Batch       : %s\n", reportPath)
+	fmt.Printf("Resumo CSV            : %s\n", report.CaminhoCSVResumo)
+	fmt.Printf("Métricas CSV          : %s\n", report.CaminhoCSVMetricas)
+	fmt.Printf("Comparação CSV        : %s\n", report.CaminhoCSVComparacao)
+	fmt.Printf("Dashboard             : %s\n", report.CaminhoDashboard)
+	return 0
+}

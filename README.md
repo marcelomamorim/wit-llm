@@ -12,28 +12,34 @@
 - usar a análise WIT como contexto;
 - gerar testes diretamente do código, sem contexto WIT.
 
-Na fase atual, o foco experimental está em uma **primeira rodada estatística pareada** com dois projetos já presentes no pacote WIT local:
+Na fase atual, o foco experimental está em uma **rodada pareada para artigo** com seis projetos já presentes no pacote WIT local:
 
 - **Jackson Databind**
 - **HttpComponents Client**
+- **Apache Commons Lang**
+- **Apache Commons IO**
+- **Apache Commons Text**
+- **Byte Buddy**
 
 ## Estado atual
 
-O projeto já está preparado para executar a **primeira rodada estatística da fase 2** com:
+O projeto já está preparado para executar a **rodada principal do artigo** com:
 
 - seleção explícita dos projetos em `phase_two.projects`;
 - uso de baselines WIT locais por projeto;
-- geração de 15 slices alinháveis por projeto, com 1 método por slice;
+- geração de 20 slices alinháveis por projeto, com 1 método por slice;
 - comparação pareada entre `WIT_CONTEXT` e `DIRECT_TESTS`;
 - execução principal em `strict_1call`;
+- geração via OpenAI Batch API com `gpt-5.4-mini`;
 - juiz IA desativado na rodada principal;
 - geração e avaliação das duas estratégias sobre os **mesmos métodos-alvo**;
 - saída consolidada em:
-  - `phase-two-study.json`
-  - `CSV`
-  - `dashboard.html`
-  - `phase-two-statistics.csv`
-  - `phase-two-statistics.md`
+  - `results_*_paired_study.json`
+  - `results_*_paired_summary.csv`
+  - `results_*_paired_metrics.csv`
+  - `results_*_paired_comparison.csv`
+  - `analysis_*_statistical_inference.md`
+  - `dashboard_*_wit_expath_regression.html`
 
 ## Pergunta experimental desta fase
 
@@ -171,19 +177,19 @@ Preflight com build mínimo, ainda sem chamada OpenAI:
 ./scripts/executar-primeira-rodada-estatistica.sh
 ```
 
-Execução paga, somente após o preflight retornar `preflight_ok=30/30`:
+Execução paga, somente após o preflight retornar todos os 120 slices como prontos:
 
 ```bash
 export OPENAI_API_KEY="sua-chave"
-CONFIRMAR_EXECUCAO_PAGA=sim ./scripts/executar-primeira-rodada-estatistica.sh
+CONFIRMAR_EXECUCAO_PAGA=sim ./scripts/run-article-main-batch-pipeline.sh
 ```
 
 Detalhes importantes:
 
-- o modelo padrão é `o4-mini-2025-04-16`;
-- o esforço de raciocínio padrão é `medium`;
+- o modelo padrão da rodada de artigo é `gpt-5.4-mini`;
+- o backend de geração é OpenAI Batch API;
 - o modo da rodada é `strict_1call`;
-- o script avalia 80 candidatos por projeto e seleciona 15 slices alinháveis;
+- o script seleciona 20 slices alinháveis por projeto;
 - para o commit histórico do Jackson, o harness instala um fallback local do parent POM e desativa o perfil Maven `java14+` com `-P!java14+`.
 
 ### Opção 1: comando direto

@@ -1,52 +1,54 @@
 # Visao Geral
 
-A fase atual do `witup-llm` compara duas estratégias de geração de testes unitários:
+A fase atual do `wit-llm` compara duas estrategias de geracao de testes Java com LLM:
 
 - **WIT_CONTEXT**: o baseline WIT entra como contexto para a geração;
 - **DIRECT_TESTS**: os testes são pedidos diretamente ao modelo, sem contexto WIT.
 
-## Por que essa mudança
+## Ideia
 
-A fase anterior misturava vários objetivos experimentais, três variantes de expaths e uma camada analítica extra. Para a nova etapa, o foco foi reduzido para uma pergunta mais clara:
+What Is Thrown (WIT) infere pre-condicoes relacionadas a excecoes em programas Java. O projeto usa esses caminhos excepcionais como sinal estruturado para orientar o LLM na geracao de testes de regressao.
 
-> usar o contexto WIT realmente melhora a qualidade dos testes em relação à geração direta?
+A pergunta central e:
+
+> caminhos excepcionais precomputados por analise estatica ajudam LLMs a gerar testes mais focados em comportamento excepcional?
 
 ## Projetos-alvo
 
-- Google Guava
-- Apache Commons Collections
+- foco atual: **OpenJDK/JDK**;
+- repositorio operacional: `https://github.com/openjdk/jdk`;
+- baseline local: `resources/wit-replication-package/data/output/jdk/wit_filtered.json`.
 
 ## Unidade de comparação
 
-Os dois cenários são avaliados sobre o **mesmo conjunto de métodos-alvo** por projeto. Isso evita comparar estratégias em subconjuntos diferentes do código.
+Os dois cenarios sao avaliados sobre o **mesmo conjunto de metodos-alvo**. A unidade principal da rodada JDK e o impacto global no projeto, mas a analise por metodo continua existindo para explicar os ganhos, falhas e uso de expaths.
 
-## Pipeline da segunda fase
+## Pipeline atual
 
 ```mermaid
 graph TD
-    A["Baseline WIT local"] --> B["Alinhamento ao checkout"]
-    C["Catalogação do checkout"] --> B
-    B --> D["Métodos-alvo comuns"]
-    D --> E["Geração com contexto WIT"]
-    D --> F["Geração direta"]
-    E --> G["Avaliação"]
+    A["wit_filtered.json do JDK"] --> B["Alinhamento WIT -> checkout"]
+    C["Catalogacao do OpenJDK"] --> B
+    B --> D["Metodos-alvo comuns"]
+    D --> E["Prompt WIT_CONTEXT"]
+    D --> F["Prompt DIRECT_TESTS"]
+    E --> G["OpenAI Batch API"]
     F --> G
-    G --> H["JSON"]
-    G --> I["CSV"]
-    G --> J["Dashboard HTML"]
+    G --> H["Testes jtreg materializados"]
+    H --> I["Variantes: baseline, WIT, DIRECT"]
+    I --> J["jtreg + JCov"]
+    J --> K["Cobertura estrutural"]
+    J --> L["Metricas de excecao"]
 ```
 
 ## Métricas principais
 
-- `test-compilation`
-- `unit-tests`
-- `test-pass-rate`
-- `target-method-coverage`
-- `assertive-tests-rate`
-- `exception-assertion-rate`
-- `jacoco-line`
-- `jacoco-branch`
-- `pit-mutation`
+- cobertura JCov de linha, branch, bloco, metodo e classe;
+- execucao `jtreg`: pass, fail, error;
+- `Exception Assertion Rate`;
+- `Passing Exception Test Rate`;
+- `Approximate Exception Path Coverage`;
+- uso/adaptacao dos expaths WIT.
 
 ## Saída esperada
 
@@ -54,4 +56,5 @@ Ao final da execução, o projeto produz um pacote legível para análise:
 
 - um relatório consolidado em JSON;
 - tabelas CSV para comparação;
-- um dashboard HTML estático para apresentação.
+- relatorios Markdown para apresentacao;
+- testes gerados materializados nas variantes do JDK.
