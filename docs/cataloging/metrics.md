@@ -38,6 +38,29 @@ Foca no counter `LINE` no nivel raiz do relatorio.
 - Compara com `detected="true"`
 - Calcula score de mutacao
 
+### 4. Cobertura JCov no JDK
+
+Na rodada JDK, a cobertura estrutural principal vem do JCov. O relatorio consolidado usa um escopo fixo de classes para comparar as variantes com o mesmo denominador:
+
+- linha;
+- branch;
+- bloco JCov;
+- metodo;
+- classe.
+
+JCov 3.0 usa mascaras separadas por `|` no parametro `include`, nao regex Java completo. Por isso, filtros como `java.(lang|io).*` nao devem ser usados diretamente.
+
+### 5. Metricas de excecao
+
+A rodada JDK tambem extrai metricas retrospectivas a partir do manifesto WIT, dos `generation.json` materializados e dos `.jtr` do jtreg:
+
+- `Exception Assertion Rate`: proporcao de metodos cujos testes gerados verificam excecoes explicitamente;
+- `Passing Exception Test Rate`: proporcao desses testes que passaram no jtreg;
+- `Approximate Exception Path Coverage`: proporcao aproximada de expaths usados ou adaptados;
+- tipos unicos de excecao exercitados/verificados.
+
+Essas metricas nao provam que o bytecode exato do `throw` foi executado. Elas medem se a geracao codificou comportamento excepcional de forma observavel.
+
 ## Pontuacao e Agregacao
 
 | Funcao | Responsabilidade |

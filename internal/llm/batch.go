@@ -26,11 +26,20 @@ type LinhaRequisicaoBatch struct {
 
 // MetadadosBatch resume a submissão de um lote OpenAI.
 type MetadadosBatch struct {
-	BatchID      string `json:"batch_id"`
-	InputFileID  string `json:"input_file_id"`
-	OutputFileID string `json:"output_file_id,omitempty"`
-	ErrorFileID  string `json:"error_file_id,omitempty"`
-	Status       string `json:"status,omitempty"`
+	BatchID       string                 `json:"batch_id"`
+	InputFileID   string                 `json:"input_file_id"`
+	OutputFileID  string                 `json:"output_file_id,omitempty"`
+	ErrorFileID   string                 `json:"error_file_id,omitempty"`
+	Status        string                 `json:"status,omitempty"`
+	RequestCounts *ContagensBatch        `json:"request_counts,omitempty"`
+	Raw           map[string]interface{} `json:"raw,omitempty"`
+}
+
+// ContagensBatch resume request_counts retornado pelo objeto Batch.
+type ContagensBatch struct {
+	Total     int `json:"total"`
+	Completed int `json:"completed"`
+	Failed    int `json:"failed"`
 }
 
 // LinhaResultadoBatch representa uma linha de saída da Batch API.
@@ -216,11 +225,25 @@ func metadadosBatch(payload map[string]interface{}, inputFileID string) Metadado
 		inputFileID = strings.TrimSpace(fmt.Sprint(payload["input_file_id"]))
 	}
 	return MetadadosBatch{
-		BatchID:      strings.TrimSpace(fmt.Sprint(payload["id"])),
-		InputFileID:  inputFileID,
-		OutputFileID: strings.TrimSpace(fmt.Sprint(payload["output_file_id"])),
-		ErrorFileID:  strings.TrimSpace(fmt.Sprint(payload["error_file_id"])),
-		Status:       strings.TrimSpace(fmt.Sprint(payload["status"])),
+		BatchID:       strings.TrimSpace(fmt.Sprint(payload["id"])),
+		InputFileID:   inputFileID,
+		OutputFileID:  strings.TrimSpace(fmt.Sprint(payload["output_file_id"])),
+		ErrorFileID:   strings.TrimSpace(fmt.Sprint(payload["error_file_id"])),
+		Status:        strings.TrimSpace(fmt.Sprint(payload["status"])),
+		RequestCounts: contagensBatch(payload),
+		Raw:           payload,
+	}
+}
+
+func contagensBatch(payload map[string]interface{}) *ContagensBatch {
+	raw, ok := payload["request_counts"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	return &ContagensBatch{
+		Total:     extrairInteiroMapa(raw, "total"),
+		Completed: extrairInteiroMapa(raw, "completed"),
+		Failed:    extrairInteiroMapa(raw, "failed"),
 	}
 }
 

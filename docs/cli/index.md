@@ -1,16 +1,20 @@
 # CLI
 
-O comando principal da fase atual é:
+Os comandos principais da fase atual sao os fluxos JDK e Batch.
 
 ```bash
-witup executar-segunda-fase --config <arquivo.json> --generation-model <modelo>
+witup preparar-estudo-jdk-global --config <arquivo.json> --jdk-root <jdk> --wit-analysis <wit_filtered.json> --output-dir <run>
 ```
 
-## Comando principal
+## Comandos principais
 
 | Comando | Uso |
 | :--- | :--- |
-| `executar-segunda-fase` | Roda a comparação `WIT_CONTEXT` vs `DIRECT_TESTS` |
+| `preparar-estudo-jdk-global` | Prepara amostra JDK, manifesto e JSONL Batch |
+| `avaliar-estudo-jdk-global` | Materializa respostas Batch em variantes JDK |
+| `medir-impacto-jdk-global` | Executa `jtreg` nas variantes materializadas |
+| `submit-openai-batch` | Submete JSONL para OpenAI Batch API |
+| `collect-openai-batch` | Coleta respostas e erros de um Batch |
 
 ## Comandos auxiliares ainda úteis
 
@@ -22,13 +26,19 @@ witup executar-segunda-fase --config <arquivo.json> --generation-model <modelo>
 | `extrair-geracao` | Extrai métricas estáticas de `generation.json` cruzado com `analysis.json` |
 | `extrair-surefire` | Soma testes executados a partir dos XMLs do Surefire |
 | `medir-reproducao-excecoes` | Mede a reprodução de expaths em uma geração |
+| `executar-segunda-fase` | Fluxo legado pareado para projetos Maven |
 
-## Exemplo
+## Exemplo JDK
 
 ```bash
-./bin/witup executar-segunda-fase \
-  --config pipelines/fase-dois-guava-commons.json \
-  --generation-model openai_main
+./bin/witup preparar-estudo-jdk-global \
+  --config generated/configs/rodada-artigo.runtime.json \
+  --generation-model openai_main \
+  --jdk-root /Users/marceloamorim/Documents/unb/jdk \
+  --wit-analysis resources/wit-replication-package/data/output/jdk/wit_filtered.json \
+  --output-dir generated/experiments/jdk-global-impact-study/<run> \
+  --requests generated/experiments/jdk-global-impact-study/<run>/requests_openai_batch_generation.jsonl \
+  --method-count 200
 ```
 
 ## Saída
@@ -36,6 +46,8 @@ witup executar-segunda-fase --config <arquivo.json> --generation-model <modelo>
 Ao final, a CLI imprime:
 
 - caminho do relatório JSON;
-- caminho dos CSVs;
-- caminho do dashboard HTML;
-- quantidade de projetos comparados.
+- caminho do manifesto;
+- caminho do JSONL Batch;
+- quantidade de métodos selecionados;
+- quantidade de expaths;
+- quantidade de requests.

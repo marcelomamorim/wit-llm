@@ -56,6 +56,14 @@ func Principal(argv []string) int {
 		return executarSubmissaoOpenAIBatch(args)
 	case "coletar-openai-batch", "collect-openai-batch":
 		return executarColetaOpenAIBatch(args)
+	case "avaliar-batch-segunda-fase", "evaluate-phase-two-batch":
+		return executarAvaliacaoBatchSegundaFase(args, servico)
+	case "preparar-estudo-jdk-global", "prepare-jdk-global-impact":
+		return executarPreparacaoJDKGlobal(args, servico)
+	case "avaliar-estudo-jdk-global", "evaluate-jdk-global-impact":
+		return executarAvaliacaoJDKGlobal(args, servico)
+	case "medir-impacto-jdk-global", "measure-jdk-global-impact":
+		return executarMedicaoJTRegJDKGlobal(args, servico)
 	case "consolidar-estatisticas-primeira-rodada", "consolidate-first-round":
 		return executarConsolidacaoEstatisticasPrimeiraRodada(args)
 	case "ajuda", "help", "-h", "--help":
@@ -96,12 +104,16 @@ func imprimirUso() {
 	fmt.Println("  preparar-batch-segunda-fase Gera JSONL Batch para a geração WIT vs direta")
 	fmt.Println("  submeter-openai-batch Submete um JSONL à Batch API da OpenAI")
 	fmt.Println("  coletar-openai-batch Consulta um batch e baixa outputs/erros quando disponíveis")
+	fmt.Println("  avaliar-batch-segunda-fase Materializa respostas Batch e executa métricas locais")
+	fmt.Println("  preparar-estudo-jdk-global Prepara amostra JDK, manifest e JSONL Batch")
+	fmt.Println("  avaliar-estudo-jdk-global Materializa variantes JDK e executa métricas globais")
+	fmt.Println("  medir-impacto-jdk-global Executa jtreg nas variantes JDK materializadas")
 	fmt.Println("  consolidar-estatisticas-primeira-rodada Consolida deltas pareados da rodada estatística")
 	fmt.Println("  ajuda                 Exibe esta mensagem")
 	fmt.Println("")
 	fmt.Println("Aliases compatíveis:")
 	fmt.Println("  models, probe, ingest-witup, analyze, analyze-agentic, compare-sources")
-	fmt.Println("  generate, evaluate, run, run-phase-two, preflight-phase-two, prepare-phase-two-batch, submit-openai-batch, collect-openai-batch, consolidate-first-round, help")
+	fmt.Println("  generate, evaluate, run, run-phase-two, preflight-phase-two, prepare-phase-two-batch, submit-openai-batch, collect-openai-batch, evaluate-phase-two-batch, prepare-jdk-global-impact, evaluate-jdk-global-impact, measure-jdk-global-impact, consolidate-first-round, help")
 }
 
 // juntarComVirgula concatena uma lista de strings em um texto legível para CLI.
