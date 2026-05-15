@@ -1,6 +1,6 @@
 # Referencia de Configuracao
 
-O `witup-llm` usa um arquivo JSON (`pipeline.json`) como configuracao central.
+O `wit-llm` usa arquivos JSON como configuracao central.
 Ele define:
 
 - o projeto Java-alvo;
@@ -8,6 +8,8 @@ Ele define:
 - os modelos LLM;
 - as metricas executadas na Parte 2;
 - opcionalmente, o escopo da segunda fase do estudo.
+
+Na rodada JDK, os scripts usam principalmente `generated/configs/rodada-artigo.runtime.json` para configurar modelos e o checkout JDK e informado por variavel de ambiente ou flag da CLI.
 
 ## Estrutura Geral
 
@@ -125,79 +127,63 @@ Cada entrada em `phase_two.projects` possui:
 | `exclude` | `string[]` | Overrides de exclude |
 | `test_framework` | `string` | Override do framework de testes |
 
-## Exemplo focado na segunda fase
+## Exemplo usado no fluxo JDK
 
 ```json
 {
   "version": "1",
   "project": {
-    "root": "/caminho/para/guava",
-    "test_framework": "infer"
+    "root": "/Users/marceloamorim/Documents/unb/jdk",
+    "include": ["src"],
+    "exclude": [".git", "build", "generated", "images", "support"],
+    "test_framework": "jtreg"
   },
   "pipeline": {
-    "output_dir": "./generated/fase-dois",
+    "output_dir": "./generated/experiments/jdk-global-impact-study",
     "save_prompts": true,
     "llm_mode": "direct"
   },
   "models": {
     "openai_main": {
       "provider": "openai_compatible",
-      "model": "o4-mini-2025-04-16",
+      "model": "gpt-5.4-mini",
       "base_url": "https://api.openai.com/v1",
       "api_key_env": "OPENAI_API_KEY",
-      "reasoning_effort": "medium"
+      "reasoning_effort": "medium",
+      "execution_backend": "batch",
+      "endpoint": "/v1/responses"
     }
   },
-  "metrics": [
-    {
-      "name": "unit-tests",
-      "command": "mvn -q test && /abs/path/bin/witup extrair-surefire --report-dir target/surefire-reports"
-    }
-  ],
-  "phase_two": {
-    "execution_mode": "repair_1retry",
-    "visualization_title": "Guava vs Commons Collections",
-    "projects": [
-      {
-        "key": "guava",
-        "label": "Google Guava",
-        "root": "/caminho/para/guava",
-        "wit_analysis_path": "/caminho/para/guava-wit.json"
-      },
-      {
-        "key": "commons-collections",
-        "label": "Apache Commons Collections",
-        "root": "/caminho/para/commons-collections",
-        "wit_analysis_path": "/caminho/para/commons-collections-wit.json"
-      }
-    ]
-  }
+  "metrics": []
 }
 ```
 
-## Saidas da segunda fase
+## Saidas do fluxo JDK
 
-Ao executar `executar-segunda-fase`, o projeto gera:
+Ao preparar, coletar e avaliar uma rodada JDK, o projeto gera:
 
-- `phase-two-study.json`
-- `csv/phase-two-summary.csv`
-- `csv/phase-two-metrics.csv`
-- `csv/phase-two-comparison.csv`
-- `dashboard.html`
+- `preparation_jdk_global_impact.json`
+- `analysis_jdk_wit_filtered_sample.json`
+- `manifest_jdk_global_methods.csv`
+- `requests_*_openai_batch_generation.jsonl`
+- `responses_openai_batch_generation.jsonl`
+- `results_jdk_global_impact.json`
+- `results_jdk_global_jtreg_summary.csv`
+- `results_jdk_jcov_200_fast_summary.csv`
+- `results_jdk_exception_coverage_metrics.csv`
 
 ## Mapa rapido da execucao
 
 ```mermaid
 graph TD
-    CFG["pipeline.json"] --> CLI["witup executar-segunda-fase"]
-    CLI --> WIT["Carrega baseline WIT local"]
-    CLI --> CAT["Cataloga checkout local"]
-    WIT --> ALIGN["Alinha baseline ao checkout"]
-    ALIGN --> WITCTX["Gera testes com contexto WIT"]
-    ALIGN --> DIRECT["Gera testes diretamente do codigo"]
-    WITCTX --> EVAL["Avalia com metricas"]
-    DIRECT --> EVAL
-    EVAL --> JSON["phase-two-study.json"]
-    EVAL --> CSV["CSV consolidado"]
-    EVAL --> HTML["dashboard.html"]
+    CFG["runtime config"] --> PREP["preparar-estudo-jdk-global"]
+    PREP --> REQ["requests JSONL"]
+    REQ --> SUBMIT["submit-openai-batch"]
+    SUBMIT --> COLLECT["collect-openai-batch"]
+    COLLECT --> EVAL["avaliar-estudo-jdk-global"]
+    EVAL --> VAR["variantes JDK"]
+    VAR --> JTREG["jtreg"]
+    VAR --> JCOV["JCov"]
+    JTREG --> CSV["CSV/JSON"]
+    JCOV --> MD["Markdown/CSV"]
 ```
