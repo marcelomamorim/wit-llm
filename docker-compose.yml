@@ -1,0 +1,93 @@
+version: "3.9"
+
+# ── Variáveis de ambiente configuráveis ───────────────────────────────────────
+# EXPERIMENT_DIR   : subdiretório em generated/experiments/   (default: jdk21-pilot)
+# RUN_STAMP        : timestamp do run atual
+# SCENARIO         : wit_context | direct_tests | baseline
+# METHOD_COUNT     : número máximo de métodos (0 = todos)
+# WIT_OUTPUT_NAME  : nome da pasta de output do WIT               (default: jdk21-pilot)
+# RUNTIME_CONFIG_FILE : arquivo de config runtime                 (default: jdk21-pilot.runtime.json)
+# GENERATION_MODEL : chave do modelo no runtime config            (default: gpt-4.1-nano)
+# OPENAI_API_KEY   : chave da API OpenAI
+
+x-common-env: &common-env
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  EXPERIMENT_DIR: ${EXPERIMENT_DIR:-jdk21-pilot}
+  RUN_STAMP: ${RUN_STAMP:-}
+  SCENARIO: ${SCENARIO:-baseline}
+  METHOD_COUNT: ${METHOD_COUNT:-20}
+  WIT_OUTPUT_NAME: ${WIT_OUTPUT_NAME:-jdk21-pilot}
+  RUNTIME_CONFIG_FILE: ${RUNTIME_CONFIG_FILE:-jdk21-pilot.runtime.json}
+  GENERATION_MODEL: ${GENERATION_MODEL:-gpt-4.1-nano}
+
+x-common-volumes: &common-volumes
+  - .:/data
+  - ./generated:/data/generated
+
+services:
+
+  # ── Constrói o JDK 21 a partir do fonte ─────────────────────────────────────
+  jdk-builder:
+    build:
+      context: .
+      dockerfile: docker/jdk-builder/Dockerfile
+      args:
+        OPENJDK_TAG: ${OPENJDK_TAG:-jdk-21+35}
+    image: witup-llm/jdk-builder:latest
+    command: java -version
+
+  # ── Avaliador: jtreg + JCov + WIT + witup ───────────────────────────────────
+  evaluator:
+    build:
+      context: .
+      dockerfile: docker/evaluator/Dockerfile
+    image: witup-llm/evaluator:latest
+    command: java -version
+
+  # ── WIT piloto: analisa java.lang com -Xmx5g ────────────────────────────────
+  wit-pilot:
+    image: witup-llm/evaluator:latest
+    environment:
+      <<: *common-env
+      WIT_SCOPE: ${WIT_SCOPE:-src/java.base/share/classes}
+      WIT_OUTPUT_NAME: ${WIT_OUTPUT_NAME:-jdk21-pilot}
+      WIT_MAX_MEMORY: ${WIT_MAX_MEMORY:-5g}
+    volumes: *common-volumes
+    working_dir: /data
+    command: bash /data/scripts/run-wit-pilot-docker.sh
+
+  # ── Pós-processamento WIT (do-post-filter.py) ────────────────────────────────
+  wit-post-process:
+    image: witup-llm/evaluator:latest
+    environment:
+      <<: *common-env
+    volumes: *common-volumes
+    working_dir: /data
+    command: bash /data/scripts/run-wit-post-process-docker.sh
+
+  # ── Preparação: gera JSONL de requisições para batch LLM ────────────────────
+  prepare:
+    image: witup-llm/evaluator:latest
+    environment:
+      <<: *common-env
+    volumes: *common-volumes
+    working_dir: /data
+    command: bash /data/scripts/run-prepare-docker.sh
+
+  # ── Avaliação: executa jtreg nos testes gerados ──────────────────────────────
+  evaluate:
+    image: witup-llm/evaluator:latest
+    environment:
+      <<: *common-env
+    volumes: *common-volumes
+    working_dir: /data
+    command: >
+      bash -c "
+        witup avaliar-estudo-jdk-global \
+          --config /data/generated/configs/${RUNTIME_CONFIG_FILE:-jdk21-pilot.runtime.json} \
+          --generation-model ${GENERATION_MODEL:-gpt-4.1-nano} \
+          --jdk-root /opt/openjdk-src \
+          --run-dir /data/generated/experiments/${EXPERIMENT_DIR:-jdk21-pilot}/${RUN_STAMP:-run} \
+          --responses /data/generated/experiments/${EXPERIMENT_DIR:-jdk21-pilot}/${RUN_STAMP:-run}/responses_openai_batch_generation.jsonl \
+          --errors   /data/generated/experiments/${EXPERIMENT_DIR:-jdk21-pilot}/${RUN_STAMP:-run}/errors_openai_batch_generation.jsonl
+      "

@@ -1,0 +1,110 @@
+site_name: wit-llm
+site_url: https://marcelomamorim.github.io/wit-llm/
+site_description: >-
+  CLI em Go para estudar geração de testes Java com LLMs, contexto WIT
+  e avaliação de impacto no OpenJDK/JDK.
+
+repo_name: marcelomamorim/wit-llm
+repo_url: https://github.com/marcelomamorim/wit-llm
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  language: pt-BR
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Modo escuro
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Modo claro
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.tabs
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Inicio: index.md
+  - Visao Geral:
+    - Introducao: overview/index.md
+    - Primeiros Passos: overview/getting-started.md
+    - Referencia de Configuracao: overview/configuration.md
+  - Estudos:
+    - Impacto Global no JDK: studies/jdk-global-impact.md
+  - CLI e Comandos:
+    - Visao Geral: cli/index.md
+  - Arquitetura:
+    - Visao Geral: architecture/index.md
+  - Harness:
+    - Visao Geral: harness/index.md
+    - Validacao: harness/validation.md
+    - Rodadas Pagas: harness/paid-runs.md
+    - Fluxo com Codex: harness/codex-workflow.md
+    - Padroes de Falha: harness/failure-patterns.md
+  - Design Docs:
+    - Visao Geral: design-docs/index.md
+    - Core Beliefs: design-docs/core-beliefs.md
+    - Fase 2: design-docs/phase-two-study.md
+  - Exec Plans:
+    - Visao Geral: exec-plans/index.md
+    - Template: exec-plans/template.md
+    - Tech Debt: exec-plans/tech-debt-tracker.md
+  - Integracao LLM:
+    - Cliente LLM: llm/client.md
+  - Catalogacao e Metricas:
+    - Visao Geral: cataloging/index.md
+    - Executor de Metricas: cataloging/metrics.md
+  - Qualidade:
+    - Quality Score: QUALITY_SCORE.md
+    - Reliability: RELIABILITY.md
+    - Security: SECURITY.md
+  - Referencias:
+    - Visao Geral: references/index.md
+    - WIT: references/wit-paper.md
+    - OpenAI Codex Harness: references/openai-codex-harness.md
+    - Commons IO Baseline: references/commons-io-baseline.md
+  - Glossario: glossary.md

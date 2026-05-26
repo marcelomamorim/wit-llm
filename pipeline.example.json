@@ -1,0 +1,127 @@
+{
+  "version": "1",
+  "project": {
+    "root": "/absolute/path/to/project",
+    "include": ["src/main/java", "."],
+    "exclude": [".git", "target", "build", "generated", "tests"],
+    "overview_file": "README.md",
+    "test_framework": "infer"
+  },
+  "pipeline": {
+    "output_dir": "./generated/default",
+    "replication_root": "./resources/wit-replication-package/data/output",
+    "baseline_file": "wit.json",
+    "save_prompts": true,
+    "max_methods": 0,
+    "judge_model": "openai_judge",
+    "llm_mode": "multiagent",
+    "deep_validation_subset_size": 8
+  },
+  "models": {
+    "openai_main": {
+      "provider": "openai_compatible",
+      "model": "gpt-5.4",
+      "base_url": "https://api.openai.com/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "temperature": 0.0,
+      "timeout_seconds": 180,
+      "max_retries": 2,
+      "reasoning_effort": "low",
+      "prompt_cache_retention": "24h",
+      "service_tier": "auto",
+      "max_output_tokens": 0
+    },
+    "openai_judge": {
+      "provider": "openai_compatible",
+      "model": "gpt-5.4",
+      "base_url": "https://api.openai.com/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "temperature": 0.0,
+      "timeout_seconds": 180,
+      "max_retries": 2,
+      "reasoning_effort": "low",
+      "prompt_cache_retention": "24h",
+      "service_tier": "auto",
+      "max_output_tokens": 0
+    }
+  },
+  "metrics": [
+    {
+      "name": "unit-tests",
+      "kind": "tests",
+      "command": "./mvnw -q -DskipITs test && ./bin/witup extrair-surefire --report-dir target/surefire-reports",
+      "weight": 1.0,
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\\\.[0-9]+)?)",
+      "scale": 100.0,
+      "working_directory": ".",
+      "timeout_seconds": 600,
+      "expected_outputs": ["target/surefire-reports"],
+      "description": "Executa os testes unitários após a geração"
+    },
+    {
+      "name": "jacoco-line-coverage",
+      "kind": "coverage",
+      "command": "./mvnw -q org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.12:report && ./bin/witup extrair-jacoco --xml target/site/jacoco/jacoco.xml --counter LINE",
+      "weight": 1.0,
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\\\.[0-9]+)?)",
+      "scale": 100.0,
+      "working_directory": ".",
+      "timeout_seconds": 600,
+      "expected_outputs": ["target/site/jacoco/jacoco.xml"],
+      "description": "Cobertura de linhas via JaCoCo (requer plugin no pom.xml do projeto-alvo)"
+    },
+    {
+      "name": "jacoco-branch-coverage",
+      "kind": "coverage",
+      "command": "./mvnw -q org.jacoco:jacoco-maven-plugin:0.8.12:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.12:report && ./bin/witup extrair-jacoco --xml target/site/jacoco/jacoco.xml --counter BRANCH",
+      "weight": 1.0,
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\\\.[0-9]+)?)",
+      "scale": 100.0,
+      "working_directory": ".",
+      "timeout_seconds": 600,
+      "expected_outputs": ["target/site/jacoco/jacoco.xml"],
+      "description": "Cobertura de branches via JaCoCo (extraída do mesmo relatório de linhas)"
+    },
+    {
+      "name": "pit-mutation-score",
+      "kind": "mutation",
+      "command": "./mvnw -q -DtimestampedReports=false -DoutputFormats=XML org.pitest:pitest-maven:1.23.0:mutationCoverage && ./bin/witup extrair-pit --report-dir target/pit-reports",
+      "fallbacks": [
+        {
+          "name": "reuse-existing-report",
+          "command": "find target/pit-reports -name mutations.xml -print -quit | grep -q . && ./bin/witup extrair-pit --report-dir target/pit-reports",
+          "expected_outputs": ["target/pit-reports"],
+          "description": "Reaproveita o relatório PIT já materializado quando a etapa principal termina em erro após gerar mutations.xml"
+        }
+      ],
+      "weight": 1.0,
+      "value_regex": "WITUP_METRIC=([0-9]+(?:\\\\.[0-9]+)?)",
+      "scale": 100.0,
+      "working_directory": ".",
+      "timeout_seconds": 900,
+      "expected_outputs": ["target/pit-reports/mutations.xml"],
+      "description": "Mutation score via PIT (requer plugin pitest-maven no pom.xml do projeto-alvo)"
+    }
+  ],
+  "phase_two": {
+    "visualization_title": "Segunda fase: contexto WIT vs geração direta",
+    "projects": [
+      {
+        "key": "guava",
+        "label": "Google Guava",
+        "root": "/absolute/path/to/guava",
+        "wit_analysis_path": "/absolute/path/to/guava-wit.json",
+        "overview_file": "/absolute/path/to/guava/README.md",
+        "test_framework": "infer"
+      },
+      {
+        "key": "commons-collections",
+        "label": "Apache Commons Collections",
+        "root": "/absolute/path/to/commons-collections",
+        "wit_analysis_path": "/absolute/path/to/commons-collections-wit.json",
+        "overview_file": "/absolute/path/to/commons-collections/README.md",
+        "test_framework": "infer"
+      }
+    ]
+  }
+}

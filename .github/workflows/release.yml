@@ -1,0 +1,68 @@
+name: Release CLI
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            archive: tar.gz
+          - goos: linux
+            goarch: arm64
+            archive: tar.gz
+          - goos: darwin
+            goarch: amd64
+            archive: tar.gz
+          - goos: darwin
+            goarch: arm64
+            archive: tar.gz
+          - goos: windows
+            goarch: amd64
+            archive: zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          name="witup-${{ matrix.goos }}-${{ matrix.goarch }}"
+          extension=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            extension=".exe"
+          fi
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -trimpath -ldflags="-s -w" -o "dist/${name}${extension}" ./cmd/witup
+
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            cd dist
+            zip "${name}.zip" "${name}${extension}"
+          else
+            tar -C dist -czf "dist/${name}.tar.gz" "${name}${extension}"
+          fi
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
