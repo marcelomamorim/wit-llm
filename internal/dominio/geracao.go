@@ -1,11 +1,18 @@
 package dominio
 
+// AcaoExpath registra se um expath do WIT foi usado, adaptado ou descartado
+// na geração de um arquivo de teste (extraído do campo notes da resposta LLM).
+type AcaoExpath struct {
+	Acao string `json:"acao"` // "used", "adapted" ou "discarded"
+}
+
 // ArquivoTesteGerado representa um arquivo de teste emitido pelo aplicacao.
 type ArquivoTesteGerado struct {
-	CaminhoRelativo    string   `json:"relative_path"`
-	Conteudo           string   `json:"content"`
-	IDsMetodosCobertos []string `json:"covered_method_ids"`
-	Observacoes        string   `json:"notes"`
+	CaminhoRelativo    string       `json:"relative_path"`
+	Conteudo           string       `json:"content"`
+	IDsMetodosCobertos []string     `json:"covered_method_ids"`
+	Observacoes        string       `json:"notes"`
+	AcoesExpath        []AcaoExpath `json:"acoes_expath,omitempty"`
 }
 
 // RelatorioGeracao resume os testes gerados em uma execução.
