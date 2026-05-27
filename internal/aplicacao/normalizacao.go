@@ -84,14 +84,35 @@ func normalizarRespostaGeracao(payload map[string]interface{}) (string, []domini
 			continue
 		}
 
+		obs := strings.TrimSpace(fmt.Sprint(entrada["notes"]))
 		files = append(files, dominio.ArquivoTesteGerado{
 			CaminhoRelativo:    caminhoRelativo,
 			Conteudo:           conteudo,
 			IDsMetodosCobertos: paraListaStrings(entrada["covered_method_ids"]),
-			Observacoes:        strings.TrimSpace(fmt.Sprint(entrada["notes"])),
+			Observacoes:        obs,
+			AcoesExpath:        extrairAcoesExpathDeNotes(obs),
 		})
 	}
 	return resumo, files
+}
+
+// extrairAcoesExpathDeNotes analisa o campo notes de um arquivo gerado e devolve
+// as ações de expath reconhecidas (used, adapted, discarded).
+// A heurística procura pelas palavras-chave em qualquer posição do texto.
+func extrairAcoesExpathDeNotes(notes string) []dominio.AcaoExpath {
+	if notes == "" || notes == "<nil>" {
+		return nil
+	}
+	lower := strings.ToLower(notes)
+	var acoes []dominio.AcaoExpath
+	// Conta cada menção explícita às palavras-chave canônicas.
+	for _, palavra := range []string{"discarded", "adapted", "used"} {
+		count := strings.Count(lower, palavra)
+		for i := 0; i < count; i++ {
+			acoes = append(acoes, dominio.AcaoExpath{Acao: palavra})
+		}
+	}
+	return acoes
 }
 
 // normalizarRespostaJuiz converte a resposta bruta do juiz em um objeto tipado.

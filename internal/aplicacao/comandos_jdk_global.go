@@ -84,6 +84,18 @@ func executarAvaliacaoJDKGlobal(args []string, service *Servico) int {
 	fmt.Printf("Variantes avaliadas  : %d\n", len(report.Variantes))
 	fmt.Printf("Resumo CSV           : %s\n", report.CaminhoResumoCSV)
 	fmt.Printf("Comparação CSV       : %s\n", report.CaminhoComparacaoCSV)
+	fmt.Printf("Stats de geração CSV : %s\n", report.CaminhoStatsGeracaoCSV)
+	for _, v := range report.Variantes {
+		if v.QuantidadeTestes > 0 || v.ExpathTotal > 0 {
+			fmt.Printf("  %-14s testes=%d tokens_in=%d tokens_out=%d expath_util=%s\n",
+				v.Nome,
+				v.QuantidadeTestes,
+				v.InputTokens,
+				v.OutputTokens,
+				formatarFloatOpcional(v.TaxaUtilizacaoExpath),
+			)
+		}
+	}
 	return 0
 }
 
