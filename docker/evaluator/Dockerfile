@@ -50,8 +50,10 @@ RUN git clone --branch "${JCOV_TAG}" --depth 1 \
 
 WORKDIR /opt/jcov-src/build
 
-# Compilar passando os jars ASM via propriedades ant (dot notation)
-RUN ant \
+# Compilar apenas os targets necessários: jcov.jar + savers.
+# build-jt.observer (que depende de javatest.jar/jtreg) é intencionalmente
+# omitido — não é necessário para instrumentação e coleta de cobertura.
+RUN ant build-jcov build-file.saver build-network.saver \
     -Dasm.jar=/tmp/asm/asm.jar \
     -Dasm.tree.jar=/tmp/asm/asm-tree.jar \
     -Dasm.util.jar=/tmp/asm/asm-util.jar
