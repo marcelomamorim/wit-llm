@@ -58,10 +58,11 @@ RUN ant build-jcov build-file.saver build-network.saver \
     -Dasm.tree.jar=/tmp/asm/asm-tree.jar \
     -Dasm.util.jar=/tmp/asm/asm-util.jar
 
-# Verificar que os três jars necessários foram gerados
-RUN ls JCOV_BUILD/jcov_3.0/jcov.jar \
-       JCOV_BUILD/jcov_3.0/jcov_file_saver.jar \
-       JCOV_BUILD/jcov_3.0/jcov_network_saver.jar
+# Verificar que os três jars necessários foram gerados.
+# basedir=".." no build.xml → output em /opt/jcov-src/JCOV_BUILD/ (não em build/)
+RUN ls /opt/jcov-src/JCOV_BUILD/jcov_3.0/jcov.jar \
+       /opt/jcov-src/JCOV_BUILD/jcov_3.0/jcov_file_saver.jar \
+       /opt/jcov-src/JCOV_BUILD/jcov_3.0/jcov_network_saver.jar
 
 # ── Stage: Clone repo (scripts, configs, código-fonte) ────────────────────────
 # O conteúdo rastreado no git (scripts/, pipelines/, etc.) vem diretamente
@@ -163,7 +164,7 @@ ENV JTREG_HOME=/opt/jtreg
 
 # ── JCov 3.0 (compilado do fonte no stage jcov-builder) ───────────────────────
 # Nenhum arquivo local necessário — compilado de github.com/openjdk/jcov@jcov3.0-b07
-COPY --from=jcov-builder /opt/jcov-src/build/JCOV_BUILD /opt/jcov/JCOV_BUILD
+COPY --from=jcov-builder /opt/jcov-src/JCOV_BUILD /opt/jcov/JCOV_BUILD
 
 ENV JCOV_HOME=/opt/jcov/JCOV_BUILD/jcov_3.0
 
