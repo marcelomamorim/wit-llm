@@ -17,11 +17,24 @@
 set -euo pipefail
 
 EXPERIMENT_DIR="${EXPERIMENT_DIR:-jdk-global-impact-study}"
-RUN_STAMP="${RUN_STAMP:-20260526T142519Z_jdk_global_impact_batch_gpt41nano}"
+RUN_STAMP="${RUN_STAMP:-}"
 SKIP_JTREG="${SKIP_JTREG:-nao}"
 SKIP_JCOV="${SKIP_JCOV:-nao}"
 SKIP_SMELLS="${SKIP_SMELLS:-nao}"
 TEST_JDK="${TEST_JDK:-/opt/test-jdk}"
+
+if [[ -z "${RUN_STAMP}" ]]; then
+  echo "[pipeline] ERRO: RUN_STAMP não definido. Passe via variável de ambiente." >&2
+  exit 1
+fi
+
+# ── Log central do pipeline ───────────────────────────────────────────────────
+# Toda a saída (stdout + stderr) é espelhada em pipeline.log dentro do run dir.
+# No host: generated/experiments/${EXPERIMENT_DIR}/${RUN_STAMP}/pipeline.log
+RUN_DIR_LOG="/data/generated/experiments/${EXPERIMENT_DIR}/${RUN_STAMP}"
+mkdir -p "${RUN_DIR_LOG}"
+PIPELINE_LOG="${RUN_DIR_LOG}/pipeline.log"
+exec > >(tee -a "${PIPELINE_LOG}") 2>&1
 
 log() { printf '\n[pipeline] %s\n' "$*"; }
 hr()  { printf '=%.0s' {1..70}; printf '\n'; }
