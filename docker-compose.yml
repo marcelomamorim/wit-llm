@@ -1,0 +1,128 @@
+version: "3.9"
+
+# ── Variáveis de ambiente configuráveis ───────────────────────────────────────
+# EXPERIMENT_DIR      : subdiretório em generated/experiments/   (default: jdk21-pilot)
+# RUN_STAMP           : timestamp do run atual
+# SCENARIO            : wit_context | direct_tests | baseline
+# METHOD_COUNT        : número máximo de métodos (0 = todos)
+# WIT_OUTPUT_NAME     : nome da pasta de output do WIT               (default: jdk21-pilot)
+# RUNTIME_CONFIG_FILE : arquivo de config runtime                    (default: jdk21-pilot.runtime.json)
+# GENERATION_MODEL    : chave do modelo no runtime config            (default: gpt-4.1-nano)
+# OPENAI_API_KEY      : chave da API OpenAI
+#
+# Reprodutibilidade:
+#   Scripts, código e binário witup vêm do repositório público em WITUP_REPO/WITUP_COMMIT.
+#   Apenas ./generated/ (configs do experimento e resultados) é montado do host.
+#   JDK da75f3c4 está integrado à imagem — não requer checkout local.
+
+x-common-env: &common-env
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  EXPERIMENT_DIR: ${EXPERIMENT_DIR:-jdk21-pilot}
+  RUN_STAMP: ${RUN_STAMP:-}
+  SCENARIO: ${SCENARIO:-baseline}
+  METHOD_COUNT: ${METHOD_COUNT:-20}
+  WIT_OUTPUT_NAME: ${WIT_OUTPUT_NAME:-jdk21-pilot}
+  RUNTIME_CONFIG_FILE: ${RUNTIME_CONFIG_FILE:-jdk21-pilot.runtime.json}
+  GENERATION_MODEL: ${GENERATION_MODEL:-openai_main}
+
+# Apenas generated/ é montado do host — scripts e binário vêm da imagem.
+x-common-volumes: &common-volumes
+  - ./generated:/data/generated
+
+services:
+
+  # ── Constrói JDK 11+28 (da75f3c4) a partir do fonte ──────────────────────────
+  # OBRIGATÓRIO: mesma versão usada na análise WIT do Diego.
+  jdk-builder:
+    build:
+      context: .
+      dockerfile: docker/jdk-builder/Dockerfile
+      args:
+        OPENJDK_COMMIT: ${OPENJDK_COMMIT:-da75f3c4}
+    image: witup-llm/jdk-builder:latest
+    command: java -version
+
+  # ── Avaliador: jtreg + JCov + WIT + witup ───────────────────────────────────
+  # Scripts e binário witup vêm do repositório público (WITUP_REPO/WITUP_COMMIT).
+  # resources/ (JCov, WIT jar) são copiados do build context — publicar como
+  # GitHub Release assets para reprodutibilidade total (ver TODO no Dockerfile).
+  evaluator:
+    build:
+      context: .
+      dockerfile: docker/evaluator/Dockerfile
+      args:
+        WITUP_REPO: ${WITUP_REPO:-https://github.com/marcelomamorim/wit-llm}
+        WITUP_COMMIT: ${WITUP_COMMIT:-main}
+    image: witup-llm/evaluator:latest
+    command: java -version
+
+  # ── WIT piloto: analisa java.lang com -Xmx5g ────────────────────────────────
+  wit-pilot:
+    image: witup-llm/evaluator:latest
+    environment:
+      <<: *common-env
+      WIT_SCOPE: ${WIT_SCOPE:-src/java.base/share/classes}
+      WIT_OUTPUT_NAME: ${WIT_OUTPUT_NAME:-jdk21-pilot}
+      WIT_MAX_MEMORY: ${WIT_MAX_MEMORY:-5g}
+    volumes: *common-volumes
+    working_dir: /data
+    command: bash /data/scripts/run-wit-pilot-docker.sh
+
+  # ── Pós-processamento WIT (do-post-filter.py) ────────────────────────────────
+  wit-post-process:
+    image: witup-llm/evaluator:latest
+    environment:
+      <<: *common-env
+    volumes: *common-volumes
+    working_dir: /data
+    command: bash /data/scripts/run-wit-post-process-docker.sh
+
+  # ── Preparação: gera JSONL de requisições para batch LLM ────────────────────
+  prepare:
+    image: witup-llm/evaluator:latest
+    environment:
+      <<: *common-env
+    volumes: *common-volumes
+    working_dir: /data
+    command: bash /data/scripts/run-prepare-docker.sh
+
+  # ── jtreg: executa testes gerados nas variantes (direct-tests + wit-context) ──
+  # Não re-materializa — usa variants/ já criados pelo serviço evaluate.
+  # RUN_BASELINE=sim para incluir baseline tier1+tier2 (lento, ~horas).
+  run-jtreg:
+    image: witup-llm/evaluator:latest
+    environment:
+      <<: *common-env
+      RUN_BASELINE: ${RUN_BASELINE:-nao}
+      JTREG_CONCURRENCY: ${JTREG_CONCURRENCY:-4}
+      JTREG_TIMEOUT_FACTOR: ${JTREG_TIMEOUT_FACTOR:-1}
+    volumes: *common-volumes
+    working_dir: /data
+    command: bash /data/scripts/run-jtreg-docker.sh
+
+  # ── Avaliação: materializa testes gerados e coleta métricas ──────────────────
+  evaluate:
+    image: witup-llm/evaluator:latest
+    environment:
+      <<: *common-env
+    volumes: *common-volumes
+    working_dir: /data
+    command: bash /data/scripts/run-evaluate-docker.sh
+
+  # ── Pipeline noturno completo: jtreg → JCov → test smells ────────────────────
+  # JDK OBRIGATÓRIA: da75f3c4 (JDK 11+28) via TEST_JDK=/opt/test-jdk na imagem
+  # O script aborta se TEST_JDK não for JDK 11.
+  overnight:
+    image: witup-llm/evaluator:latest
+    environment:
+      <<: *common-env
+      EXPERIMENT_DIR: ${EXPERIMENT_DIR:-jdk-global-impact-study}
+      RUN_STAMP: ${RUN_STAMP:-}
+      JTREG_CONCURRENCY: ${JTREG_CONCURRENCY:-4}
+      JTREG_TIMEOUT_FACTOR: ${JTREG_TIMEOUT_FACTOR:-2}
+      SKIP_JTREG: ${SKIP_JTREG:-nao}
+      SKIP_JCOV: ${SKIP_JCOV:-nao}
+      SKIP_SMELLS: ${SKIP_SMELLS:-nao}
+    volumes: *common-volumes
+    working_dir: /data
+    command: bash /data/scripts/run-overnight-pipeline.sh

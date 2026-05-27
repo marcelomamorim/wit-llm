@@ -34,6 +34,9 @@ const (
 
 var jdkGlobalExcludes = []string{
 	".git",
+	".github",
+	".idea",
+	".jcheck",
 	".gradle",
 	"build",
 	"builds",
@@ -42,6 +45,10 @@ var jdkGlobalExcludes = []string{
 	"images",
 	"support",
 	"test-results",
+	"jtreg-work-jdk",
+	"jtreg-report-jdk",
+	"jtreg-work",
+	"jtreg-report",
 }
 
 type metadadosWITJDK struct {
@@ -214,6 +221,12 @@ func (s *Servico) AvaliarEstudoJDKGlobal(cfg *dominio.ConfigAplicacao, generatio
 	variantes[1].InputTokens = witGeneration.InputTokens
 	variantes[1].OutputTokens = witGeneration.OutputTokens
 	variantes[1].EstimatedCost = witGeneration.EstimatedCost
+	witUsado, witAdaptado, witDescartado, witTotal, witTaxa := agregarExpathsGeracao(witGeneration.ArquivosTeste)
+	variantes[1].ExpathUsado = witUsado
+	variantes[1].ExpathAdaptado = witAdaptado
+	variantes[1].ExpathDescartado = witDescartado
+	variantes[1].ExpathTotal = witTotal
+	variantes[1].TaxaUtilizacaoExpath = witTaxa
 	variantes[2].CaminhoGeracao = directGenerationPath
 	variantes[2].QuantidadeTestes = len(directGeneration.ArquivosTeste)
 	variantes[2].InputTokens = directGeneration.InputTokens
@@ -241,6 +254,7 @@ func (s *Servico) AvaliarEstudoJDKGlobal(cfg *dominio.ConfigAplicacao, generatio
 		CaminhoManifestCSV:      preparation.CaminhoManifestCSV,
 		CaminhoResumoCSV:        filepath.Join(runDir, "results_jdk_global_impact_summary.csv"),
 		CaminhoComparacaoCSV:    filepath.Join(runDir, "results_jdk_global_impact_comparison.csv"),
+		CaminhoStatsGeracaoCSV:  filepath.Join(runDir, "results_jdk_global_generation_stats.csv"),
 		Variantes:               variantes,
 	}
 	reportPath := filepath.Join(runDir, "results_jdk_global_impact.json")
@@ -253,7 +267,10 @@ func (s *Servico) AvaliarEstudoJDKGlobal(cfg *dominio.ConfigAplicacao, generatio
 	if err := escreverComparacaoJDKGlobalCSV(report.CaminhoComparacaoCSV, report); err != nil {
 		return dominio.RelatorioJDKGlobal{}, "", err
 	}
-	registro.Info("jdk-global", "avaliação global concluída artefato=%s", reportPath)
+	if err := escreverStatsGeracaoJDKGlobalCSV(report.CaminhoStatsGeracaoCSV, report); err != nil {
+		return dominio.RelatorioJDKGlobal{}, "", err
+	}
+	registro.Info("jdk-global", "avaliação global concluída artefato=%s stats=%s", reportPath, report.CaminhoStatsGeracaoCSV)
 	return report, reportPath, nil
 }
 
@@ -701,21 +718,43 @@ func escreverComparacaoJDKGlobalCSV(path string, report dominio.RelatorioJDKGlob
 	defer file.Close()
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
-	if err := writer.Write([]string{"metric", "baseline", "wit_context", "direct_tests", "delta_wit_minus_baseline", "delta_direct_minus_baseline", "delta_wit_minus_direct"}); err != nil {
+	header := []string{
+		"metric",
+		"baseline", "wit_context", "direct_tests",
+		"delta_wit_minus_baseline", "delta_direct_minus_baseline", "delta_wit_minus_direct",
+	}
+	if err := writer.Write(header); err != nil {
 		return err
 	}
+
 	porVariante := map[string]map[string]*float64{}
+	porVarianteInt := map[string]map[string]int{}
+	witTaxa := (*float64)(nil)
 	for _, variante := range report.Variantes {
 		metricasVariante := map[string]*float64{}
 		for _, metric := range variante.ResultadosMetricas {
 			metricasVariante[metric.Nome] = primeiroNumeroMetricaGlobal(metric.SaidaPadrao)
 		}
 		porVariante[variante.Nome] = metricasVariante
+		porVarianteInt[variante.Nome] = map[string]int{
+			"generated_test_file_count": variante.QuantidadeTestes,
+			"input_tokens":              variante.InputTokens,
+			"output_tokens":             variante.OutputTokens,
+		}
+		if variante.Nome == "wit-context" {
+			witTaxa = variante.TaxaUtilizacaoExpath
+		}
 	}
+
+	// Linhas de métricas externas (jtreg, cobertura, etc.)
+	// Exclui métricas já cobertas pela seção de stats de geração abaixo.
+	statsGeracaoKeys := map[string]bool{"generated_test_file_count": true, "input_tokens": true, "output_tokens": true}
 	nomes := map[string]bool{}
 	for _, metricasVariante := range porVariante {
 		for nome := range metricasVariante {
-			nomes[nome] = true
+			if !statsGeracaoKeys[nome] {
+				nomes[nome] = true
+			}
 		}
 	}
 	ordenados := make([]string, 0, len(nomes))
@@ -739,6 +778,36 @@ func escreverComparacaoJDKGlobalCSV(path string, report dominio.RelatorioJDKGlob
 			return err
 		}
 	}
+
+	// Linhas de stats de geração (test_count, tokens)
+	for _, chave := range []string{"generated_test_file_count", "input_tokens", "output_tokens"} {
+		baseV := intParaFloatPtr(porVarianteInt["baseline"][chave])
+		witV := intParaFloatPtr(porVarianteInt["wit-context"][chave])
+		directV := intParaFloatPtr(porVarianteInt["direct-tests"][chave])
+		if err := writer.Write([]string{
+			chave,
+			formatarFloatOpcional(baseV),
+			formatarFloatOpcional(witV),
+			formatarFloatOpcional(directV),
+			formatarDeltaOpcional(witV, baseV),
+			formatarDeltaOpcional(directV, baseV),
+			formatarDeltaOpcional(witV, directV),
+		}); err != nil {
+			return err
+		}
+	}
+
+	// Linha de taxa de utilização de expaths (só WIT_CONTEXT tem valor)
+	if err := writer.Write([]string{
+		"expath_utilization_rate",
+		"",
+		formatarFloatOpcional(witTaxa),
+		"",
+		"", "", "",
+	}); err != nil {
+		return err
+	}
+
 	return writer.Error()
 }
 
@@ -760,6 +829,11 @@ func primeiroNumeroMetricaGlobal(texto string) *float64 {
 	return nil
 }
 
+func intParaFloatPtr(v int) *float64 {
+	f := float64(v)
+	return &f
+}
+
 func formatarFloatOpcional(valor *float64) string {
 	if valor == nil {
 		return ""
@@ -773,6 +847,71 @@ func formatarDeltaOpcional(esquerda, direita *float64) string {
 	}
 	delta := *esquerda - *direita
 	return strconv.FormatFloat(delta, 'f', 4, 64)
+}
+
+// agregarExpathsGeracao agrega as ações de expath de todos os arquivos gerados.
+func agregarExpathsGeracao(arquivos []dominio.ArquivoTesteGerado) (used, adapted, discarded, total int, taxa *float64) {
+	for _, arquivo := range arquivos {
+		for _, acao := range arquivo.AcoesExpath {
+			total++
+			switch acao.Acao {
+			case "used":
+				used++
+			case "adapted":
+				adapted++
+			case "discarded":
+				discarded++
+			}
+		}
+	}
+	if total > 0 {
+		v := float64(used+adapted) / float64(total)
+		taxa = &v
+	}
+	return
+}
+
+// escreverStatsGeracaoJDKGlobalCSV grava um CSV com uma linha por variante contendo
+// test_count, tokens, custo e utilização de expaths (para WIT_CONTEXT).
+func escreverStatsGeracaoJDKGlobalCSV(path string, report dominio.RelatorioJDKGlobal) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+	header := []string{
+		"variant", "scenario",
+		"generated_test_file_count",
+		"input_tokens", "output_tokens", "estimated_cost_usd",
+		"expath_used", "expath_adapted", "expath_discarded", "expath_total", "expath_utilization_rate",
+	}
+	if err := writer.Write(header); err != nil {
+		return err
+	}
+	for _, v := range report.Variantes {
+		row := []string{
+			v.Nome,
+			v.Cenario,
+			strconv.Itoa(v.QuantidadeTestes),
+			strconv.Itoa(v.InputTokens),
+			strconv.Itoa(v.OutputTokens),
+			formatarFloatOpcional(v.EstimatedCost),
+			strconv.Itoa(v.ExpathUsado),
+			strconv.Itoa(v.ExpathAdaptado),
+			strconv.Itoa(v.ExpathDescartado),
+			strconv.Itoa(v.ExpathTotal),
+			formatarFloatOpcional(v.TaxaUtilizacaoExpath),
+		}
+		if err := writer.Write(row); err != nil {
+			return err
+		}
+	}
+	return writer.Error()
 }
 
 func compactarJSONParaLog(payload interface{}) string {
