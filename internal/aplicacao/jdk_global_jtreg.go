@@ -32,6 +32,9 @@ func (s *Servico) MedirImpactoJDKGlobalComJTReg(runDir, jtregPath, testJDK, java
 	if strings.TrimSpace(runDir) == "" || runDir == "." {
 		return dominio.RelatorioJTRegJDKGlobal{}, "", fmt.Errorf("run-dir é obrigatório")
 	}
+	if absRunDir, err := filepath.Abs(runDir); err == nil {
+		runDir = absRunDir
+	}
 	if strings.TrimSpace(jtregPath) == "" {
 		return dominio.RelatorioJTRegJDKGlobal{}, "", fmt.Errorf("jtreg é obrigatório")
 	}
@@ -53,13 +56,33 @@ func (s *Servico) MedirImpactoJDKGlobalComJTReg(runDir, jtregPath, testJDK, java
 			registro.Info("jdk-global", "alvo base contextual inferido: %s", baseTarget)
 		}
 	}
+	if strings.Contains(coverageCommand, "{jcov_include_mask}") {
+		mask := construirMascaraJCov(runDir)
+		coverageCommand = strings.ReplaceAll(coverageCommand, "{jcov_include_mask}", mask)
+		registro.Info("jdk-global", "jcov_include_mask gerada: %d classes", strings.Count(mask, "|")+1)
+	}
 	variantes := []dominio.ResultadoJTRegJDKGlobal{
 		{Variante: "baseline", Cenario: "BASELINE", RaizProjeto: filepath.Join(runDir, "variants", "baseline")},
 		{Variante: "wit-context", Cenario: string(dominio.CenarioSegundaFaseContextoWIT), RaizProjeto: filepath.Join(runDir, "variants", "wit-context")},
 		{Variante: "direct-tests", Cenario: string(dominio.CenarioSegundaFaseDireto), RaizProjeto: filepath.Join(runDir, "variants", "direct-tests")},
 	}
 	resultados := make([]dominio.ResultadoJTRegJDKGlobal, 0, len(variantes))
+	baselineWorkDir := filepath.Join(runDir, "jtreg-work", "baseline")
 	for _, variante := range variantes {
+		// Para variantes não-baseline, pré-popula extraPropDefns com as classes
+		// compiladas pelo baseline para evitar ClassNotFoundException: requires.VMProps.
+		// O jtreg 7.4 às vezes falha em recompilar VMProps.java em execuções sequenciais
+		// no mesmo JDK-alvo, mas as classes compiladas pelo baseline são reutilizáveis.
+		if variante.Variante != "baseline" {
+			varWorkDir := filepath.Join(runDir, "jtreg-work", variante.Variante)
+			src := filepath.Join(baselineWorkDir, "extraPropDefns")
+			dst := filepath.Join(varWorkDir, "extraPropDefns")
+			if info, err := os.Stat(src); err == nil && info.IsDir() {
+				if err := os.MkdirAll(varWorkDir, 0o755); err == nil {
+					_ = artefatos.CopiarDiretorioFiltrado(src, dst, nil)
+				}
+			}
+		}
 		resultados = append(resultados, executarJTRegVarianteJDKGlobal(variante, runDir, jtregPath, testJDK, javaHome, baseTarget, generatedTarget, coverageCommand, archX8664, timeoutSeconds, concurrency))
 	}
 	report := dominio.RelatorioJTRegJDKGlobal{
@@ -106,7 +129,11 @@ func executarJTRegVarianteJDKGlobal(variante dominio.ResultadoJTRegJDKGlobal, ru
 		return variante
 	}
 	_ = os.RemoveAll(variante.ReportDir)
-	_ = os.RemoveAll(variante.WorkDir)
+	// Preserva extraPropDefns entre rodadas: o jtreg 7.4 falha em recompilar
+	// VMProps.java em execuções subsequentes contra o mesmo JDK-alvo. A primeira
+	// compilação bem-sucedida é reutilizável porque VMProps lê propriedades do JDK
+	// que não mudam entre variantes.
+	limparWorkDirPreservandoExtraPropDefns(variante.WorkDir)
 	if err := os.MkdirAll(variante.ReportDir, 0o755); err != nil {
 		variante.Status = "failed"
 		variante.SaidaErro = err.Error()
@@ -474,4 +501,41 @@ func passRateJDKGlobal(resultado dominio.ResultadoJTRegJDKGlobal) *float64 {
 	}
 	value := float64(resultado.Passou) / float64(resultado.Total) * 100
 	return &value
+}
+
+func limparWorkDirPreservandoExtraPropDefns(workDir string) {
+	entries, err := os.ReadDir(workDir)
+	if err != nil {
+		_ = os.RemoveAll(workDir)
+		return
+	}
+	for _, entry := range entries {
+		if entry.Name() != "extraPropDefns" {
+			_ = os.RemoveAll(filepath.Join(workDir, entry.Name()))
+		}
+	}
+}
+
+// construirMascaraJCov lê o manifesto de preparação do run e devolve uma
+// máscara de inclusão no formato que o JCov 3.0 espera: nomes de classe FQN
+// separados por "|". Cada entrada cobre a classe e seus inner classes
+// (sufixo "$*" não é necessário no formato pipe do JCov 3.0).
+func construirMascaraJCov(runDir string) string {
+	var preparation dominio.RelatorioPreparacaoJDKGlobal
+	if err := artefatos.LerJSON(filepath.Join(runDir, jdkGlobalPreparationFile), &preparation); err != nil {
+		registro.Info("jdk-global", "construirMascaraJCov: não foi possível ler manifesto: %v", err)
+		return ""
+	}
+	seen := map[string]bool{}
+	var classes []string
+	for _, m := range preparation.Metodos {
+		fqn := strings.TrimSpace(m.NomeContainer)
+		if fqn == "" || seen[fqn] {
+			continue
+		}
+		seen[fqn] = true
+		classes = append(classes, fqn)
+	}
+	sort.Strings(classes)
+	return strings.Join(classes, "|")
 }
