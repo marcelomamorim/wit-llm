@@ -49,15 +49,20 @@ type ResultadoMetricaGlobalJDK struct {
 // ResultadoVarianteJDKGlobal representa uma das três variantes do experimento:
 // baseline, WIT_CONTEXT ou DIRECT_TESTS.
 type ResultadoVarianteJDKGlobal struct {
-	Nome               string                      `json:"name"`
-	Cenario            string                      `json:"scenario"`
-	RaizProjeto        string                      `json:"project_root"`
-	CaminhoGeracao     string                      `json:"generation_path,omitempty"`
-	QuantidadeTestes   int                         `json:"generated_test_file_count"`
-	InputTokens        int                         `json:"input_tokens,omitempty"`
-	OutputTokens       int                         `json:"output_tokens,omitempty"`
-	EstimatedCost      *float64                    `json:"estimated_cost,omitempty"`
-	ResultadosMetricas []ResultadoMetricaGlobalJDK `json:"metric_results"`
+	Nome                 string                      `json:"name"`
+	Cenario              string                      `json:"scenario"`
+	RaizProjeto          string                      `json:"project_root"`
+	CaminhoGeracao       string                      `json:"generation_path,omitempty"`
+	QuantidadeTestes     int                         `json:"generated_test_file_count"`
+	InputTokens          int                         `json:"input_tokens,omitempty"`
+	OutputTokens         int                         `json:"output_tokens,omitempty"`
+	EstimatedCost        *float64                    `json:"estimated_cost,omitempty"`
+	ExpathUsado          int                         `json:"expath_used_count,omitempty"`
+	ExpathAdaptado       int                         `json:"expath_adapted_count,omitempty"`
+	ExpathDescartado     int                         `json:"expath_discarded_count,omitempty"`
+	ExpathTotal          int                         `json:"expath_total_count,omitempty"`
+	TaxaUtilizacaoExpath *float64                    `json:"expath_utilization_rate,omitempty"`
+	ResultadosMetricas   []ResultadoMetricaGlobalJDK `json:"metric_results"`
 }
 
 // RelatorioJDKGlobal consolida o estudo de impacto global no projeto-alvo.
@@ -73,6 +78,7 @@ type RelatorioJDKGlobal struct {
 	CaminhoManifestCSV      string                       `json:"manifest_csv_path"`
 	CaminhoResumoCSV        string                       `json:"summary_csv_path"`
 	CaminhoComparacaoCSV    string                       `json:"comparison_csv_path"`
+	CaminhoStatsGeracaoCSV  string                       `json:"generation_stats_csv_path,omitempty"`
 	Variantes               []ResultadoVarianteJDKGlobal `json:"variants"`
 }
 
