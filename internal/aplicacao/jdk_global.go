@@ -34,6 +34,9 @@ const (
 
 var jdkGlobalExcludes = []string{
 	".git",
+	".github",
+	".idea",
+	".jcheck",
 	".gradle",
 	"build",
 	"builds",
@@ -42,6 +45,10 @@ var jdkGlobalExcludes = []string{
 	"images",
 	"support",
 	"test-results",
+	"jtreg-work-jdk",
+	"jtreg-report-jdk",
+	"jtreg-work",
+	"jtreg-report",
 }
 
 type metadadosWITJDK struct {

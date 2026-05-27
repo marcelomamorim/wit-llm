@@ -1,11 +1,14 @@
 package artefatos
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // CopiarDiretorioFiltrado replica uma árvore de diretórios ignorando caminhos
@@ -59,7 +62,16 @@ func CopiarDiretorioFiltrado(origem, destino string, segmentosExcluidos []string
 		if err := os.MkdirAll(filepath.Dir(destinoAtual), 0o755); err != nil {
 			return fmt.Errorf("ao criar diretório de destino %q: %w", filepath.Dir(destinoAtual), err)
 		}
-		return copiarArquivo(caminho, destinoAtual, info.Mode().Perm())
+		if err := copiarArquivo(caminho, destinoAtual, info.Mode().Perm()); err != nil {
+			// Arquivos inacessíveis via bind-mount Docker (ex: nomes com espaço no macOS)
+			// retornam EDEADLK. São duplicatas acidentais — pular sem abortar.
+			if errors.Is(err, syscall.EDEADLK) {
+				slog.Warn("arquivo ignorado (inacessível via bind-mount)", "caminho", caminho)
+				return nil
+			}
+			return err
+		}
+		return nil
 	})
 }
 
@@ -120,7 +132,15 @@ func contemCaminhoExcluido(relativo string, excluidos map[string]struct{}) bool 
 
 // copiarArquivo replica um arquivo individual preservando o modo recebido do
 // diretório de origem.
+//
+// Tenta hardlink primeiro: é instantâneo, não lê conteúdo e não aciona o
+// Gatekeeper do macOS em arquivos com atributo de quarantine. Faz fallback para
+// cópia de conteúdo caso o hardlink falhe (filesystems diferentes, etc.).
 func copiarArquivo(origem, destino string, modo os.FileMode) error {
+	if err := os.Link(origem, destino); err == nil {
+		return nil
+	}
+
 	arquivoOrigem, err := os.Open(origem)
 	if err != nil {
 		return fmt.Errorf("ao abrir arquivo de origem %q: %w", origem, err)
