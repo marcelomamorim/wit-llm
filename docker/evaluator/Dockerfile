@@ -198,7 +198,7 @@ WORKDIR /data
 # Smoke test: java de sistema = 21 (runtime), test-jdk = 11 (testes WIT)
 RUN java -version 2>&1 | grep "21" \
     && /opt/test-jdk/bin/java -version 2>&1 | grep "11" \
-    && witup version \
+    && witup ajuda \
     && python3 -c "import z3; print('z3 ok:', z3.get_version_string())" \
     && python3 -c "import sympy, psutil; print('sympy/psutil ok')" \
     && python3 -c "import openai; print('openai ok:', openai.__version__)"
