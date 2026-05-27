@@ -50,10 +50,12 @@ RUN git clone --branch "${JCOV_TAG}" --depth 1 \
 
 WORKDIR /opt/jcov-src/build
 
-# Compilar apenas os targets necessários: jcov.jar + savers.
-# build-jt.observer (que depende de javatest.jar/jtreg) é intencionalmente
-# omitido — não é necessário para instrumentação e coleta de cobertura.
-RUN ant build-jcov build-file.saver build-network.saver \
+# Compilar target padrão "build".
+# build.properties define javatestjar=javatest.jar por padrão; sem o jar real,
+# build-jt.observer falharia. Passamos javatestjar= (vazio) para que a condição
+# javatest.present não seja setada e build-jt.observer seja pulado via if="javatest.present".
+RUN ant \
+    -Djavatestjar= \
     -Dasm.jar=/tmp/asm/asm.jar \
     -Dasm.tree.jar=/tmp/asm/asm-tree.jar \
     -Dasm.util.jar=/tmp/asm/asm-util.jar
