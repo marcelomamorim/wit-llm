@@ -53,7 +53,7 @@ func executarSubmissaoOpenAIBatch(args []string) int {
 		fmt.Fprintln(os.Stderr, "erro: --config, --model, --requests e --output são obrigatórios")
 		return 2
 	}
-	cfg, err := configuracao.Carregar(*configPath)
+	cfg, err := configuracao.CarregarParaBatch(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "erro: %v\n", err)
 		return 1
@@ -97,7 +97,7 @@ func executarColetaOpenAIBatch(args []string) int {
 		fmt.Fprintln(os.Stderr, "erro: --config, --model, --batch-id e --output-dir são obrigatórios")
 		return 2
 	}
-	cfg, err := configuracao.Carregar(*configPath)
+	cfg, err := configuracao.CarregarParaBatch(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "erro: %v\n", err)
 		return 1

@@ -43,6 +43,41 @@ type configAplicacaoBruta struct {
 	SegundaFase dominio.ConfigSegundaFase       `json:"phase_two"`
 }
 
+// CarregarParaBatch carrega e valida apenas a seção de modelos do arquivo de
+// configuração. Usado por submeter-openai-batch e coletar-openai-batch, que
+// precisam somente das credenciais do modelo e não requerem que a raiz do
+// projeto (tipicamente /opt/openjdk-src dentro do container) exista no host.
+func CarregarParaBatch(caminho string) (*dominio.ConfigAplicacao, error) {
+	caminhoAbsoluto, err := filepath.Abs(caminho)
+	if err != nil {
+		return nil, fmt.Errorf("ao resolver o caminho da configuração: %w", err)
+	}
+	conteudo, err := os.ReadFile(caminhoAbsoluto)
+	if err != nil {
+		return nil, fmt.Errorf("ao ler a configuração %q: %w", caminhoAbsoluto, err)
+	}
+	cfg, err := interpretarConfiguracao(conteudo)
+	if err != nil {
+		return nil, fmt.Errorf("ao interpretar a configuração JSON %q: %w", caminhoAbsoluto, err)
+	}
+	cfg.CaminhoConfig = caminhoAbsoluto
+	if cfg.Versao != "1" {
+		return nil, fmt.Errorf("version %q não suportada; use \"1\"", cfg.Versao)
+	}
+	if len(cfg.Modelos) == 0 {
+		return nil, errors.New("a configuração deve declarar ao menos um modelo em \"models\"")
+	}
+	for chave, modelo := range cfg.Modelos {
+		if strings.TrimSpace(modelo.Modelo) == "" {
+			return nil, fmt.Errorf("models.%s.model é obrigatório", chave)
+		}
+		if strings.TrimSpace(modelo.URLBase) == "" {
+			return nil, fmt.Errorf("models.%s.base_url é obrigatório", chave)
+		}
+	}
+	return cfg, nil
+}
+
 // Carregar carrega, normaliza e valida a configuração JSON da aplicação.
 //
 // O runtime atual é restrito a Java, então os valores padrão apontam
