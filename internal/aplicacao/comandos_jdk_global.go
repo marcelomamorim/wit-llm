@@ -18,13 +18,18 @@ func executarPreparacaoJDKGlobal(args []string, service *Servico) int {
 	witPath := fs.String("wit-analysis", "", "Arquivo wit_filtered.json do JDK")
 	outputDir := fs.String("output-dir", "", "Diretório da rodada")
 	requestsPath := fs.String("requests", "", "Arquivo JSONL Batch a gerar")
+	existingAnalysis := fs.String("existing-analysis", "", "Análise pré-alinhada (analysis_jdk_wit_filtered_sample.json de rodada anterior); pula catálogo+alinhamento")
 	methodCount := fs.Int("method-count", jdkGlobalDefaultMethodCount, "Quantidade de métodos-alvo")
 	workers := fs.Int("workers", runtime.NumCPU(), "Número máximo de workers Go")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *configPath == "" || *jdkRoot == "" || *witPath == "" || *outputDir == "" {
-		fmt.Fprintln(os.Stderr, "erro: --config, --jdk-root, --wit-analysis e --output-dir são obrigatórios")
+	if *configPath == "" || *jdkRoot == "" || *outputDir == "" {
+		fmt.Fprintln(os.Stderr, "erro: --config, --jdk-root e --output-dir são obrigatórios")
+		return 2
+	}
+	if *existingAnalysis == "" && *witPath == "" {
+		fmt.Fprintln(os.Stderr, "erro: --wit-analysis é obrigatório quando --existing-analysis não é fornecido")
 		return 2
 	}
 	cfg, err := configuracao.Carregar(*configPath)
@@ -32,7 +37,7 @@ func executarPreparacaoJDKGlobal(args []string, service *Servico) int {
 		fmt.Fprintf(os.Stderr, "erro: %v\n", err)
 		return 1
 	}
-	report, reportPath, err := service.PrepararEstudoJDKGlobal(cfg, *generationModelKey, *jdkRoot, *witPath, *outputDir, *requestsPath, *methodCount, *workers)
+	report, reportPath, err := service.PrepararEstudoJDKGlobal(cfg, *generationModelKey, *jdkRoot, *witPath, *outputDir, *requestsPath, *existingAnalysis, *methodCount, *workers)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "erro: %v\n", err)
 		return 1

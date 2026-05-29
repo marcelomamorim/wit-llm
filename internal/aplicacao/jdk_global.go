@@ -1,10 +1,12 @@
 package aplicacao
 
 import (
+	"bufio"
 	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,7 +60,13 @@ type metadadosWITJDK struct {
 
 // PrepararEstudoJDKGlobal prepara a amostra, o relatório WIT filtrado e o JSONL
 // Batch para o estudo de impacto global no OpenJDK.
-func (s *Servico) PrepararEstudoJDKGlobal(cfg *dominio.ConfigAplicacao, generationModelKey, jdkRoot, witPath, outputDir, requestsPath string, methodCount, workers int) (dominio.RelatorioPreparacaoJDKGlobal, string, error) {
+//
+// Quando existingAnalysisPath é fornecido (não-vazio), o passo de catálogo e
+// alinhamento WIT é pulado: a análise pré-alinhada é carregada diretamente do
+// arquivo indicado (ex: analysis_jdk_wit_filtered_sample.json de uma rodada
+// anterior). Isso é útil para regenerar o JSONL com novos prompts sem varrer
+// novamente todo o código-fonte do JDK.
+func (s *Servico) PrepararEstudoJDKGlobal(cfg *dominio.ConfigAplicacao, generationModelKey, jdkRoot, witPath, outputDir, requestsPath, existingAnalysisPath string, methodCount, workers int) (dominio.RelatorioPreparacaoJDKGlobal, string, error) {
 	if methodCount <= 0 {
 		methodCount = jdkGlobalDefaultMethodCount
 	}
@@ -78,9 +86,6 @@ func (s *Servico) PrepararEstudoJDKGlobal(cfg *dominio.ConfigAplicacao, generati
 	if info, err := os.Stat(jdkRoot); err != nil || !info.IsDir() {
 		return dominio.RelatorioPreparacaoJDKGlobal{}, "", fmt.Errorf("raiz JDK inválida: %s", jdkRoot)
 	}
-	if info, err := os.Stat(witPath); err != nil || info.IsDir() {
-		return dominio.RelatorioPreparacaoJDKGlobal{}, "", fmt.Errorf("baseline WIT filtrado inválido: %s", witPath)
-	}
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return dominio.RelatorioPreparacaoJDKGlobal{}, "", err
 	}
@@ -92,34 +97,60 @@ func (s *Servico) PrepararEstudoJDKGlobal(cfg *dominio.ConfigAplicacao, generati
 	defer cancelCtxHeartbeat()
 
 	cfgJDK := clonarConfiguracaoJDKGlobal(cfg, jdkRoot, methodCount)
-	registro.Info("jdk-global", "catalogando checkout JDK root=%s workers=%d", jdkRoot, workers)
-	metodosCatalogados, err := s.catalogFactory.NovoCatalogo(cfgJDK.Projeto).Catalogar()
-	if err != nil {
-		return dominio.RelatorioPreparacaoJDKGlobal{}, "", err
-	}
-	progressoHeartbeat.Incrementar()
 
-	baselineReport, err := witup.CarregarAnalise(witPath)
-	if err != nil {
-		return dominio.RelatorioPreparacaoJDKGlobal{}, "", err
+	var baselineAlinhada dominio.RelatorioAnalise
+	var metodosAlvo []dominio.DescritorMetodo
+
+	if strings.TrimSpace(existingAnalysisPath) != "" {
+		// Caminho rápido: carrega análise pré-alinhada, pula catálogo + alinhamento.
+		registro.Info("jdk-global", "carregando análise existente (sem catálogo) path=%s", existingAnalysisPath)
+		if err := artefatos.LerJSON(existingAnalysisPath, &baselineAlinhada); err != nil {
+			return dominio.RelatorioPreparacaoJDKGlobal{}, "", fmt.Errorf("ao carregar análise existente: %w", err)
+		}
+		metodosAlvo = extrairMetodosDasAnalises(baselineAlinhada.Analises)
+		if len(metodosAlvo) == 0 {
+			return dominio.RelatorioPreparacaoJDKGlobal{}, "", fmt.Errorf("análise existente não contém métodos alinhados")
+		}
+		if methodCount > 0 && len(metodosAlvo) > methodCount {
+			metodosAlvo = metodosAlvo[:methodCount]
+			baselineAlinhada.Analises = baselineAlinhada.Analises[:methodCount]
+			baselineAlinhada.TotalMetodos = methodCount
+		}
+		registro.Info("jdk-global", "análise carregada métodos=%d", len(metodosAlvo))
+		progressoHeartbeat.Incrementar() // passo 1 (catálogo) concluído via cache
+		progressoHeartbeat.Incrementar() // passo 2 (alinhamento) concluído via cache
+	} else {
+		// Caminho completo: cataloga o JDK e alinha com WIT.
+		if info, err := os.Stat(witPath); err != nil || info.IsDir() {
+			return dominio.RelatorioPreparacaoJDKGlobal{}, "", fmt.Errorf("baseline WIT filtrado inválido: %s", witPath)
+		}
+		registro.Info("jdk-global", "catalogando checkout JDK root=%s workers=%d", jdkRoot, workers)
+		metodosCatalogados, err := s.catalogFactory.NovoCatalogo(cfgJDK.Projeto).Catalogar()
+		if err != nil {
+			return dominio.RelatorioPreparacaoJDKGlobal{}, "", err
+		}
+		progressoHeartbeat.Incrementar()
+
+		baselineReport, err := witup.CarregarAnalise(witPath)
+		if err != nil {
+			return dominio.RelatorioPreparacaoJDKGlobal{}, "", err
+		}
+		var resumo resumoAlvosWITUP
+		baselineAlinhada, metodosAlvo, resumo = alinharWITUPAoCatalogo(baselineReport, metodosCatalogados, methodCount)
+		if len(metodosAlvo) == 0 {
+			return dominio.RelatorioPreparacaoJDKGlobal{}, "", fmt.Errorf("nenhum método do WIT filtrado alinhou ao checkout JDK atual")
+		}
+		registro.Info("jdk-global", "alinhamento WIT concluído baseline=%d alinhados=%d não_encontrados=%d", resumo.QuantidadeBaseline, resumo.QuantidadeCorrespondidos, resumo.QuantidadeNaoEncontrados)
+		progressoHeartbeat.Incrementar()
 	}
-	baselineAlinhada, metodosAlvo, resumo := alinharWITUPAoCatalogo(baselineReport, metodosCatalogados, methodCount)
-	if len(metodosAlvo) == 0 {
-		return dominio.RelatorioPreparacaoJDKGlobal{}, "", fmt.Errorf("nenhum método do WIT filtrado alinhou ao checkout JDK atual")
-	}
-	registro.Info("jdk-global", "alinhamento WIT concluído baseline=%d alinhados=%d não_encontrados=%d", resumo.QuantidadeBaseline, resumo.QuantidadeCorrespondidos, resumo.QuantidadeNaoEncontrados)
-	progressoHeartbeat.Incrementar()
 
 	analysisPath := filepath.Join(outputDir, jdkGlobalAnalysisFile)
 	if err := artefatos.EscreverJSON(analysisPath, baselineAlinhada); err != nil {
 		return dominio.RelatorioPreparacaoJDKGlobal{}, "", err
 	}
 	overview := overviewJDKGlobal()
-	linhas, err := construirLinhasBatchJDKGlobalParalelo(cfgJDK, model, generationModelKey, overview, baselineAlinhada, metodosAlvo, workers)
+	nLinhas, err := escreverLinhasBatchJDKGlobalStreamar(cfgJDK, model, overview, baselineAlinhada, metodosAlvo, requestsPath)
 	if err != nil {
-		return dominio.RelatorioPreparacaoJDKGlobal{}, "", err
-	}
-	if err := llm.EscreverJSONLBatch(requestsPath, linhas); err != nil {
 		return dominio.RelatorioPreparacaoJDKGlobal{}, "", err
 	}
 	progressoHeartbeat.Incrementar()
@@ -129,9 +160,12 @@ func (s *Servico) PrepararEstudoJDKGlobal(cfg *dominio.ConfigAplicacao, generati
 	if err := escreverManifestJDKGlobal(manifestPath, metodos); err != nil {
 		return dominio.RelatorioPreparacaoJDKGlobal{}, "", err
 	}
-	metadata, err := carregarMetadadosWITJDK(witPath)
-	if err != nil {
-		return dominio.RelatorioPreparacaoJDKGlobal{}, "", err
+	var metadata metadadosWITJDK
+	if strings.TrimSpace(witPath) != "" {
+		metadata, err = carregarMetadadosWITJDK(witPath)
+		if err != nil {
+			return dominio.RelatorioPreparacaoJDKGlobal{}, "", err
+		}
 	}
 	report := dominio.RelatorioPreparacaoJDKGlobal{
 		IDExecucao:              filepath.Base(outputDir),
@@ -145,7 +179,7 @@ func (s *Servico) PrepararEstudoJDKGlobal(cfg *dominio.ConfigAplicacao, generati
 		AnaliseMetodoSecundaria: true,
 		QuantidadeMetodos:       len(metodos),
 		QuantidadeExpaths:       contarCaminhosAnalises(baselineAlinhada.Analises),
-		QuantidadeRequests:      len(linhas),
+		QuantidadeRequests:      nLinhas,
 		ChaveModeloGeracao:      generationModelKey,
 		CaminhoAnalise:          analysisPath,
 		CaminhoManifestCSV:      manifestPath,
@@ -451,6 +485,135 @@ func construirLinhasBatchJDKGlobalDiretasPorMetodo(cfg *dominio.ConfigAplicacao,
 
 func customIDJDKGlobalPorMetodo(cenario string, metodo dominio.DescritorMetodo) string {
 	return fmt.Sprintf("%s/%s/%s/%s", artefatos.Slugificar(jdkGlobalProjectKey), cenario, artefatos.Slugificar(metodo.NomeContainer), artefatos.Slugificar(metodo.IDMetodo))
+}
+
+
+// escreverLinhasBatchJDKGlobalStreamar constrói as linhas de requisição Batch para
+// os dois cenários (wit-context e direct-tests) em paralelo, gravando diretamente
+// em arquivos temporários sem acumular as linhas em memória.
+// Ao final, mescla os dois arquivos temporários no outputPath.
+func escreverLinhasBatchJDKGlobalStreamar(cfg *dominio.ConfigAplicacao, model dominio.ConfigModelo, overview string, analysis dominio.RelatorioAnalise, metodos []dominio.DescritorMetodo, outputPath string) (int, error) {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return 0, fmt.Errorf("ao criar diretório do JSONL Batch: %w", err)
+	}
+	dir := filepath.Dir(outputPath)
+	tmpWIT, err := os.CreateTemp(dir, "jdk-batch-wit-*.jsonl")
+	if err != nil {
+		return 0, fmt.Errorf("ao criar arquivo temporário WIT: %w", err)
+	}
+	defer os.Remove(tmpWIT.Name())
+	defer tmpWIT.Close()
+
+	tmpDirect, err := os.CreateTemp(dir, "jdk-batch-direct-*.jsonl")
+	if err != nil {
+		return 0, fmt.Errorf("ao criar arquivo temporário direto: %w", err)
+	}
+	defer os.Remove(tmpDirect.Name())
+	defer tmpDirect.Close()
+
+	// WIT primeiro: popula o cache de arquivos-fonte para os 736 arquivos únicos.
+	// Direct em seguida: todos os acessos ao cache são hits — zero I/O de disco.
+	// Execução sequencial é mais eficiente que paralela sob pressão de memória,
+	// pois elimina a disputa simultânea por páginas do compressor macOS.
+	nWIT, errWIT := escreverLinhasBatchWITParaWriter(cfg, model, overview, analysis, tmpWIT)
+	if errWIT != nil {
+		return 0, errWIT
+	}
+	nDirect, errDirect := escreverLinhasBatchDiretasParaWriter(cfg, model, overview, metodos, tmpDirect)
+	if errDirect != nil {
+		return 0, errDirect
+	}
+
+	out, err := os.Create(outputPath)
+	if err != nil {
+		return 0, fmt.Errorf("ao criar arquivo de saída JSONL: %w", err)
+	}
+	defer out.Close()
+
+	if _, err := tmpWIT.Seek(0, 0); err != nil {
+		return 0, fmt.Errorf("ao rebobinar arquivo WIT: %w", err)
+	}
+	if _, err := tmpDirect.Seek(0, 0); err != nil {
+		return 0, fmt.Errorf("ao rebobinar arquivo direct: %w", err)
+	}
+
+	bw := bufio.NewWriterSize(out, 1<<20)
+	if _, err := io.Copy(bw, tmpWIT); err != nil {
+		return 0, fmt.Errorf("ao copiar WIT para saída: %w", err)
+	}
+	if _, err := io.Copy(bw, tmpDirect); err != nil {
+		return 0, fmt.Errorf("ao copiar direct para saída: %w", err)
+	}
+	if err := bw.Flush(); err != nil {
+		return 0, fmt.Errorf("ao finalizar escrita do JSONL: %w", err)
+	}
+
+	return nWIT + nDirect, nil
+}
+
+func escreverLinhasBatchWITParaWriter(cfg *dominio.ConfigAplicacao, model dominio.ConfigModelo, overview string, analysis dominio.RelatorioAnalise, w io.Writer) (int, error) {
+	analysis = filtrarAnalisesParte2(analysis)
+	analises := append([]dominio.AnaliseMetodo{}, analysis.Analises...)
+	sort.Slice(analises, func(i, j int) bool {
+		return analises[i].Metodo.IDMetodo < analises[j].Metodo.IDMetodo
+	})
+	enc := json.NewEncoder(w)
+	seen := map[string]bool{}
+	for _, analise := range analises {
+		containerName := analise.Metodo.NomeContainer
+		methodsPayload := []dominio.AnaliseMetodo{analise}
+		contextoComum := construirContextoGeracaoTestes(cfg.Projeto, containerName, extrairMetodosDasAnalises(methodsPayload))
+		linha, err := llm.ConstruirLinhaBatchResponses(
+			customIDJDKGlobalPorMetodo("wit-context", analise.Metodo),
+			model,
+			construirPromptGeracaoSistema(resolverFrameworkTestes(cfg.Projeto)),
+			construirPromptGeracaoUsuario(overview, containerName, methodsPayload, contextoComum),
+			dominio.OpcoesRequisicaoLLM{PromptCacheKey: construirPromptCacheKey(identificarProjeto(cfg), "generation", analise.Metodo.IDMetodo)},
+		)
+		if err != nil {
+			return 0, err
+		}
+		if seen[linha.CustomID] {
+			return 0, fmt.Errorf("custom_id duplicado WIT: %s", linha.CustomID)
+		}
+		seen[linha.CustomID] = true
+		if err := enc.Encode(linha); err != nil {
+			return 0, fmt.Errorf("ao codificar linha WIT %s: %w", linha.CustomID, err)
+		}
+	}
+	return len(analises), nil
+}
+
+func escreverLinhasBatchDiretasParaWriter(cfg *dominio.ConfigAplicacao, model dominio.ConfigModelo, overview string, metodos []dominio.DescritorMetodo, w io.Writer) (int, error) {
+	ordenados := append([]dominio.DescritorMetodo{}, metodos...)
+	sort.Slice(ordenados, func(i, j int) bool {
+		return ordenados[i].IDMetodo < ordenados[j].IDMetodo
+	})
+	enc := json.NewEncoder(w)
+	seen := map[string]bool{}
+	for _, metodo := range ordenados {
+		containerName := metodo.NomeContainer
+		methodsPayload := []dominio.DescritorMetodo{metodo}
+		contextoComum := construirContextoGeracaoTestes(cfg.Projeto, containerName, methodsPayload)
+		linha, err := llm.ConstruirLinhaBatchResponses(
+			customIDJDKGlobalPorMetodo("direct-tests", metodo),
+			model,
+			construirPromptGeracaoDiretaSistema(resolverFrameworkTestes(cfg.Projeto)),
+			construirPromptGeracaoDiretaUsuario(overview, containerName, methodsPayload, contextoComum),
+			dominio.OpcoesRequisicaoLLM{PromptCacheKey: construirPromptCacheKey(identificarProjeto(cfg), "direct-generation", metodo.IDMetodo)},
+		)
+		if err != nil {
+			return 0, err
+		}
+		if seen[linha.CustomID] {
+			return 0, fmt.Errorf("custom_id duplicado direct: %s", linha.CustomID)
+		}
+		seen[linha.CustomID] = true
+		if err := enc.Encode(linha); err != nil {
+			return 0, fmt.Errorf("ao codificar linha direct %s: %w", linha.CustomID, err)
+		}
+	}
+	return len(ordenados), nil
 }
 
 func materializarGeracaoBatchJDKGlobalWITPorMetodo(cfg *dominio.ConfigAplicacao, model dominio.ConfigModelo, generationModelKey, overview string, analysisReport dominio.RelatorioAnalise, analysisPath string, resultadosBatch map[string]llm.LinhaResultadoBatch, workspace *artefatos.EspacoTrabalho) (dominio.RelatorioGeracao, string, error) {
