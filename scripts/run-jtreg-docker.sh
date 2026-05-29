@@ -72,6 +72,7 @@ run_jtreg_generated() {
     -conc:"${CONCURRENCY}" \
     -timeout:"${TIMEOUT_FACTOR}" \
     -verbose:fail \
+    -javacoption:-encoding -javacoption:UTF-8 \
     "${generated_dir}" 2>&1 | tee "${log_file}"
   local jtreg_exit=$?
   set -e
