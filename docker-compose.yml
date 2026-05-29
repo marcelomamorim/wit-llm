@@ -123,6 +123,23 @@ services:
       SKIP_JTREG: ${SKIP_JTREG:-nao}
       SKIP_JCOV: ${SKIP_JCOV:-nao}
       SKIP_SMELLS: ${SKIP_SMELLS:-nao}
-    volumes: *common-volumes
+      JCOV_VARIANT: ${JCOV_VARIANT:-}
+    volumes:
+      - ./generated:/data/generated
+      - ./scripts:/data/scripts
     working_dir: /data
     command: bash /data/scripts/run-overnight-pipeline.sh
+
+  # ── Baseline JCov: mede cobertura de branch do tier1+tier2 existente ─────────
+  # JDK OBRIGATÓRIA: da75f3c4 (JDK 11+28) — mesma versão do artigo WIT.
+  # Saída: generated/experiments/${EXPERIMENT_DIR}/${RUN_STAMP}/jcov-baseline/
+  jcov-baseline:
+    image: witup-llm/evaluator:latest
+    environment:
+      EXPERIMENT_DIR: ${EXPERIMENT_DIR:-jdk-global-impact-study}
+      RUN_STAMP: ${RUN_STAMP:-}
+    volumes:
+      - ./generated:/data/generated
+      - ./scripts:/data/scripts
+    working_dir: /data
+    command: bash /data/scripts/run-jcov-baseline-docker.sh
