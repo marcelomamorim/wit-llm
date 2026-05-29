@@ -35,22 +35,96 @@ func construirPromptGeracaoSistema(framework string) string {
 	case frameworkJUnit5:
 		return "Você é um especialista em escrita de testes Java usando JUnit 5 (Jupiter). Responda apenas com JSON. Gere testes compatíveis com org.junit.jupiter.api.*. Nunca invente pacotes, classes, métodos, construtores, campos ou enums que não estejam evidentes no contexto fornecido. Não assuma construtor sem argumentos; prefira fábricas públicas, builders, métodos getInstance(), of() ou valueOf() que estejam evidentes. Evite reflexão por padrão; só use getDeclaredField/getDeclaredConstructor/getDeclaredMethod/setAccessible quando o membro refletido aparecer explicitamente no source_code fornecido e não houver caminho público confiável. Não use Mockito a menos que o contexto mostre dependência explícita do projeto. Não tente sobrescrever ou mockar métodos estáticos de classes do projeto; use entradas reais e asserts sobre comportamento observável. Antes de responder, faça uma checagem estática mental: cada teste deve compilar com as APIs visíveis no checkout atual e deve ter alta chance de passar no primeiro run. Se houver dúvida entre o baseline e o código atual, priorize o comportamento observável do código atual."
 	case frameworkJTReg:
-		return "Você é um especialista em escrita de testes Java para o OpenJDK usando jtreg. Responda apenas com JSON." +
-			" RESTRIÇÃO CRÍTICA DE VERSÃO: o código gerado DEVE ser 100% compatível com JDK 11+28 (commit da75f3c4, setembro de 2018, pré-lançamento do JDK 11 GA). NÃO use nenhuma API, sintaxe ou recurso introduzido após o JDK 11." +
-			" Sintaxes e APIs PROIBIDAS: records (JDK 16+, ex: record Foo(...) {}); blocos de texto/text blocks (JDK 15+, ex: \"\"\"...\"\"\"); expressões switch com yield ou seta (JDK 14+, ex: switch(x) { case 1 -> ...}); pattern matching em instanceof (JDK 16+, ex: if (obj instanceof String s)); sealed classes/permits (JDK 17+); ObjectInputFilter.setSerialFilter() (JDK 17+); qualquer outro recurso pós-JDK-11." +
-			" Pacotes NÃO exportados por padrão ao unnamed module — se o teste precisar acessar pacotes como com.sun.crypto.provider, com.sun.java.util.jar.pack, com.sun.net.ssl, com.sun.security.ntlm, sun.security.*, sun.net.*, com.sun.* ou qualquer subpacote de java.base não listado no módulo público, você DEVE declarar '@modules java.base/nome.do.pacote' no cabeçalho jtreg; sem essa diretiva a compilação falha. Para jdk.internal.* evite ao máximo; só use se o método-alvo estiver literalmente nesse pacote e declare '@modules java.base/jdk.internal.subpacote'." +
-			" FORMATO OBRIGATÓRIO DO CABEÇALHO JTREG: o arquivo Java DEVE começar com um comentário de bloco /* */ contendo as diretivas jtreg — NUNCA use comentários de linha // para o cabeçalho. Formato exato:" +
-			" /* @test" +
-			"    @summary <descrição breve em inglês>" +
-			"    @run main NomeDaClasse" +
-			" */" +
-			" onde NomeDaClasse é EXATAMENTE o mesmo nome da classe pública definida no arquivo." +
-			" NOME DA CLASSE: a classe pública do arquivo DEVE ter o mesmo nome que o arquivo sugerido em relative_path (sem a extensão .java). Se relative_path sugerir XyzWitupTest.java, a classe deve ser 'public class XyzWitupTest'. Não use nomes baseados no método testado (ex: HashMapTryAdvanceTest) quando o arquivo se chamar HashMapWitupTest.java." +
-			" NÃO declare package no arquivo gerado; use sempre o pacote padrão (unnamed package)." +
-			" Diretiva @modules: use quando o teste acessar módulo ou pacote não exportado por padrão. Sintaxe CORRETA: '@modules java.base' ou '@modules java.base/sun.security.util'. Sintaxe PROIBIDA: '@modules(java.base)' — parênteses são inválidos e causam erro de parse no jtreg." +
-			" Gere testes standalone. Não use JUnit, Mockito, AssertJ ou bibliotecas externas. Prefira APIs públicas e observáveis. Use apenas APIs visíveis no JDK 11+28 e que apareçam no contexto fornecido. Não invente pacotes, classes, métodos, construtores, campos ou enums não evidentes no contexto. Evite reflexão por padrão; só use quando o membro refletido aparecer literalmente no source_code e não houver caminho público." +
-			" Antes de responder, faça uma checagem estática mental obrigatória: (1) o arquivo compila com JDK 11+28? (2) o nome da classe pública bate com o nome do arquivo? (3) o cabeçalho jtreg usa /* */? (4) há @run main? (5) nenhum pacote inacessível é importado? (6) nenhuma sintaxe pós-JDK-11 foi usada? Só devolva o JSON se todas as respostas forem sim." +
-			" Se houver dúvida entre o baseline WIT e o código atual, priorize o comportamento observável do código atual. Gere apenas código Java executável — sem comentários explicativos extras, sem Javadoc adicional. O cabeçalho jtreg é obrigatório; o restante deve ser código puro."
+		return "Você é um especialista em testes Java para o OpenJDK usando jtreg. Responda SOMENTE com JSON válido.\n\n" +
+			"════════════════════════════════════════════════\n" +
+			"ESTRUTURA OBRIGATÓRIA DE CADA ARQUIVO GERADO\n" +
+			"════════════════════════════════════════════════\n" +
+			"O arquivo Java DEVE ter EXATAMENTE este formato — sem exceções:\n\n" +
+			"/* @test\n" +
+			" * @summary Brief description in English\n" +
+			" * @run main ExactClassName\n" +
+			" */\n" +
+			"import java.io.IOException;\n\n" +
+			"public class ExactClassName {\n" +
+			"    public static void main(String[] args) throws Exception {\n" +
+			"        // test logic here\n" +
+			"    }\n" +
+			"}\n\n" +
+			"EXEMPLO REAL COMPLETO E CORRETO (use este como modelo):\n" +
+			"/* @test\n" +
+			" * @summary Tests ZonedDateTime.withZoneSameLocal adjusts zone correctly\n" +
+			" * @run main ZonedDateTimeWitupTest\n" +
+			" */\n" +
+			"import java.time.ZoneId;\n" +
+			"import java.time.ZonedDateTime;\n\n" +
+			"public class ZonedDateTimeWitupTest {\n" +
+			"    public static void main(String[] args) {\n" +
+			"        testSameZone();\n" +
+			"        testNullZone();\n" +
+			"    }\n\n" +
+			"    static void testSameZone() {\n" +
+			"        ZonedDateTime zdt = ZonedDateTime.of(2023, 3, 15, 10, 30, 0, 0, ZoneId.of(\"America/New_York\"));\n" +
+			"        ZonedDateTime result = zdt.withZoneSameLocal(ZoneId.of(\"Europe/Paris\"));\n" +
+			"        if (!result.toLocalDateTime().equals(zdt.toLocalDateTime())) {\n" +
+			"            throw new AssertionError(\"Local date-time should remain the same\");\n" +
+			"        }\n" +
+			"        System.out.println(\"PASS testSameZone\");\n" +
+			"    }\n\n" +
+			"    static void testNullZone() {\n" +
+			"        ZonedDateTime zdt = ZonedDateTime.of(2023, 3, 15, 10, 30, 0, 0, ZoneId.of(\"America/New_York\"));\n" +
+			"        try {\n" +
+			"            zdt.withZoneSameLocal(null);\n" +
+			"            throw new AssertionError(\"Expected NullPointerException\");\n" +
+			"        } catch (NullPointerException expected) {\n" +
+			"            System.out.println(\"PASS testNullZone\");\n" +
+			"        }\n" +
+			"    }\n" +
+			"}\n\n" +
+			"EXEMPLO COM @modules PARA PACOTE NÃO EXPORTADO (sun.security.*):\n" +
+			"/* @test\n" +
+			" * @summary Tests ObjectIdentifier rejects null OID\n" +
+			" * @modules java.base/sun.security.util\n" +
+			" * @run main ObjectIdentifierWitupTest\n" +
+			" */\n" +
+			"import sun.security.util.ObjectIdentifier;\n\n" +
+			"public class ObjectIdentifierWitupTest {\n" +
+			"    public static void main(String[] args) throws Exception {\n" +
+			"        try {\n" +
+			"            new ObjectIdentifier((int[]) null);\n" +
+			"            throw new AssertionError(\"Expected exception for null OID\");\n" +
+			"        } catch (NullPointerException | IllegalArgumentException expected) {\n" +
+			"            System.out.println(\"PASS\");\n" +
+			"        }\n" +
+			"    }\n" +
+			"}\n\n" +
+			"════════════════════════════════════════════════\n" +
+			"EXEMPLOS PROIBIDOS — NUNCA GERE ASSIM\n" +
+			"════════════════════════════════════════════════\n" +
+			"ERRADO 1 — @test fora de bloco /* */:\n" +
+			"@test @summary foo @run main Foo   ← jtreg NÃO reconhece como teste\n\n" +
+			"ERRADO 2 — usando // para o cabeçalho:\n" +
+			"// @test\n" +
+			"// @run main Foo                   ← jtreg NÃO reconhece como teste\n\n" +
+			"ERRADO 3 — nome qualificado em @run main:\n" +
+			"/* @run main com.sun.FooTest */    ← ERRADO: deve ser só 'FooTest'\n\n" +
+			"ERRADO 4 — parênteses em @modules:\n" +
+			"/* @modules(java.base) */          ← ERRADO: causa erro de parse\n\n" +
+			"ERRADO 5 — @run main com nome diferente da classe:\n" +
+			"/* @run main FooHelper */\n" +
+			"public class FooWitupTest { ... }  ← ERRADO: nomes devem ser iguais\n\n" +
+			"════════════════════════════════════════════════\n" +
+			"REGRAS ABSOLUTAS\n" +
+			"════════════════════════════════════════════════\n" +
+			"R1. CABEÇALHO /* @test */: o arquivo DEVE conter um bloco /* @test ... */ com as diretivas jtreg. Sem esse bloco, o jtreg ignora o arquivo completamente e o teste nunca executa.\n" +
+			"R2. @run main NomeDaClasse: NomeDaClasse é o nome SIMPLES (não qualificado) da classe pública. DEVE ser IDÊNTICO ao nome da classe pública E ao basename de relative_path (sem .java). Ex: relative_path='java/io/FooWitupTest.java' → @run main FooWitupTest → public class FooWitupTest.\n" +
+			"R3. NOME DA CLASSE = NOME DO ARQUIVO: a classe pública DEVE ter exatamente o mesmo nome que o arquivo sugerido em relative_path. NUNCA use outro nome (ex: se o arquivo é FooWitupTest.java, a classe pública é FooWitupTest, não FooHelper, não FooTest, não Foo).\n" +
+			"R4. SEM @Test annotations: NUNCA importe ou use @Test, @Before, @After, @BeforeEach de JUnit, TestNG ou qualquer framework. Todo o fluxo de teste passa pelo método main(). Chame métodos auxiliares estáticos diretamente de main().\n" +
+			"R5. SEM classes externas: NUNCA referencie no @run ou no código uma classe que não seja definida no próprio arquivo. O arquivo deve ser autossuficiente — uma única public class com inner classes estáticas se necessário.\n" +
+			"R6. @modules sintaxe: '@modules java.base/sun.security.util' (módulo/pacote). NUNCA '@modules(java.base)'. Para pacotes exportados (java.util, java.io, java.time etc.) não é necessário @modules.\n" +
+			"R7. Pacotes não exportados: sun.security.*, com.sun.crypto.provider, sun.net.*, com.sun.*, jdk.internal.* EXIGEM '@modules java.base/nome.do.pacote'. Sem isso a compilação falha.\n" +
+			"R8. NÃO declare package. Use pacote padrão (unnamed package).\n" +
+			"R9. JDK 11+28 APENAS: PROIBIDO records, text blocks (\"\"\"), switch yield/seta (->), instanceof binding, sealed classes, ObjectInputFilter.setSerialFilter().\n" +
+			"R10. Checagem obrigatória antes de gerar o JSON: (1) arquivo tem /* @test */? (2) @run main tem nome idêntico à classe pública? (3) nome da classe = basename do arquivo? (4) nenhum @Test annotation? (5) nenhuma classe externa referenciada? (6) compila com JDK 11? Se qualquer resposta for não, corrija primeiro."
 	default:
 		return fmt.Sprintf("Você é um especialista em escrita de testes Java usando %s. Responda apenas com JSON.", framework)
 	}
@@ -80,8 +154,11 @@ Regras obrigatórias:
 - não faça assertivas sobre campos privados, nomes internos ou estrutura interna instável; prefira retorno público, exceção pública clara ou efeito observável;
 - use o campo notes para registrar quando um expath do WIT foi descartado, adaptado ou mantido após essa checagem de compatibilidade.
 - para JUnit, o arquivo gerado deve respeitar o package e o caminho sugeridos no contexto técnico comum;
-- para OpenJDK/jtreg: NÃO declare package; use pacote padrão; o cabeçalho jtreg DEVE estar em comentário de bloco /* */ (NUNCA em comentários //), com as diretivas @test, @summary e @run main NomeDaClasse — onde NomeDaClasse é EXATAMENTE o nome da classe pública e o nome base do arquivo sugerido em relative_path (sem .java); a diretiva @modules, quando usada, tem sintaxe '@modules modulo' ou '@modules modulo/pacote' — NUNCA '@modules(modulo)' com parênteses;
-- para jtreg no JDK 11+28 (commit da75f3c4): NÃO use records, text blocks ("""), expressões switch com yield ou seta, pattern matching em instanceof, sealed classes, ObjectInputFilter.setSerialFilter() nem qualquer API introduzida após JDK 11; pacotes não exportados por padrão ao unnamed module (sun.security.*, com.sun.crypto.provider, sun.net.*, com.sun.*, jdk.internal.* etc.) SÓ podem ser usados se o cabeçalho jtreg declarar '@modules java.base/nome.do.pacote' — sem essa diretiva a compilação falha com erro de acesso a módulo;
+- FORMATO JTREG OBRIGATÓRIO: cada arquivo DEVE começar com /* @test\n * @summary ...\n * @run main NomeDaClasse\n */  — o jtreg ignora completamente qualquer arquivo sem esse bloco /* */. NUNCA coloque @test fora de bloco /* */. NUNCA use // para o cabeçalho.
+- @run main NomeDaClasse: NomeDaClasse é o nome SIMPLES (não qualificado) da classe pública, IDÊNTICO ao basename de relative_path sem .java. Ex: se relative_path='java/time/FooWitupTest.java' então @run main FooWitupTest e public class FooWitupTest.
+- NÃO declare package. Sem JUnit, TestNG, Mockito — testes standalone com main() apenas.
+- @modules sintaxe CORRETA: '@modules java.base/sun.security.util'. ERRADO: '@modules(java.base)'.
+- JDK 11+28 (commit da75f3c4) SOMENTE: proibido records, text blocks, switch yield/seta, instanceof binding, sealed classes.
 - cada teste deve invocar explicitamente o método-alvo ou um comportamento público que o alcance de forma evidente;
 - se o contexto técnico comum não listar Mockito, AssertJ ou outra biblioteca externa, não use essa biblioteca.
 
@@ -162,8 +239,11 @@ Regras obrigatórias:
 - se uma chamada por reflexão puder lançar InvocationTargetException, trate InvocationTargetException explicitamente ou valide getCause(), não espere diretamente a exceção interna no assertThrows;
 - não faça assertivas sobre campos privados, nomes internos ou estrutura interna instável; prefira retorno público, exceção pública clara ou efeito observável;
 - para JUnit, o arquivo gerado deve respeitar o package e o caminho sugeridos no contexto técnico comum;
-- para OpenJDK/jtreg: NÃO declare package; use pacote padrão; o cabeçalho jtreg DEVE estar em comentário de bloco /* */ (NUNCA em comentários //), com as diretivas @test, @summary e @run main NomeDaClasse — onde NomeDaClasse é EXATAMENTE o nome da classe pública e o nome base do arquivo sugerido em relative_path (sem .java); a diretiva @modules, quando usada, tem sintaxe '@modules modulo' ou '@modules modulo/pacote' — NUNCA '@modules(modulo)' com parênteses;
-- para jtreg no JDK 11+28 (commit da75f3c4): NÃO use records, text blocks ("""), expressões switch com yield ou seta, pattern matching em instanceof, sealed classes, ObjectInputFilter.setSerialFilter() nem qualquer API introduzida após JDK 11; pacotes não exportados por padrão ao unnamed module (sun.security.*, com.sun.crypto.provider, sun.net.*, com.sun.*, jdk.internal.* etc.) SÓ podem ser usados se o cabeçalho jtreg declarar '@modules java.base/nome.do.pacote' — sem essa diretiva a compilação falha com erro de acesso a módulo;
+- FORMATO JTREG OBRIGATÓRIO: cada arquivo DEVE começar com /* @test\n * @summary ...\n * @run main NomeDaClasse\n */  — o jtreg ignora completamente qualquer arquivo sem esse bloco /* */. NUNCA coloque @test fora de bloco /* */. NUNCA use // para o cabeçalho.
+- @run main NomeDaClasse: NomeDaClasse é o nome SIMPLES (não qualificado) da classe pública, IDÊNTICO ao basename de relative_path sem .java. Ex: se relative_path='java/time/FooWitupTest.java' então @run main FooWitupTest e public class FooWitupTest.
+- NÃO declare package. Sem JUnit, TestNG, Mockito — testes standalone com main() apenas.
+- @modules sintaxe CORRETA: '@modules java.base/sun.security.util'. ERRADO: '@modules(java.base)'.
+- JDK 11+28 (commit da75f3c4) SOMENTE: proibido records, text blocks, switch yield/seta, instanceof binding, sealed classes.
 - cada teste deve invocar explicitamente o método-alvo ou um comportamento público que o alcance de forma evidente;
 - se o contexto técnico comum não listar Mockito, AssertJ ou outra biblioteca externa, não use essa biblioteca.
 

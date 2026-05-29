@@ -105,7 +105,9 @@ services:
     image: witup-llm/evaluator:latest
     environment:
       <<: *common-env
-    volumes: *common-volumes
+    volumes:
+      - ./generated:/data/generated
+      - ./scripts:/data/scripts
     working_dir: /data
     command: bash /data/scripts/run-evaluate-docker.sh
 

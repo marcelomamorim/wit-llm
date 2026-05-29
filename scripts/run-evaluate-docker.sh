@@ -27,7 +27,43 @@ RUN_DIR="/data/generated/experiments/${EXPERIMENT_DIR}/${RUN_STAMP}"
 
 log() { printf '[evaluate] %s\n' "$*"; }
 
-# ── Passo 1: Materializar os testes via witup ─────────────────────────────────
+# ── Passo 1: Corrigir paths do host → Docker no preparation JSON ──────────────
+# O prepare foi executado no host (paths /Users/...); dentro do Docker o projeto
+# está em /data. Criamos uma cópia patched apenas para o evaluate.
+PREP_JSON="${RUN_DIR}/preparation_jdk_global_impact.json"
+PREP_JSON_DOCKER="${RUN_DIR}/preparation_jdk_global_impact_docker.json"
+
+if [[ -f "${PREP_JSON}" ]]; then
+  log "Adaptando paths do preparation JSON para o ambiente Docker..."
+  python3 - "${PREP_JSON}" "${PREP_JSON_DOCKER}" << 'PY'
+import json, sys, re
+
+src, dst = sys.argv[1], sys.argv[2]
+data = open(src).read()
+
+# Detectar o prefixo do host (tudo antes de /generated/ ou /resources/)
+m = re.search(r'("(?:[^"]+))((?:/generated/|/resources/|/bin/))', data)
+if m:
+    host_prefix = m.group(1).lstrip('"')
+    # Extrair só o prefixo antes do primeiro /generated ou /resources
+    for marker in ['/generated/', '/resources/', '/bin/']:
+        idx = host_prefix.find(marker)
+        if idx != -1:
+            host_prefix = host_prefix[:idx]
+            break
+    data = data.replace(host_prefix, '/data')
+    print(f'[evaluate] Substituído "{host_prefix}" → "/data"', file=sys.stderr)
+else:
+    print('[evaluate] AVISO: prefixo host não detectado — usando prep JSON original', file=sys.stderr)
+
+open(dst, 'w').write(data)
+PY
+  # Substituir o arquivo original pelo patched temporariamente (witup lê pelo nome fixo)
+  cp "${PREP_JSON}" "${PREP_JSON}.host_backup"
+  cp "${PREP_JSON_DOCKER}" "${PREP_JSON}"
+fi
+
+# ── Passo 2: Materializar os testes via witup ─────────────────────────────────
 log "Materializando testes gerados pelo LLM..."
 witup avaliar-estudo-jdk-global \
     --config    "/data/generated/configs/${RUNTIME_CONFIG_FILE}" \
@@ -37,9 +73,14 @@ witup avaliar-estudo-jdk-global \
     --responses "${RUN_DIR}/responses_openai_batch_generation.jsonl" \
     --errors    "${RUN_DIR}/errors_openai_batch_generation.jsonl"
 
+# Restaurar o JSON original do host
+if [[ -f "${PREP_JSON}.host_backup" ]]; then
+  mv "${PREP_JSON}.host_backup" "${PREP_JSON}"
+fi
+
 log "Materialização concluída."
 
-# ── Passo 2: Criar TEST.ROOT mínimo em cada variante ─────────────────────────
+# ── Passo 3: Criar TEST.ROOT mínimo em cada variante ─────────────────────────
 # O jtreg sobe o filesystem buscando TEST.ROOT. O test/jdk/TEST.ROOT do OpenJDK
 # referencia VMProps.java com -XX:+WhiteBoxAPI em caminhos inexistentes no
 # container; sem este arquivo, o jtreg aborta silenciosamente ~1042 de 1066 testes.
