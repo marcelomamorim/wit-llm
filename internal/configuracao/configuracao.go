@@ -421,7 +421,7 @@ func normalizarEsforcoRaciocinio(valor string) string {
 	esforco := strings.TrimSpace(strings.ToLower(valor))
 	switch esforco {
 	case "":
-		return "low"
+		return "" // vazio = não incluir campo reasoning (padrão para modelos não-reasoning)
 	case "minimal":
 		return "low"
 	default:

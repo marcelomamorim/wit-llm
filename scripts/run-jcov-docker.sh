@@ -147,6 +147,8 @@ WRAPPER
   log "  wrapper: ${java_wrapper}"
 
   # ── Executar jtreg ─────────────────────────────────────────────────────────
+  # -javacoption:-encoding -javacoption:UTF-8: força UTF-8 no javac
+  # (JAVA_TOOL_OPTIONS é ignorado pois jtreg isola o ambiente do javac)
   set +e
   "${JTREG}" \
     -jdk:"${WRAPPER_JDK}" \
@@ -155,6 +157,7 @@ WRAPPER
     -conc:"${CONCURRENCY}" \
     -timeout:"${TIMEOUT_FACTOR}" \
     -verbose:fail \
+    -javacoption:-encoding -javacoption:UTF-8 \
     "${generated_dir}" 2>&1 | tee "${log_file}"
   local jtreg_exit=$?
   set -e
