@@ -130,10 +130,53 @@ func construirPromptGeracaoSistema(framework string) string {
 	}
 }
 
+func frameworkDoContextoGeracaoPrompt(contexto map[string]interface{}) string {
+	if contexto == nil {
+		return frameworkJUnit5
+	}
+	framework, _ := contexto["test_framework"].(string)
+	normalizado := normalizarFrameworkTestes(framework)
+	if normalizado == frameworkInfer {
+		return frameworkJUnit5
+	}
+	return normalizado
+}
+
+func regrasFrameworkGeracaoUsuario(framework string) string {
+	switch normalizarFrameworkTestes(framework) {
+	case frameworkJTReg:
+		return `- FORMATO JTREG OBRIGATÓRIO: cada arquivo DEVE começar com /* @test\n * @summary ...\n * @run main NomeDaClasse\n */  — o jtreg ignora completamente qualquer arquivo sem esse bloco /* */. NUNCA coloque @test fora de bloco /* */. NUNCA use // para o cabeçalho.
+- @run main NomeDaClasse: NomeDaClasse é o nome SIMPLES (não qualificado) da classe pública, IDÊNTICO ao basename de relative_path sem .java. Ex: se relative_path='java/time/FooWitupTest.java' então @run main FooWitupTest e public class FooWitupTest.
+- NÃO declare package. Sem JUnit, TestNG, Mockito — testes standalone com main() apenas.
+- @modules sintaxe CORRETA: '@modules java.base/sun.security.util'. ERRADO: '@modules(java.base)'.
+- JDK 11+28 (commit da75f3c4) SOMENTE: proibido records, text blocks, switch yield/seta, instanceof binding, sealed classes.`
+	case frameworkJUnit4:
+		return `- para JUnit, o arquivo gerado deve respeitar recommended_test_package e recommended_relative_test_path do contexto técnico comum;
+- declare o package exatamente como recommended_test_package quando ele estiver preenchido;
+- use JUnit 4: org.junit.Test, org.junit.Assert e, quando necessário, @Before/@After;
+- não use org.junit.jupiter.*, @TempDir, @DisplayName, assertDoesNotThrow ou APIs exclusivas de JUnit 5;
+- não use cabeçalhos ou diretivas do jtreg; gere classes de teste JUnit normais.`
+	case frameworkJUnit5:
+		return `- para JUnit, o arquivo gerado deve respeitar recommended_test_package e recommended_relative_test_path do contexto técnico comum;
+- declare o package exatamente como recommended_test_package quando ele estiver preenchido;
+- use JUnit 5/Jupiter: org.junit.jupiter.api.Test e org.junit.jupiter.api.Assertions;
+- use assertThrows apenas quando o código atual sustentar claramente a exceção;
+- não use JUnit 4, org.junit.Test ou org.junit.Assert;
+- não use cabeçalhos ou diretivas do jtreg; gere classes de teste JUnit normais.`
+	default:
+		return `- para JUnit, o arquivo gerado deve respeitar recommended_test_package e recommended_relative_test_path do contexto técnico comum;
+- declare o package exatamente como recommended_test_package quando ele estiver preenchido;
+- siga o test_framework informado no contexto técnico comum;
+- não use cabeçalhos ou diretivas do jtreg; gere classes de teste do framework configurado.`
+	}
+}
+
 // construirPromptGeracaoUsuario monta o prompt de geração de testes para um contêiner.
 func construirPromptGeracaoUsuario(overview, containerName string, methodsPayload []dominio.AnaliseMetodo, contextoOpcional ...map[string]interface{}) string {
 	conteudoCompactado, _ := json.MarshalIndent(compactarAnalisesParaGeracao(methodsPayload), "", "  ")
-	contextoComum, _ := json.MarshalIndent(selecionarContextoGeracaoPrompt(contextoOpcional...), "", "  ")
+	contextoSelecionado := selecionarContextoGeracaoPrompt(contextoOpcional...)
+	contextoComum, _ := json.MarshalIndent(contextoSelecionado, "", "  ")
+	regrasFramework := regrasFrameworkGeracaoUsuario(frameworkDoContextoGeracaoPrompt(contextoSelecionado))
 	return fmt.Sprintf(`Gere arquivos de teste Java determinísticos para os métodos abaixo.
 Return JSON: {"files":[{"relative_path":"...","content":"...","covered_method_ids":[...],"notes":"..."}]}
 
@@ -153,14 +196,9 @@ Regras obrigatórias:
 - se uma chamada por reflexão puder lançar InvocationTargetException, trate InvocationTargetException explicitamente ou valide getCause(), não espere diretamente a exceção interna no assertThrows;
 - não faça assertivas sobre campos privados, nomes internos ou estrutura interna instável; prefira retorno público, exceção pública clara ou efeito observável;
 - use o campo notes para registrar quando um expath do WIT foi descartado, adaptado ou mantido após essa checagem de compatibilidade.
-- para JUnit, o arquivo gerado deve respeitar o package e o caminho sugeridos no contexto técnico comum;
-- FORMATO JTREG OBRIGATÓRIO: cada arquivo DEVE começar com /* @test\n * @summary ...\n * @run main NomeDaClasse\n */  — o jtreg ignora completamente qualquer arquivo sem esse bloco /* */. NUNCA coloque @test fora de bloco /* */. NUNCA use // para o cabeçalho.
-- @run main NomeDaClasse: NomeDaClasse é o nome SIMPLES (não qualificado) da classe pública, IDÊNTICO ao basename de relative_path sem .java. Ex: se relative_path='java/time/FooWitupTest.java' então @run main FooWitupTest e public class FooWitupTest.
-- NÃO declare package. Sem JUnit, TestNG, Mockito — testes standalone com main() apenas.
-- @modules sintaxe CORRETA: '@modules java.base/sun.security.util'. ERRADO: '@modules(java.base)'.
-- JDK 11+28 (commit da75f3c4) SOMENTE: proibido records, text blocks, switch yield/seta, instanceof binding, sealed classes.
 - cada teste deve invocar explicitamente o método-alvo ou um comportamento público que o alcance de forma evidente;
 - se o contexto técnico comum não listar Mockito, AssertJ ou outra biblioteca externa, não use essa biblioteca.
+%s
 
 Linguagem: Java
 Contêiner: %s
@@ -207,7 +245,7 @@ Ao usar expaths:
 
 Análises dos métodos:
 %s
-`, containerName, reduzirVisaoGeralParaGeracao(overview), string(contextoComum), string(conteudoCompactado))
+`, regrasFramework, containerName, reduzirVisaoGeralParaGeracao(overview), string(contextoComum), string(conteudoCompactado))
 }
 
 // construirPromptGeracaoDiretaSistema monta o prompt sistêmico para geração
@@ -221,7 +259,9 @@ func construirPromptGeracaoDiretaSistema(framework string) string {
 // usando apenas o código local e a visão geral do projeto.
 func construirPromptGeracaoDiretaUsuario(overview, containerName string, methods []dominio.DescritorMetodo, contextoOpcional ...map[string]interface{}) string {
 	conteudoCompactado, _ := json.MarshalIndent(compactarMetodosParaGeracaoDireta(methods), "", "  ")
-	contextoComum, _ := json.MarshalIndent(selecionarContextoGeracaoPrompt(contextoOpcional...), "", "  ")
+	contextoSelecionado := selecionarContextoGeracaoPrompt(contextoOpcional...)
+	contextoComum, _ := json.MarshalIndent(contextoSelecionado, "", "  ")
+	regrasFramework := regrasFrameworkGeracaoUsuario(frameworkDoContextoGeracaoPrompt(contextoSelecionado))
 	return fmt.Sprintf(`Gere arquivos de teste Java determinísticos diretamente a partir dos métodos abaixo, sem usar expaths pré-computados.
 Return JSON: {"files":[{"relative_path":"...","content":"...","covered_method_ids":[...],"notes":"..."}]}
 
@@ -238,14 +278,9 @@ Regras obrigatórias:
 - evite reflexão e acesso a estado interno; se precisar usar reflexão, o membro refletido deve aparecer literalmente no source_code e o notes deve justificar por que não há caminho público;
 - se uma chamada por reflexão puder lançar InvocationTargetException, trate InvocationTargetException explicitamente ou valide getCause(), não espere diretamente a exceção interna no assertThrows;
 - não faça assertivas sobre campos privados, nomes internos ou estrutura interna instável; prefira retorno público, exceção pública clara ou efeito observável;
-- para JUnit, o arquivo gerado deve respeitar o package e o caminho sugeridos no contexto técnico comum;
-- FORMATO JTREG OBRIGATÓRIO: cada arquivo DEVE começar com /* @test\n * @summary ...\n * @run main NomeDaClasse\n */  — o jtreg ignora completamente qualquer arquivo sem esse bloco /* */. NUNCA coloque @test fora de bloco /* */. NUNCA use // para o cabeçalho.
-- @run main NomeDaClasse: NomeDaClasse é o nome SIMPLES (não qualificado) da classe pública, IDÊNTICO ao basename de relative_path sem .java. Ex: se relative_path='java/time/FooWitupTest.java' então @run main FooWitupTest e public class FooWitupTest.
-- NÃO declare package. Sem JUnit, TestNG, Mockito — testes standalone com main() apenas.
-- @modules sintaxe CORRETA: '@modules java.base/sun.security.util'. ERRADO: '@modules(java.base)'.
-- JDK 11+28 (commit da75f3c4) SOMENTE: proibido records, text blocks, switch yield/seta, instanceof binding, sealed classes.
 - cada teste deve invocar explicitamente o método-alvo ou um comportamento público que o alcance de forma evidente;
 - se o contexto técnico comum não listar Mockito, AssertJ ou outra biblioteca externa, não use essa biblioteca.
+%s
 
 Linguagem: Java
 Contêiner: %s
@@ -257,7 +292,7 @@ Contexto técnico comum aos dois cenários:
 
 Métodos-alvo:
 %s
-`, containerName, reduzirVisaoGeralParaGeracao(overview), string(contextoComum), string(conteudoCompactado))
+`, regrasFramework, containerName, reduzirVisaoGeralParaGeracao(overview), string(contextoComum), string(conteudoCompactado))
 }
 
 func construirPromptReparoSistema(framework string) string {

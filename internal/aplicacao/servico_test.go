@@ -790,6 +790,74 @@ func TestConstruirPromptGeracaoUsuarioExplicaCamposDoRelatorioWIT(t *testing.T) 
 	}
 }
 
+func TestConstruirPromptGeracaoUsuarioJUnitNaoIncluiRegrasJTReg(t *testing.T) {
+	contexto := map[string]interface{}{
+		"test_framework":                 "junit5",
+		"recommended_test_package":       "sample",
+		"recommended_relative_test_path": "src/test/java/sample/ExampleWitupGeneratedTest.java",
+	}
+	analises := []dominio.AnaliseMetodo{{
+		Metodo: dominio.DescritorMetodo{
+			IDMetodo:       "sample.Example:run:10",
+			CaminhoArquivo: "src/main/java/sample/Example.java",
+			NomeContainer:  "sample.Example",
+			NomeMetodo:     "run",
+			Assinatura:     "sample.Example.run(java.lang.String)",
+			Origem:         "public void run(String value) { if (value == null) throw new NullPointerException(); }",
+		},
+	}}
+	metodos := []dominio.DescritorMetodo{analises[0].Metodo}
+
+	witPrompt := construirPromptGeracaoUsuario("overview", "sample.Example", analises, contexto)
+	directPrompt := construirPromptGeracaoDiretaUsuario("overview", "sample.Example", metodos, contexto)
+	for nome, prompt := range map[string]string{"wit": witPrompt, "direct": directPrompt} {
+		for _, proibido := range []string{"FORMATO JTREG", "@test", "@run main", "@modules", "NÃO declare package"} {
+			if strings.Contains(prompt, proibido) {
+				t.Fatalf("prompt %s não deveria conter regra JTReg %q:\n%s", nome, proibido, prompt)
+			}
+		}
+		for _, esperado := range []string{
+			"JUnit 5/Jupiter",
+			"recommended_test_package",
+			"recommended_relative_test_path",
+			"declare o package exatamente",
+		} {
+			if !strings.Contains(prompt, esperado) {
+				t.Fatalf("prompt %s deveria conter regra JUnit %q:\n%s", nome, esperado, prompt)
+			}
+		}
+	}
+}
+
+func TestConstruirPromptGeracaoUsuarioJTRegMantemRegrasObrigatorias(t *testing.T) {
+	contexto := map[string]interface{}{
+		"test_framework":                 "jtreg",
+		"recommended_relative_test_path": "test/jdk/witup/generated/sample/ExampleWitupTest.java",
+	}
+	prompt := construirPromptGeracaoUsuario("overview", "sample.Example", []dominio.AnaliseMetodo{{
+		Metodo: dominio.DescritorMetodo{
+			IDMetodo:       "sample.Example:run:10",
+			CaminhoArquivo: "src/main/java/sample/Example.java",
+			NomeContainer:  "sample.Example",
+			NomeMetodo:     "run",
+			Assinatura:     "sample.Example.run(java.lang.String)",
+			Origem:         "public void run(String value) { if (value == null) throw new NullPointerException(); }",
+		},
+	}}, contexto)
+
+	for _, esperado := range []string{
+		"FORMATO JTREG OBRIGATÓRIO",
+		"@test",
+		"@run main",
+		"@modules",
+		"NÃO declare package",
+	} {
+		if !strings.Contains(prompt, esperado) {
+			t.Fatalf("prompt jtreg deveria conter %q:\n%s", esperado, prompt)
+		}
+	}
+}
+
 func TestCompactarAnalisesParaGeracaoIncluiCodigoAtualENotasDeCompatibilidade(t *testing.T) {
 	compartilhado := compactarAnalisesParaGeracao([]dominio.AnaliseMetodo{{
 		Metodo: dominio.DescritorMetodo{
