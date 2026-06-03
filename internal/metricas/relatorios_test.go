@@ -26,6 +26,74 @@ func TestExtrairCoberturaJaCoCo(t *testing.T) {
 	}
 }
 
+// TestExtrairCoberturaJaCoCoFallbackPackage cobre o cenário em que o XML não
+// possui <counter> diretos na raiz (ex: exec vazio/truncado por OOM — commons-io
+// tem <argLine>-Xmx25M</argLine> hardcoded). O fallback deve agregar os counters
+// dos elementos <package>.
+func TestExtrairCoberturaJaCoCoFallbackPackage(t *testing.T) {
+	tempDir := t.TempDir()
+	caminho := filepath.Join(tempDir, "jacoco.xml")
+	// XML sem counter na raiz — apenas dentro de <package>
+	xmlSemRaiz := `<report name="commons-io">` +
+		`<package name="org/apache/commons/io">` +
+		`<counter type="LINE" missed="20" covered="80"/>` +
+		`<counter type="BRANCH" missed="10" covered="30"/>` +
+		`</package>` +
+		`<package name="org/apache/commons/io/input">` +
+		`<counter type="LINE" missed="5" covered="15"/>` +
+		`</package>` +
+		`</report>`
+	if err := artefatos.EscreverTexto(caminho, xmlSemRaiz); err != nil {
+		t.Fatalf("escrever fixture: %v", err)
+	}
+
+	// LINE: coberto=80+15=95, perdido=20+5=25 → 95/120 ≈ 79.17%
+	valor, err := ExtrairCoberturaJaCoCo(caminho, "LINE")
+	if err != nil {
+		t.Fatalf("fallback package LINE: %v", err)
+	}
+	esperado := 95.0 / 120.0 * 100.0
+	if math.Abs(valor-esperado) > 0.01 {
+		t.Fatalf("esperava %.2f, recebi %.2f", esperado, valor)
+	}
+
+	// BRANCH: coberto=30, perdido=10 → 75%
+	valorB, err := ExtrairCoberturaJaCoCo(caminho, "BRANCH")
+	if err != nil {
+		t.Fatalf("fallback package BRANCH: %v", err)
+	}
+	if math.Abs(valorB-75.0) > 0.01 {
+		t.Fatalf("esperava 75.00, recebi %.2f", valorB)
+	}
+}
+
+// TestExtrairCoberturaJaCoCoEncodingISO8859 cobre o caso real do commons-io:
+// o JaCoCo gera o XML com encoding="iso-8859-1", que o encoding/xml do Go
+// rejeita. O normalizarEncodingXML deve reescrever para UTF-8 antes do parse.
+func TestExtrairCoberturaJaCoCoEncodingISO8859(t *testing.T) {
+	tempDir := t.TempDir()
+	caminho := filepath.Join(tempDir, "jacoco.xml")
+	// Simula exatamente o prólogo que o JaCoCo maven plugin gera
+	xmlISO := `<?xml version="1.0" encoding="iso-8859-1" standalone="yes"?>` +
+		`<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">` +
+		`<report name="commons-io">` +
+		`<counter type="LINE" missed="40" covered="60"/>` +
+		`<counter type="BRANCH" missed="20" covered="30"/>` +
+		`</report>`
+	if err := artefatos.EscreverTexto(caminho, xmlISO); err != nil {
+		t.Fatalf("escrever fixture: %v", err)
+	}
+
+	// LINE: 60/(60+40) = 60%
+	valor, err := ExtrairCoberturaJaCoCo(caminho, "LINE")
+	if err != nil {
+		t.Fatalf("encoding iso-8859-1 LINE: %v", err)
+	}
+	if math.Abs(valor-60.0) > 0.01 {
+		t.Fatalf("esperava 60.00, recebi %.2f", valor)
+	}
+}
+
 func TestExtrairMutacaoPIT(t *testing.T) {
 	tempDir := t.TempDir()
 	caminho := filepath.Join(tempDir, "target", "pit-reports", "mutations.xml")
