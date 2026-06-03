@@ -1,0 +1,15 @@
+projeto	cenario	arquivos_originais	arquivos_ok	compilacao	surefire_tests	pass_rate	jacoco_line	jacoco_branch	pit_mutation
+commons-io	wit-context	50	42	1.00	321	96.88	24.31	18.36	
+commons-io	direct-tests	50	40	1.00	264	93.56	21.44	16.76	
+commons-lang	wit-context	65	47	1.00	389	96.40	12.12	7.31	
+commons-lang	direct-tests	65	54	1.00	419	92.84	15.04	9.56	
+h2database	wit-context	239	82	0.00					
+h2database	direct-tests	237	72	0.00					
+httpcomponents-client	wit-context	2	0	0					
+httpcomponents-client	direct-tests	7	0	0					
+jackson-databind	wit-context	49	17	1.00	76	89.47	1.20	0.60	
+jackson-databind	direct-tests	49	15	1.00	63	95.24	1.13	0.64	
+joda-time	wit-context	77	5	1.00			21.68	17.04	
+joda-time	direct-tests	76	13	1.00			21.68	17.04	
+logging-log4j2	wit-context	17	0	0					
+logging-log4j2	direct-tests	17	0	0					

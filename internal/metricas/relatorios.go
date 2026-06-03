@@ -19,8 +19,16 @@ type jacocoCounter struct {
 	Coberto int    `xml:"covered,attr"`
 }
 
+type jacocoPackage struct {
+	Counters []jacocoCounter `xml:"counter"`
+}
+
+// jacocoReport lê os <counter> diretos da raiz <report> e também os <counter>
+// dentro de <package> para casos em que o JaCoCo não emite counters agregados
+// no topo (ex: exec vazio ou gerado por CLI sem source files).
 type jacocoReport struct {
 	Counters []jacocoCounter `xml:"counter"`
+	Packages []jacocoPackage `xml:"package"`
 }
 
 type pitMutation struct {
@@ -184,6 +192,25 @@ func (e EstatisticasGeracao) TaxaAssertEstadoInterno() float64 {
 	return (float64(e.ArquivosComAssertEstadoInt) / float64(e.ArquivosTeste)) * 100.0
 }
 
+// reEncodingXML substitui declarações de encoding não-UTF no prólogo XML.
+var reEncodingXML = regexp.MustCompile(`(?i)(encoding\s*=\s*")([^"]+)(")`)
+
+// normalizarEncodingXML reescreve a declaração de encoding para UTF-8 quando
+// necessário. O encoding/xml do Go só suporta UTF-8 e UTF-16; relatórios
+// JaCoCo às vezes declaram iso-8859-1. Como os dados (nomes Java, inteiros)
+// são todos ASCII, a substituição é segura.
+func normalizarEncodingXML(dados []byte) []byte {
+	maxLen := 200
+	if len(dados) < maxLen {
+		maxLen = len(dados)
+	}
+	if !strings.Contains(strings.ToLower(string(dados[:maxLen])), "encoding") {
+		return dados
+	}
+	return reEncodingXML.ReplaceAll(dados, []byte(`${1}UTF-8${3}`))
+}
+
+
 // ExtrairCoberturaJaCoCo lê um relatório XML do JaCoCo e devolve a cobertura
 // percentual do contador solicitado.
 func ExtrairCoberturaJaCoCo(caminhoXML, tipoContador string) (float64, error) {
@@ -192,12 +219,20 @@ func ExtrairCoberturaJaCoCo(caminhoXML, tipoContador string) (float64, error) {
 		return 0, fmt.Errorf("ao ler relatório JaCoCo %q: %w", caminhoXML, err)
 	}
 
+	// Go's encoding/xml só suporta UTF-8 e UTF-16. O JaCoCo às vezes declara
+	// encoding="iso-8859-1" (Latin-1). Como os dados do relatório são apenas
+	// nomes de classe Java e inteiros (todos ASCII), substituir a declaração
+	// por UTF-8 é seguro e evita o erro "xml: encoding ... declared".
+	dados = normalizarEncodingXML(dados)
+
 	var relatorio jacocoReport
 	if err := xml.Unmarshal(dados, &relatorio); err != nil {
 		return 0, fmt.Errorf("ao interpretar relatório JaCoCo %q: %w", caminhoXML, err)
 	}
 
 	tipoContador = strings.ToUpper(strings.TrimSpace(tipoContador))
+
+	// 1ª tentativa: counters diretos na raiz <report> (formato padrão do JaCoCo).
 	for _, contador := range relatorio.Counters {
 		if strings.ToUpper(strings.TrimSpace(contador.Tipo)) != tipoContador {
 			continue
@@ -208,6 +243,29 @@ func ExtrairCoberturaJaCoCo(caminhoXML, tipoContador string) (float64, error) {
 		}
 		return (float64(contador.Coberto) / float64(total)) * 100.0, nil
 	}
+
+	// 2ª tentativa: agregar counters de todos os <package> (fallback para XMLs
+	// gerados sem counters na raiz — ex: exec vazio, CLI sem source files).
+	var totalCoberto, totalPerdido int
+	encontrado := false
+	for _, pkg := range relatorio.Packages {
+		for _, contador := range pkg.Counters {
+			if strings.ToUpper(strings.TrimSpace(contador.Tipo)) != tipoContador {
+				continue
+			}
+			totalCoberto += contador.Coberto
+			totalPerdido += contador.Perdido
+			encontrado = true
+		}
+	}
+	if encontrado {
+		total := totalCoberto + totalPerdido
+		if total == 0 {
+			return 0, nil
+		}
+		return (float64(totalCoberto) / float64(total)) * 100.0, nil
+	}
+
 	return 0, fmt.Errorf("contador JaCoCo %q não encontrado em %q", tipoContador, caminhoXML)
 }
 

@@ -143,3 +143,70 @@ services:
       - ./scripts:/data/scripts
     working_dir: /data
     command: bash /data/scripts/run-jcov-baseline-docker.sh
+
+  # ── article-evaluator: avaliação completa do experimento de artigo ────────────
+  # Pipeline em duas etapas:
+  #
+  #   Etapa 1 — Setup (uma vez por máquina, ~30-60 min):
+  #     docker compose run --rm article-setup
+  #     Clona 7 projetos Java, pré-aquece Maven, gera baselines WIT.
+  #     Persiste tudo em ./generated/ para reuso.
+  #
+  #   Etapa 2 — Avaliação (com o JSONL de respostas do batch):
+  #     RESPONSES_JSONL=/caminho/para/batch_output.jsonl \
+  #       docker compose run --rm article-evaluate
+  #     Executa: compilação, Surefire, JaCoCo (line+branch), PIT mutation score.
+  #     Saída em ./generated/results/article-eval/
+  #
+  # Variáveis configuráveis:
+  #   RESPONSES_JSONL   : (obrigatório) arquivo JSONL de respostas do batch
+  #   ERRORS_JSONL      : (opcional) arquivo JSONL de erros do batch
+  #   RUN_STAMP         : timestamp da rodada (default: auto)
+  #   GENERATION_MODEL  : chave do modelo no runtime.json (default: openai_main)
+  #   SKIP_MAVEN_WARMUP : "sim" para pular pré-aquecimento na etapa de setup
+  #   FORCE_RECLONE     : "sim" para forçar re-clone dos projetos
+  #   JODA_TIME_COMMIT  : ref do joda-time (default: v2.12.7)
+  #   LOG4J2_COMMIT     : ref do log4j2    (default: rel/2.23.1)
+
+  article-setup:
+    build:
+      context: docker/article-evaluator
+      dockerfile: Dockerfile
+      args:
+        WITUP_REPO:   ${WITUP_REPO:-https://github.com/marcelomamorim/witup-llm}
+        WITUP_COMMIT: ${WITUP_COMMIT:-main}
+    image: witup-llm/article-evaluator:latest
+    environment:
+      SKIP_MAVEN_WARMUP: ${SKIP_MAVEN_WARMUP:-nao}
+      FORCE_RECLONE:     ${FORCE_RECLONE:-nao}
+      JODA_TIME_COMMIT:  ${JODA_TIME_COMMIT:-v2.12.7}
+      LOG4J2_COMMIT:     ${LOG4J2_COMMIT:-rel/2.23.1}
+    volumes:
+      - ./generated:/data/generated
+    working_dir: /data
+    command: bash /data/scripts/run-article-setup-docker.sh
+
+  # ── article-pit: compila individualmente, poda falhos, roda JaCoCo + PIT ────
+  # Requer article-setup e article-evaluate já executados.
+  # Uso: docker compose run --rm article-pit
+  article-pit:
+    image: witup-llm/article-evaluator:latest
+    volumes:
+      - ./generated:/data/generated
+    working_dir: /data
+    command: bash /data/scripts/run-article-pit-docker.sh
+
+  article-evaluate:
+    image: witup-llm/article-evaluator:latest
+    environment:
+      RESPONSES_JSONL:  ${RESPONSES_JSONL:-}
+      ERRORS_JSONL:     ${ERRORS_JSONL:-}
+      RUN_STAMP:        ${RUN_STAMP:-}
+      GENERATION_MODEL: ${GENERATION_MODEL:-openai_main}
+    volumes:
+      - ./generated:/data/generated
+      # Montar o JSONL de respostas diretamente se estiver fora de ./generated/
+      # Ex: RESPONSES_JSONL=/data/batch.jsonl e montar o diretório pai:
+      - ${BATCH_DIR:-./generated}:/data/batch-input:ro
+    working_dir: /data
+    command: bash /data/scripts/run-article-evaluate-docker.sh
