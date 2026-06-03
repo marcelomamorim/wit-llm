@@ -257,7 +257,10 @@ fi
 step "Passo 6/6 — Rodar jtreg (baseline tier1+tier2 + testes gerados)"
 log "RUN_BASELINE=${RUN_BASELINE} | JTREG_CONCURRENCY=${JTREG_CONCURRENCY}"
 
+# Montar scripts/ local para usar a versão atualizada do run-jtreg-docker.sh
+# (a imagem pode ter uma versão mais antiga do script clonada do GitHub)
 docker compose -f "${ROOT_DIR}/docker-compose.yml" run --rm \
+  -v "${ROOT_DIR}/scripts:/data/scripts:ro" \
   -e EXPERIMENT_DIR="${EXPERIMENT_SUBDIR}" \
   -e RUN_STAMP="${RUN_STAMP}" \
   -e RUN_BASELINE="${RUN_BASELINE}" \
