@@ -40,6 +40,101 @@ parse_jtreg_counts() {
   echo "${pass:-0} ${fail:-0} ${error:-0}"
 }
 
+# Converte testes gerados do formato raw (anotações soltas) para formato jtreg válido.
+# jtreg exige que @test, @run, @modules, @summary estejam dentro de /* ... */.
+# Também corrige @run main ClassName → @run main <NomeRealDaClasse>.
+fix_jtreg_format() {
+  local dir="$1"
+  find "${dir}" -name "*.java" | while read -r f; do
+    # Extrair nome da classe do arquivo (nome do arquivo sem .java)
+    local classname
+    classname=$(basename "${f}" .java)
+
+    # Verificar se já está no formato correto (tem /* @test ou já tem bloco de comentário com @test)
+    if grep -q "/\*" "${f}" && grep -q "@test" "${f}"; then
+      continue
+    fi
+
+    # Extrair linhas de anotação (@test, @summary, @run, @modules, @bug, @library)
+    # que estão no topo do arquivo (antes do primeiro import ou public class)
+    python3 - "${f}" "${classname}" << 'PYEOF'
+import sys, re
+
+path, classname = sys.argv[1], sys.argv[2]
+with open(path, encoding='utf-8', errors='replace') as f:
+    content = f.read()
+
+lines = content.split('\n')
+
+# Coletar imports para detectar pacotes internos que precisam de @modules completo
+import_pkgs = set()
+for line in lines:
+    m = re.match(r'^import\s+([\w.]+)\.\w+;', line.strip())
+    if m:
+        import_pkgs.add(m.group(1))
+
+# Separar linhas de anotação jtreg das linhas de código Java
+annotation_lines = []
+code_lines = []
+in_annotations = True
+
+for line in lines:
+    stripped = line.strip()
+    if in_annotations and re.match(r'^@(test|summary|run|modules|bug|library|requires|compile|ignore|key)\b', stripped, re.IGNORECASE):
+        annotation_lines.append(' * ' + stripped)
+    else:
+        in_annotations = False
+        line = re.sub(r'\bClassName\b', classname, line)
+        code_lines.append(line)
+
+if not annotation_lines:
+    annotation_lines = [' * @test', f' * @summary Generated test for {classname}',
+                        f' * @run main {classname}']
+
+# Corrigir @run main ClassName e @summary("...") nos annotation_lines
+fixed_annotations = []
+has_modules = False
+for al in annotation_lines:
+    # Corrigir @run main ClassName
+    al = re.sub(r'(@run\s+main\s+)ClassName\b', r'\g<1>' + classname, al)
+    al = re.sub(r'(@run\s+main)\s*$', r'\g<1> ' + classname, al)
+    # Corrigir @summary("texto") → @summary texto  (parênteses inválidos no jtreg)
+    al = re.sub(r'@summary\s*\("([^"]*)"\)', r'@summary \1', al)
+    al = re.sub(r"@summary\s*\('([^']*)'\)", r'@summary \1', al)
+    # Corrigir @modules java.base → @modules completo para pacotes internos
+    if re.search(r'@modules\s+java\.base\s*$', al):
+        has_modules = True
+        internal_mods = []
+        for pkg in sorted(import_pkgs):
+            if pkg.startswith('com.sun.') or pkg.startswith('sun.'):
+                # Encontrar módulo dono (heurística: java.base para sun/com.sun)
+                internal_mods.append(f'java.base/{pkg}')
+        if internal_mods:
+            al = ' * @modules ' + ' '.join(internal_mods)
+    fixed_annotations.append(al)
+
+# Se não tem @modules mas usa pacotes internos, adicionar
+if not has_modules:
+    internal_mods = [f'java.base/{pkg}' for pkg in sorted(import_pkgs)
+                     if pkg.startswith('com.sun.') or pkg.startswith('sun.')]
+    if internal_mods:
+        # Inserir após @test
+        for i, al in enumerate(fixed_annotations):
+            if '@test' in al:
+                for mod in reversed(internal_mods):
+                    fixed_annotations.insert(i+1, f' * @modules {mod}')
+                break
+
+# Montar o arquivo corrigido
+header = '/*\n' + '\n'.join(fixed_annotations) + '\n */\n'
+new_content = header + '\n'.join(code_lines)
+
+with open(path, 'w', encoding='utf-8') as f:
+    f.write(new_content)
+PYEOF
+  done
+}
+
 run_jtreg_generated() {
   local variant_name="$1"
   local variant_root="${VARIANTS_ROOT}/${variant_name}"
@@ -56,6 +151,10 @@ run_jtreg_generated() {
   local test_count
   test_count=$(find "${generated_dir}" -name "*.java" | wc -l | tr -d ' ')
   log "testes encontrados: ${test_count}"
+
+  # Corrigir formato jtreg dos testes gerados
+  log "  corrigindo formato jtreg dos testes gerados..."
+  fix_jtreg_format "${generated_dir}"
 
   local work_dir="${variant_root}/jtreg-work-witup"
   local report_dir="${variant_root}/jtreg-report-witup"
@@ -103,7 +202,10 @@ run_jtreg_baseline_tier1_tier2() {
   local log_file="${report_dir}/jtreg-run.log"
   mkdir -p "${work_dir}" "${report_dir}"
 
-  log "iniciando jtreg baseline tier1+tier2 (conc=1, timeout_factor=${TIMEOUT_FACTOR}x)..."
+  # Baseline: testes originais do JDK no mesmo módulo dos testes gerados.
+  # com/sun/crypto/provider/Cipher/AES tem testes jtreg reais (@test jtreg).
+  # java/lang usa TestNG sem @test jtreg — não é selecionado pelo jtreg plain.
+  log "iniciando jtreg baseline (com/sun/crypto/provider/Cipher/AES, conc=1)..."
 
   set +e
   "${JTREG}" \
@@ -113,8 +215,7 @@ run_jtreg_baseline_tier1_tier2() {
     -conc:1 \
     -timeout:"${TIMEOUT_FACTOR}" \
     -verbose:fail \
-    -k:"tier1|tier2" \
-    "${test_dir}/jdk" 2>&1 | tee "${log_file}"
+    "${test_dir}/jdk/com/sun/crypto/provider/Cipher/AES" 2>&1 | tee "${log_file}"
   local jtreg_exit=$?
   set -e
 
