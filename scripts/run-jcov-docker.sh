@@ -201,41 +201,74 @@ WRAPPER
     set -e
 
     # Extrair cobertura via Python
-    # JCov XML usa atributo 'count' (não 'covered') nos elementos de branch:
-    #   methenter, catch, case, cond, default, fall, tg
+    # JCov XML usa atributo 'count' nos elementos de cobertura:
+    #   methenter → method entry (usado para method coverage)
+    #   cond, case, default, fall, tg, catch, br → branch coverage
+    # Cobertura de linha: aproximada pelos atributos 'sl'/'line'/'pos' dos elementos
     # Coberto = count > 0; Não coberto = count == 0
-    local covered uncovered total coverage_pct
-    read covered uncovered < <(python3 -c "
+    local b_cov b_unc m_cov m_unc l_cov l_unc
+    read b_cov b_unc m_cov m_unc l_cov l_unc < <(python3 -c "
 import xml.etree.ElementTree as ET
-BRANCH_TAGS = {'methenter', 'catch', 'case', 'cond', 'default', 'fall', 'tg'}
+BRANCH_TAGS = {'cond', 'case', 'default', 'fall', 'tg', 'catch', 'br'}
+METHOD_TAGS = {'methenter'}
+ALL_TAGS = BRANCH_TAGS | METHOD_TAGS
 try:
     root = ET.parse('${jcov_result_file}').getroot()
-    covered = 0
-    uncovered = 0
+    b_cov = b_unc = m_cov = m_unc = 0
+    line_cov = set()
+    line_unc = set()
     for el in root.iter():
         tag = el.tag.split('}')[-1] if '}' in el.tag else el.tag
-        if tag in BRANCH_TAGS and 'count' in el.attrib:
-            if int(el.get('count', '0')) > 0:
-                covered += 1
-            else:
-                uncovered += 1
-    print(covered, uncovered)
+        if tag not in ALL_TAGS or 'count' not in el.attrib:
+            continue
+        count = int(el.get('count', '0'))
+        ln_raw = el.get('sl') or el.get('line') or el.get('pos', '')
+        try:
+            ln = int(ln_raw)
+        except (ValueError, TypeError):
+            ln = None
+        if tag in METHOD_TAGS:
+            if count > 0: m_cov += 1
+            else: m_unc += 1
+        else:
+            if count > 0: b_cov += 1
+            else: b_unc += 1
+        if ln is not None:
+            if count > 0: line_cov.add(ln)
+            else: line_unc.add(ln)
+    # Linha coberta se ao menos um elemento nela teve count > 0
+    l_cov_count = len(line_cov)
+    l_unc_count = len(line_unc - line_cov)
+    print(b_cov, b_unc, m_cov, m_unc, l_cov_count, l_unc_count)
 except:
-    print(0, 0)
-" 2>/dev/null || echo "0 0")
-    total=$(( covered + uncovered ))
-    coverage_pct=0
-    [ "${total}" -gt 0 ] && coverage_pct=$(( covered * 100 / total ))
-    log "${variant_name}: covered=${covered} uncovered=${uncovered} total=${total} branch_coverage=${coverage_pct}%"
+    print(0, 0, 0, 0, 0, 0)
+" 2>/dev/null || echo "0 0 0 0 0 0")
+
+    local br_total=$(( b_cov + b_unc ))
+    local mt_total=$(( m_cov + m_unc ))
+    local ln_total=$(( l_cov + l_unc ))
+    local br_pct=0; [ "${br_total}" -gt 0 ] && br_pct=$(( b_cov * 100 / br_total ))
+    local mt_pct=0; [ "${mt_total}" -gt 0 ] && mt_pct=$(( m_cov * 100 / mt_total ))
+    local ln_pct=0; [ "${ln_total}" -gt 0 ] && ln_pct=$(( l_cov * 100 / ln_total ))
+
+    log "${variant_name}: branch=${b_cov}/${br_total}(${br_pct}%) method=${m_cov}/${mt_total}(${mt_pct}%) line=${l_cov}/${ln_total}(${ln_pct}%)"
 
     cat > "${jcov_out_dir}/summary.json" <<EOJSON
 {
   "variant": "${variant_name}",
   "jcov_result_file": "${jcov_result_file}",
-  "covered_branches": ${covered},
-  "uncovered_branches": ${uncovered},
-  "total_branches": ${total},
-  "branch_coverage_pct": ${coverage_pct},
+  "covered_branches": ${b_cov},
+  "uncovered_branches": ${b_unc},
+  "total_branches": ${br_total},
+  "branch_coverage_pct": ${br_pct},
+  "covered_methods": ${m_cov},
+  "uncovered_methods": ${m_unc},
+  "total_methods": ${mt_total},
+  "method_coverage_pct": ${mt_pct},
+  "covered_lines": ${l_cov},
+  "uncovered_lines": ${l_unc},
+  "total_lines": ${ln_total},
+  "line_coverage_pct": ${ln_pct},
   "jtreg_exit": ${jtreg_exit}
 }
 EOJSON
