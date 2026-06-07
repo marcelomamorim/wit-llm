@@ -16,6 +16,10 @@ set -euo pipefail
 EXPERIMENT_DIR="${EXPERIMENT_DIR:-jdk-global-impact-study}"
 RUN_STAMP="${RUN_STAMP:-run}"
 RUN_BASELINE="${RUN_BASELINE:-nao}"
+JTREG_TIER_FILTER="${JTREG_TIER_FILTER:-tier1|tier2}"
+# BASELINE_RESULTS_JSON: caminho para um jtreg-results.json anterior.
+# Se definido, a entrada "baseline" é copiada de lá e o jtreg NÃO re-executa o baseline.
+BASELINE_RESULTS_JSON="${BASELINE_RESULTS_JSON:-}"
 
 RUN_DIR="/data/generated/experiments/${EXPERIMENT_DIR}/${RUN_STAMP}"
 VARIANTS_ROOT="${RUN_DIR}/variants"
@@ -40,97 +44,135 @@ parse_jtreg_counts() {
   echo "${pass:-0} ${fail:-0} ${error:-0}"
 }
 
-# Converte testes gerados do formato raw (anotações soltas) para formato jtreg válido.
-# jtreg exige que @test, @run, @modules, @summary estejam dentro de /* ... */.
-# Também corrige @run main ClassName → @run main <NomeRealDaClasse>.
+# Normaliza e corrige o cabeçalho jtreg de cada arquivo gerado:
+#  - Extrai anotações @test/@summary/@run/@modules do bloco /* */ (uma ou várias linhas)
+#    ou de linhas @xxx soltas no topo do arquivo
+#  - Sempre re-emite o cabeçalho em formato multi-linha correto
+#  - Injeta @modules java.base/<pkg> para todo pacote interno importado
+#    (com.sun.*, sun.*, jdk.internal.*)
+#  - Corrige @run main ClassName → nome real da classe
+#  - Remove package declaration (inválido em testes jtreg standalone)
+#
+# IMPORTANTE: processa TODOS os arquivos, inclusive os que já têm /* @test */,
+# pois o LLM pode ter gerado o bloco em uma linha só sem @modules.
 fix_jtreg_format() {
   local dir="$1"
   find "${dir}" -name "*.java" | while read -r f; do
-    # Extrair nome da classe do arquivo (nome do arquivo sem .java)
     local classname
     classname=$(basename "${f}" .java)
-
-    # Verificar se já está no formato correto (tem /* @test ou já tem bloco de comentário com @test)
-    if grep -q "/\*" "${f}" && grep -q "@test" "${f}"; then
-      continue
-    fi
-
-    # Extrair linhas de anotação (@test, @summary, @run, @modules, @bug, @library)
-    # que estão no topo do arquivo (antes do primeiro import ou public class)
     python3 - "${f}" "${classname}" << 'PYEOF'
 import sys, re
 
 path, classname = sys.argv[1], sys.argv[2]
-with open(path, encoding='utf-8', errors='replace') as f:
-    content = f.read()
+with open(path, encoding='utf-8', errors='replace') as fh:
+    content = fh.read()
 
-lines = content.split('\n')
-
-# Coletar imports para detectar pacotes internos que precisam de @modules completo
+# ── 1. Coletar imports para detectar pacotes internos ─────────────────────────
+INTERNAL_PREFIXES = ('com.sun.', 'sun.', 'jdk.internal.')
 import_pkgs = set()
-for line in lines:
-    m = re.match(r'^import\s+([\w.]+)\.\w+;', line.strip())
+for line in content.split('\n'):
+    m = re.match(r'^\s*import\s+([\w.]+)\.\w+\s*;', line)
     if m:
         import_pkgs.add(m.group(1))
 
-# Separar linhas de anotação jtreg das linhas de código Java
-annotation_lines = []
-code_lines = []
-in_annotations = True
+internal_mods = sorted(
+    f'java.base/{pkg}'
+    for pkg in import_pkgs
+    if any(pkg.startswith(p) for p in INTERNAL_PREFIXES)
+)
 
-for line in lines:
-    stripped = line.strip()
-    if in_annotations and re.match(r'^@(test|summary|run|modules|bug|library|requires|compile|ignore|key)\b', stripped, re.IGNORECASE):
-        annotation_lines.append(' * ' + stripped)
-    else:
-        in_annotations = False
-        line = re.sub(r'\bClassName\b', classname, line)
-        code_lines.append(line)
+# ── 2. Extrair anotações jtreg existentes (de bloco /* */ ou linhas @xxx) ────
+#   Suporte a bloco em uma linha: /* @test @summary ... @run main X */
+#   e a bloco multi-linha ou anotações soltas no topo.
+existing = {'test': True, 'summary': None, 'run': None, 'modules': [], 'extra': []}
 
-if not annotation_lines:
-    annotation_lines = [' * @test', f' * @summary Generated test for {classname}',
-                        f' * @run main {classname}']
+# Tentar extrair de bloco /* ... */ no início do arquivo
+block_match = re.match(r'^\s*/\*(.*?)\*/', content, re.DOTALL)
+if block_match:
+    block_text = block_match.group(1)
+    # Separar por tokens @xxx (cada @ inicia uma diretiva)
+    tokens = re.split(r'(?=@\w)', block_text)
+    for tok in tokens:
+        tok = tok.strip().lstrip('* ').rstrip('* ')
+        if not tok:
+            continue
+        m = re.match(r'@(\w+)\s*(.*)', tok, re.DOTALL)
+        if not m:
+            continue
+        key, val = m.group(1).lower(), m.group(2).strip().replace('\n', ' ')
+        val = re.sub(r'\s+', ' ', val)
+        if key == 'summary':
+            existing['summary'] = val
+        elif key == 'run':
+            existing['run'] = val
+        elif key == 'modules':
+            existing['modules'].append(val)
+        elif key not in ('test',):
+            existing['extra'].append(f'@{m.group(1)} {val}'.strip())
+    # Remover o bloco do conteúdo
+    content_body = content[block_match.end():]
+else:
+    # Sem bloco: verificar anotações soltas no início
+    content_body = content
+    lines = content.split('\n')
+    body_start = 0
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        m = re.match(r'^@(test|summary|run|modules|bug|library|key|requires|compile|ignore)\b(.*)', stripped, re.IGNORECASE)
+        if m:
+            key, val = m.group(1).lower(), m.group(2).strip()
+            if key == 'summary': existing['summary'] = val
+            elif key == 'run':   existing['run'] = val
+            elif key == 'modules': existing['modules'].append(val)
+            body_start = i + 1
+        elif stripped == '' and body_start == i:
+            body_start = i + 1
+        else:
+            break
+    content_body = '\n'.join(lines[body_start:])
 
-# Corrigir @run main ClassName e @summary("...") nos annotation_lines
-fixed_annotations = []
-has_modules = False
-for al in annotation_lines:
-    # Corrigir @run main ClassName
-    al = re.sub(r'(@run\s+main\s+)ClassName\b', r'\g<1>' + classname, al)
-    al = re.sub(r'(@run\s+main)\s*$', r'\g<1> ' + classname, al)
-    # Corrigir @summary("texto") → @summary texto  (parênteses inválidos no jtreg)
-    al = re.sub(r'@summary\s*\("([^"]*)"\)', r'@summary \1', al)
-    al = re.sub(r"@summary\s*\('([^']*)'\)", r'@summary \1', al)
-    # Corrigir @modules java.base → @modules completo para pacotes internos
-    if re.search(r'@modules\s+java\.base\s*$', al):
-        has_modules = True
-        internal_mods = []
-        for pkg in sorted(import_pkgs):
-            if pkg.startswith('com.sun.') or pkg.startswith('sun.'):
-                # Encontrar módulo dono (heurística: java.base para sun/com.sun)
-                internal_mods.append(f'java.base/{pkg}')
-        if internal_mods:
-            al = ' * @modules ' + ' '.join(internal_mods)
-    fixed_annotations.append(al)
+# ── 3. Remover package declaration (inválido em standalone jtreg) ─────────────
+content_body = re.sub(r'^\s*package\s+[\w.]+\s*;\s*\n?', '', content_body, flags=re.MULTILINE)
 
-# Se não tem @modules mas usa pacotes internos, adicionar
-if not has_modules:
-    internal_mods = [f'java.base/{pkg}' for pkg in sorted(import_pkgs)
-                     if pkg.startswith('com.sun.') or pkg.startswith('sun.')]
-    if internal_mods:
-        # Inserir após @test
-        for i, al in enumerate(fixed_annotations):
-            if '@test' in al:
-                for mod in reversed(internal_mods):
-                    fixed_annotations.insert(i+1, f' * @modules {mod}')
-                break
+# ── 4. Corrigir @run main: substituir ClassName genérico pelo nome real ────────
+run_val = existing['run'] or f'main {classname}'
+run_val = re.sub(r'(?i)\bmain\s+className\b', f'main {classname}', run_val)
+run_val = re.sub(r'(?i)^main\s*$', f'main {classname}', run_val)
+if not run_val.strip().startswith('main'):
+    run_val = f'main {classname}'
+# Garantir que o classname no @run bate com o nome do arquivo
+run_val = re.sub(r'main\s+\S+', f'main {classname}', run_val)
 
-# Montar o arquivo corrigido
-header = '/*\n' + '\n'.join(fixed_annotations) + '\n */\n'
-new_content = header + '\n'.join(code_lines)
+# ── 5. Normalizar @summary ─────────────────────────────────────────────────────
+summary_val = existing['summary'] or f'Generated test for {classname}'
+summary_val = re.sub(r'^\("|"\)$', '', summary_val)  # remover parênteses/aspas extras
 
-with open(path, 'w', encoding='utf-8') as f:
-    f.write(new_content)
+# ── 6. Construir @modules finais ──────────────────────────────────────────────
+#   Partir dos @modules já declarados + adicionar os faltantes dos imports
+declared_mods = set()
+for m_val in existing['modules']:
+    for part in m_val.split():
+        declared_mods.add(part.strip())
+# Adicionar módulos internos detectados via import
+all_mods = sorted(declared_mods | set(internal_mods))
+# Remover entrada genérica "java.base" sem subpacote se já há java.base/pkg
+if 'java.base' in all_mods and any(m.startswith('java.base/') for m in all_mods):
+    all_mods = [m for m in all_mods if m != 'java.base']
+
+# ── 7. Montar cabeçalho final ─────────────────────────────────────────────────
+header_lines = ['/*', ' * @test', f' * @summary {summary_val}']
+for mod in all_mods:
+    header_lines.append(f' * @modules {mod}')
+for extra in existing['extra']:
+    header_lines.append(f' * {extra}')
+header_lines.append(f' * @run {run_val}')
+header_lines.append(' */')
+
+header = '\n'.join(header_lines) + '\n'
+new_content = header + content_body.lstrip('\n')
+
+with open(path, 'w', encoding='utf-8') as fh:
+    fh.write(new_content)
 PYEOF
   done
 }
@@ -202,12 +244,19 @@ run_jtreg_baseline_tier1_tier2() {
   local log_file="${report_dir}/jtreg-run.log"
   mkdir -p "${work_dir}" "${report_dir}"
 
-  # Baseline: testes originais do JDK no mesmo módulo dos testes gerados.
-  # com/sun/crypto/provider/Cipher/AES tem testes jtreg reais (@test jtreg).
-  # java/lang usa TestNG sem @test jtreg — não é selecionado pelo jtreg plain.
-  log "iniciando jtreg baseline (com/sun/crypto/provider/Cipher/AES, conc=1)..."
+  # Baseline: todos os testes originais do JDK no diretório dos módulos amostrados.
+  # Nota: os testes de com/sun/crypto/provider/Cipher/AES não usam @key tier1/tier2,
+  # portanto o filtro de tier NÃO é aplicado ao baseline (seria "no tests selected").
+  local tier_filter="${JTREG_TIER_FILTER:-}"
+  if [[ -n "${tier_filter}" ]]; then
+    log "iniciando jtreg baseline (com/sun/crypto/provider/Cipher/AES, tier=${tier_filter}, conc=1)..."
+  else
+    log "iniciando jtreg baseline (com/sun/crypto/provider/Cipher/AES, sem filtro de tier, conc=1)..."
+  fi
 
   set +e
+  local tier_args=()
+  [[ -n "${tier_filter}" ]] && tier_args=( -k:"${tier_filter}" )
   "${JTREG}" \
     -jdk:"${TEST_JDK}" \
     -w:"${work_dir}" \
@@ -215,6 +264,7 @@ run_jtreg_baseline_tier1_tier2() {
     -conc:1 \
     -timeout:"${TIMEOUT_FACTOR}" \
     -verbose:fail \
+    "${tier_args[@]}" \
     "${test_dir}/jdk/com/sun/crypto/provider/Cipher/AES" 2>&1 | tee "${log_file}"
   local jtreg_exit=$?
   set -e
@@ -236,6 +286,8 @@ log "TEST_JDK=${TEST_JDK}"
 log "CONCURRENCY=${CONCURRENCY}"
 log "TIMEOUT_FACTOR=${TIMEOUT_FACTOR}x"
 log "RUN_BASELINE=${RUN_BASELINE}"
+log "JTREG_TIER_FILTER=${JTREG_TIER_FILTER}"
+log "BASELINE_RESULTS_JSON=${BASELINE_RESULTS_JSON:-<não definido>}"
 
 mkdir -p "${RUN_DIR}"
 
@@ -245,7 +297,28 @@ results+=( "$(run_jtreg_generated "direct-tests")" )
 results+=( "$(run_jtreg_generated "wit-context")" )
 
 if [[ "${RUN_BASELINE}" =~ ^(sim|1|yes|true)$ ]]; then
-  results+=( "$(run_jtreg_baseline_tier1_tier2)" )
+  if [[ -n "${BASELINE_RESULTS_JSON}" && -f "${BASELINE_RESULTS_JSON}" ]]; then
+    # Reutilizar baseline de run anterior — sem re-execução
+    log "=== variante: baseline (reutilizando ${BASELINE_RESULTS_JSON}) ==="
+    baseline_entry=$(python3 -c "
+import json, sys
+with open('${BASELINE_RESULTS_JSON}') as f:
+    d = json.load(f)
+b = d.get('baseline')
+if b:
+    b['reused_from'] = '${BASELINE_RESULTS_JSON}'
+    print('\"baseline\": ' + json.dumps(b))
+" 2>/dev/null || echo "")
+    if [[ -n "${baseline_entry}" ]]; then
+      results+=( "${baseline_entry}" )
+      log "  baseline reutilizado com sucesso."
+    else
+      log "  AVISO: entrada 'baseline' não encontrada em ${BASELINE_RESULTS_JSON} — re-executando"
+      results+=( "$(run_jtreg_baseline_tier1_tier2)" )
+    fi
+  else
+    results+=( "$(run_jtreg_baseline_tier1_tier2)" )
+  fi
 fi
 
 # Escrever JSON de resultados
