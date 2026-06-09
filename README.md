@@ -22,29 +22,71 @@ O experimento principal avalia a geração de testes para o OpenJDK usando o com
 
 ### Especificações
 
-| Parâmetro | Valor |
-|---|---|
-| Projeto-alvo | `openjdk/jdk` @ `da75f3c4` (JDK 11+28) |
-| Baseline WIT | `generated/wit-data/jdk/wit_filtered.json` (~5.698 métodos) |
-| Modelo LLM | `gpt-4.1-nano-2025-04-14` |
-| Temperature | 0 |
-| Max output tokens | 2048 |
-| Execução batch | OpenAI Batch API (`/v1/responses`) |
-| Variantes | `baseline`, `wit-context`, `direct-tests` |
-| Framework de testes | jtreg (OpenJDK test runner) |
-| Cobertura | JCov (branch + method + line) |
-| Baseline jtreg | tier1 + tier2 do JDK completo |
-| Análise de smells | 10 padrões via análise estática |
+| Parâmetro | Valor | Arquivo |
+|---|---|---|
+| Projeto-alvo | `openjdk/jdk` @ `da75f3c4` (JDK 11+28) | `scripts/run-jdk-full-pilot.sh` |
+| Baseline WIT | `generated/wit-data/jdk/wit_filtered.json` (~5.698 métodos) | `internal/aplicacao/jdk_global.go` |
+| Modelo LLM | `gpt-4.1-nano-2025-04-14` | `generated/configs/jdk-pilot.runtime.json` |
+| Temperature | 0 | `scripts/run-jdk-full-pilot.sh` |
+| Max output tokens | 2048 | `scripts/run-jdk-full-pilot.sh` |
+| Execução batch | OpenAI Batch API (`/v1/responses`) | `internal/llm/batch.go` |
+| Preparação | `witup preparar-estudo-jdk-global` | `internal/aplicacao/comandos_jdk_global.go` |
+| Materialização | `witup avaliar-estudo-jdk-global` | `internal/aplicacao/jdk_global.go` |
+| Variantes | `baseline`, `wit-context`, `direct-tests` | `internal/aplicacao/jdk_global.go` |
+| Framework de testes | jtreg (OpenJDK test runner) | `scripts/run-jtreg-docker.sh` |
+| Cobertura | JCov (branch + method + line) | `scripts/run-jcov-pilot-docker.sh`, `scripts/run-jcov-baseline-docker.sh` |
+| Baseline jtreg | tier1 + tier2 do JDK completo | `scripts/run-jcov-baseline-docker.sh` |
+| Análise de smells | 10 padrões via análise estática | `scripts/detect_test_smells.py`, `scripts/run-smells-docker.sh` |
 
 ### Métricas coletadas
 
-- **jtreg**: pass, fail, error, pass rate — por variante e por cenário combinado
-- **JCov**: branch coverage %, method coverage %, line coverage %
-- **Cenários comparativos**:
+- **jtreg** (`scripts/run-jtreg-docker.sh`): pass, fail, error, pass rate — por variante
+- **JCov** (`scripts/run-jcov-pilot-docker.sh`, `scripts/run-jcov-docker.sh`): branch, method e line coverage %
+- **Cenários comparativos** (calculados via merge no relatório final):
   - `(1) baseline` — testes originais JDK tier1+tier2
-  - `(2) baseline + wit-context` — merge sem re-execução
-  - `(3) baseline + direct-tests` — merge sem re-execução
-- **Test smells**: density, breakdown por tipo (wit-context vs direct-tests)
+  - `(2) baseline + wit-context` — merge JCov sem re-execução do baseline
+  - `(3) baseline + direct-tests` — merge JCov sem re-execução do baseline
+- **Test smells** (`scripts/detect_test_smells.py`): density, breakdown por tipo (wit-context vs direct-tests)
+- **Comparação estatística** (`scripts/analyze_smells_comparison.py`): chi-square, odds ratio por tipo de smell
+
+### Prompts de geração
+
+Arquivo: [`internal/aplicacao/prompts.go`](internal/aplicacao/prompts.go)
+
+#### Variante `wit-context`
+
+Usa duas funções:
+
+**System prompt** — `construirPromptGeracaoSistema("jtreg")`:
+- Papel: especialista em testes jtreg para OpenJDK
+- Restrições de versão: JDK 11+28 (`da75f3c4`) — proíbe records, text blocks, switch expressions, pattern matching, sealed classes
+- Formato obrigatório: cabeçalho `/* @test @summary @run main NomeDaClasse */` em bloco `/* */`
+- Módulos internos: obriga `@modules java.base/com.sun.*` para pacotes não exportados
+- Checklist pré-resposta: compila? nome bate com arquivo? cabeçalho correto? `@run main`? sem pacotes inacessíveis?
+- Regra de ouro: em caso de dúvida, simplificar ao mínimo que compila
+
+**User prompt** — `construirPromptGeracaoUsuario(...)`:
+- Recebe: visão geral do projeto, nome do contêiner, lista de métodos com expaths WIT
+- Contexto WIT fornecido por método:
+  - `method.source_code` — código-fonte completo do método no checkout atual
+  - `expaths[]` — lista de caminhos de exceção (tipo, gatilho, condições de guarda, confiança, evidências)
+  - `checkout_compatibility_notes` — expaths descartados por incompatibilidade com o checkout
+- Instruções de uso dos expaths: tratá-los como hipóteses prioritárias para exceções, mas sempre validar contra o código atual; descartar se contraditório
+- Saída esperada: `{"files":[{"relative_path":"...","content":"...","covered_method_ids":[...],"notes":"..."}]}`
+
+#### Variante `direct-tests`
+
+Usa as mesmas funções base com uma diferença:
+
+**System prompt** — `construirPromptGeracaoDiretaSistema("jtreg")`:
+- Idêntico ao system prompt wit-context, com sufixo adicional:
+  > *"Nesta execução, você não receberá expaths nem contexto WITUP; derive testes diretamente do código-fonte dos métodos fornecidos."*
+
+**User prompt** — `construirPromptGeracaoDiretaUsuario(...)`:
+- Recebe: visão geral do projeto, nome do contêiner, lista de métodos **sem expaths**
+- Contexto por método: apenas `method.source_code` e `method.signature`
+- Sem referência a WIT, expaths ou caminhos de exceção pré-computados
+- Instruções: derivar casos excepcionais somente quando evidente no código atual
 
 ---
 
@@ -57,6 +99,8 @@ O experimento principal avalia a geração de testes para o OpenJDK usando o com
 - `OPENAI_API_KEY`
 
 ### Passo 1 — Build da imagem Docker (GitHub Actions → Docker Hub)
+
+**Arquivos:** [`.github/workflows/build-evaluator-amd64.yml`](.github/workflows/build-evaluator-amd64.yml), [`docker/jdk-builder/Dockerfile`](docker/jdk-builder/Dockerfile), [`docker/evaluator/Dockerfile`](docker/evaluator/Dockerfile)
 
 A imagem `witup-llm/evaluator` contém o JDK 11+28 compilado, jtreg e JCov.
 O build para `linux/amd64` é feito automaticamente via GitHub Actions:
@@ -74,6 +118,8 @@ O build para `linux/amd64` é feito automaticamente via GitHub Actions:
 
 ### Passo 2 — Geração dos testes (OpenAI Batch)
 
+**Arquivos:** [`scripts/run-jdk-full-pilot.sh`](scripts/run-jdk-full-pilot.sh), [`scripts/poll-openai-batch.sh`](scripts/poll-openai-batch.sh), [`internal/aplicacao/comandos_jdk_global.go`](internal/aplicacao/comandos_jdk_global.go), [`internal/llm/batch.go`](internal/llm/batch.go)
+
 ```bash
 # Piloto com N métodos (recomendado: 10–100 para validação)
 PILOT_METHODS=100 \
@@ -83,11 +129,11 @@ SKIP_BUILD_IMAGE=sim \
 
 O script executa automaticamente:
 1. Clona o JDK @ `da75f3c4`
-2. Amostra N métodos do `wit_filtered.json`
-3. Gera requests JSONL (wit-context + direct-tests)
-4. Submete à OpenAI Batch API
-5. Aguarda conclusão (polling automático)
-6. Materializa as 3 variantes
+2. Amostra N métodos do `wit_filtered.json` via `witup preparar-estudo-jdk-global`
+3. Gera requests JSONL (wit-context + direct-tests) com prompts de `internal/aplicacao/prompts.go`
+4. Submete à OpenAI Batch API via `witup submeter-openai-batch`
+5. Aguarda conclusão via polling (`scripts/poll-openai-batch.sh`)
+6. Materializa as 3 variantes via `witup avaliar-estudo-jdk-global`
 
 Para re-rodar com respostas já baixadas:
 
@@ -99,6 +145,8 @@ RESPONSES_JSONL=generated/experiments/jdk-pilot/<stamp>/responses_openai_batch_g
 ```
 
 ### Passo 3 — Execução do JCov no AWS CodeBuild
+
+**Arquivos:** [`scripts/run-jcov-baseline-docker.sh`](scripts/run-jcov-baseline-docker.sh), [`scripts/run-jcov-docker.sh`](scripts/run-jcov-docker.sh), [`scripts/run-jcov-pilot-docker.sh`](scripts/run-jcov-pilot-docker.sh)
 
 A medição de cobertura JCov (tier1+tier2 do JDK completo) é executada no AWS CodeBuild para aproveitar alta concorrência (72 vCPUs).
 
@@ -128,11 +176,11 @@ Upload do `variants-generated.zip` para o bucket S3 `witup-jcov-results` via con
 O buildspec executa em sequência:
 1. Instala AWS CLI
 2. Baixa testes gerados do S3
-3. Roda JCov no **baseline** (tier1+tier2 do JDK)
-4. Roda JCov no **wit-context** (testes gerados)
-5. Roda JCov no **direct-tests** (testes gerados)
-6. Merge: `baseline + wit` e `baseline + direct`
-7. Extrai métricas → `jcov-summary.json`
+3. Roda JCov no **baseline** via `run-jcov-baseline-docker.sh` (tier1+tier2 do JDK)
+4. Roda JCov no **wit-context** via `run-jcov-docker.sh`
+5. Roda JCov no **direct-tests** via `run-jcov-docker.sh`
+6. Merge: `baseline + wit` e `baseline + direct` via `java -jar jcov.jar Merger`
+7. Extrai métricas (branch/method/line) → `jcov-summary.json`
 8. Salva tudo no S3
 
 > Tempo estimado: ~2–4 horas com 72 vCPUs
@@ -140,14 +188,16 @@ O buildspec executa em sequência:
 #### 3.3 — Baixar resultados
 
 Após o build, baixar do S3:
-- `jcov-summary.json` — métricas consolidadas
+- `jcov-summary.json` — métricas consolidadas (branch/method/line por cenário)
 - `jcov-baseline/jcov-result.xml` — XML de cobertura do baseline
-- `jcov-merged-baseline-wit.xml` — cobertura combinada
-- `jcov-merged-baseline-direct.xml` — cobertura combinada
+- `jcov-merged-baseline-wit.xml` — cobertura combinada baseline+wit
+- `jcov-merged-baseline-direct.xml` — cobertura combinada baseline+direct
 
 Mover para: `generated/experiments/jdk-pilot/<RUN_STAMP>/`
 
 ### Passo 4 — Test Smells e Relatório Final
+
+**Arquivos:** [`scripts/run-smells-docker.sh`](scripts/run-smells-docker.sh), [`scripts/detect_test_smells.py`](scripts/detect_test_smells.py), [`scripts/analyze_smells_comparison.py`](scripts/analyze_smells_comparison.py), [`scripts/run-jdk-full-pilot.sh`](scripts/run-jdk-full-pilot.sh)
 
 ```bash
 # Rodar smells (local, dentro do Docker)
@@ -164,9 +214,24 @@ RESPONSES_JSONL=generated/experiments/jdk-pilot/<RUN_STAMP>/responses_openai_bat
 ```
 
 O relatório final (`pilot-final-report.json`) consolida:
-- jtreg: 3 cenários com merge
-- JCov: branch/method/line coverage
-- Test smells: wit-context vs direct-tests
+- jtreg: 3 cenários com merge (pass/fail/error/pass rate)
+- JCov: branch/method/line coverage por cenário e combinado
+- Test smells: density e breakdown por tipo (wit-context vs direct-tests)
+
+**Smells detectados** (`scripts/detect_test_smells.py`):
+
+| Smell | Descrição |
+|---|---|
+| `empty_test` | Teste sem assertions |
+| `assertion_roulette` | ≥3 assertions sem mensagens descritivas |
+| `exception_catching` | `catch(Exception e)` genérico sem comentário "expected" |
+| `conditional_logic` | `if`/`for`/`while`/`switch` no corpo do teste |
+| `redundant_println` | `System.out.println` no teste |
+| `verbose_test` | Método de teste com mais de 30 linhas |
+| `ignored_test` | `@Ignore`/`@Disabled` ou `@run main` ausente |
+| `sleepy_test` | `Thread.sleep` no teste |
+| `empty_catch` | Bloco `catch` completamente vazio |
+| `expected_exception_catch` | Padrão jtreg correto para exceções esperadas *(métrica positiva, não é smell)* |
 
 ---
 
