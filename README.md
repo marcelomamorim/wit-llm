@@ -1,7 +1,7 @@
 # witup-llm
 
-[![CI](https://github.com/marcelomamorim/witup-llm/actions/workflows/ci.yml/badge.svg)](https://github.com/marcelomamorim/witup-llm/actions/workflows/ci.yml)
-[![Release CLI](https://github.com/marcelomamorim/witup-llm/actions/workflows/release.yml/badge.svg)](https://github.com/marcelomamorim/witup-llm/actions/workflows/release.yml)
+[![CI](https://github.com/marcelomamorim/wit-llm/actions/workflows/ci.yml/badge.svg)](https://github.com/marcelomamorim/wit-llm/actions/workflows/ci.yml)
+[![Release CLI](https://github.com/marcelomamorim/wit-llm/actions/workflows/release.yml/badge.svg)](https://github.com/marcelomamorim/wit-llm/actions/workflows/release.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/marcelomamorim/witup-llm)](https://goreportcard.com/report/github.com/marcelomamorim/witup-llm)
 ![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)
 ![Target](https://img.shields.io/badge/Target-Java%20projects-orange?logo=openjdk&logoColor=white)
@@ -9,345 +9,213 @@
 
 `witup-llm` é uma CLI em Go para pesquisa sobre geração de testes unitários em projetos Java a partir de dois cenários:
 
-- usar a análise WIT como contexto;
-- gerar testes diretamente do código, sem contexto WIT.
+- **WIT-context**: usa a análise WIT (exception paths) como contexto para o LLM;
+- **Direct-tests**: gera testes diretamente do código, sem contexto WIT.
 
-Na fase atual, o foco experimental está em uma **rodada pareada para artigo** com seis projetos já presentes no pacote WIT local:
+O objetivo é medir se o contexto WIT melhora a qualidade das suítes geradas em relação à geração direta.
 
-- **Jackson Databind**
-- **HttpComponents Client**
-- **Apache Commons Lang**
-- **Apache Commons IO**
-- **Apache Commons Text**
-- **Byte Buddy**
+---
 
-## Estado atual
+## Experimento JDK (openjdk/jdk)
 
-O projeto já está preparado para executar a **rodada principal do artigo** com:
+O experimento principal avalia a geração de testes para o OpenJDK usando o commit `da75f3c4` (JDK 11+28).
 
-- seleção explícita dos projetos em `phase_two.projects`;
-- uso de baselines WIT locais por projeto;
-- geração de 20 slices alinháveis por projeto, com 1 método por slice;
-- comparação pareada entre `WIT_CONTEXT` e `DIRECT_TESTS`;
-- execução principal em `strict_1call`;
-- geração via OpenAI Batch API com `gpt-5.4-mini`;
-- juiz IA desativado na rodada principal;
-- geração e avaliação das duas estratégias sobre os **mesmos métodos-alvo**;
-- saída consolidada em:
-  - `results_*_paired_study.json`
-  - `results_*_paired_summary.csv`
-  - `results_*_paired_metrics.csv`
-  - `results_*_paired_comparison.csv`
-  - `analysis_*_statistical_inference.md`
-  - `dashboard_*_wit_expath_regression.html`
+### Especificações
 
-## Pergunta experimental desta fase
+| Parâmetro | Valor |
+|---|---|
+| Projeto-alvo | `openjdk/jdk` @ `da75f3c4` (JDK 11+28) |
+| Baseline WIT | `generated/wit-data/jdk/wit_filtered.json` (~5.698 métodos) |
+| Modelo LLM | `gpt-4.1-nano-2025-04-14` |
+| Temperature | 0 |
+| Max output tokens | 2048 |
+| Execução batch | OpenAI Batch API (`/v1/responses`) |
+| Variantes | `baseline`, `wit-context`, `direct-tests` |
+| Framework de testes | jtreg (OpenJDK test runner) |
+| Cobertura | JCov (branch + method + line) |
+| Baseline jtreg | tier1 + tier2 do JDK completo |
+| Análise de smells | 10 padrões via análise estática |
 
-Para cada projeto, queremos comparar:
+### Métricas coletadas
 
-1. **WIT_CONTEXT**
-   Usa a análise WIT como contexto para a geração de testes.
+- **jtreg**: pass, fail, error, pass rate — por variante e por cenário combinado
+- **JCov**: branch coverage %, method coverage %, line coverage %
+- **Cenários comparativos**:
+  - `(1) baseline` — testes originais JDK tier1+tier2
+  - `(2) baseline + wit-context` — merge sem re-execução
+  - `(3) baseline + direct-tests` — merge sem re-execução
+- **Test smells**: density, breakdown por tipo (wit-context vs direct-tests)
 
-2. **DIRECT_TESTS**
-   Gera os testes diretamente a partir do código local, sem expaths/contexto WIT.
+---
 
-O objetivo é medir se o contexto WIT realmente melhora a qualidade das suítes em relação à geração direta.
+## Como executar o experimento JDK
 
-## Como o fluxo funciona
+### Pré-requisitos
 
-1. carrega o baseline WIT local do projeto;
-2. cataloga o checkout Java;
-3. alinha o baseline WIT ao checkout atual;
-4. usa os métodos alinhados como conjunto-alvo comum;
-5. executa os dois cenários:
-   - com contexto WIT
-   - geração direta
-6. avalia as suítes geradas com métricas como:
-   - compilação
-   - testes executados
-   - JaCoCo line
-   - JaCoCo branch
-   - PIT mutation
-7. gera:
-   - JSON consolidado
-   - CSVs analíticos
-   - dashboard HTML
-
-O dashboard da fase 2 agora também mostra, por cenário:
-
-- métricas com explicação contextual;
-- parecer do juiz em português;
-- auditoria de uso da IA (`request_count`, `repair_used`, `input_tokens`, `output_tokens`, `estimated_cost`);
-- seção expansível com a classe de teste gerada e os métodos-alvo cobertos.
-
-## Saídas principais
-
-Ao final de `executar-segunda-fase`, você recebe:
-
-- `phase-two-study.json`
-- `csv/phase-two-summary.csv`
-- `csv/phase-two-metrics.csv`
-- `csv/phase-two-comparison.csv`
-- `csv/phase-two-statistics.csv`
-- `csv/phase-two-statistics.md`
-- `dashboard.html`
-
-Esses artefatos ficam dentro do diretório de saída configurado.
-
-O modo padrão da fase 2 é `repair_1retry`, com no máximo uma tentativa de
-reparo por cenário. Para uma comparação estrita e simétrica de orçamento de
-inferência, use `strict_1call`.
-
-## Harness para codificar com Codex
-
-O projeto agora usa uma estrutura leve de harness engineering para orientar o
-trabalho com agentes de código:
-
-- [`AGENTS.md`](/Users/marceloamorim/Documents/unb/witup-llm/AGENTS.md) funciona como índice curto para o Codex;
-- [`ARCHITECTURE.md`](/Users/marceloamorim/Documents/unb/witup-llm/ARCHITECTURE.md) resume o desenho técnico;
-- [`docs/harness/`](/Users/marceloamorim/Documents/unb/witup-llm/docs/harness) guarda validação, rodadas pagas e padrões de falha;
-- [`scripts/validar-codex.sh`](/Users/marceloamorim/Documents/unb/witup-llm/scripts/validar-codex.sh) executa os sensores baratos antes de uma rodada paga.
-
-Para validar mudanças locais sem gastar créditos:
-
-```bash
-./scripts/validar-codex.sh
-```
-
-## Pré-requisitos
-
+- Docker
 - Go `1.24+`
-- Git
-- Java `11+` ou `17+`
-- Maven (`mvn`) ou `mvnw` no projeto-alvo
 - `OPENAI_API_KEY`
-- baselines WIT locais já processados em `resources/wit-replication-package/data/output`
 
-Os scripts da primeira rodada clonam automaticamente os checkouts em `generated/repos/`.
+### Passo 1 — Build da imagem Docker (GitHub Actions → Docker Hub)
 
-## Instalação
+A imagem `witup-llm/evaluator` contém o JDK 11+28 compilado, jtreg e JCov.
+O build para `linux/amd64` é feito automaticamente via GitHub Actions:
 
-```bash
-git clone https://github.com/marcelomamorim/witup-llm.git
-cd witup-llm
-make build
-```
+1. Configurar secrets no repositório GitHub:
+   - `DOCKERHUB_USERNAME` — seu usuário Docker Hub
+   - `DOCKERHUB_TOKEN` — token de acesso Docker Hub
 
-Ou:
+2. Disparar o workflow:
+   - GitHub → **Actions** → **"Build evaluator (amd64) → Docker Hub"** → **Run workflow**
 
-```bash
-go build -o bin/witup ./cmd/witup
-```
+3. A imagem é publicada em: `cloudarchlab/witup-evaluator:amd64`
 
-## Configuração
+> Tempo estimado: ~60–90 min (compila OpenJDK do zero)
 
-O projeto usa JSON versionado para configuração.
-
-Arquivo-base:
-
-- [`/Users/marceloamorim/Documents/unb/witup-llm/pipeline.example.json`](/Users/marceloamorim/Documents/unb/witup-llm/pipeline.example.json)
-
-Perfil pronto para a fase nova:
-
-- [`/Users/marceloamorim/Documents/unb/witup-llm/pipelines/fase-dois-guava-commons.json`](/Users/marceloamorim/Documents/unb/witup-llm/pipelines/fase-dois-guava-commons.json)
-
-Campos mais importantes:
-
-- `project.root`
-- `pipeline.output_dir`
-- `models.*`
-- `metrics`
-- `phase_two.projects[*].root`
-- `phase_two.projects[*].wit_analysis_path`
-- `phase_two.projects[*].target_containers`
-
-## Execução rápida
-
-### Primeira rodada estatística
-
-Preparação barata, sem chamada OpenAI:
+### Passo 2 — Geração dos testes (OpenAI Batch)
 
 ```bash
-./scripts/preparar-primeira-rodada-estatistica.sh
+# Piloto com N métodos (recomendado: 10–100 para validação)
+PILOT_METHODS=100 \
+SKIP_BUILD_IMAGE=sim \
+  ./scripts/run-jdk-full-pilot.sh
 ```
 
-Preflight com build mínimo, ainda sem chamada OpenAI:
+O script executa automaticamente:
+1. Clona o JDK @ `da75f3c4`
+2. Amostra N métodos do `wit_filtered.json`
+3. Gera requests JSONL (wit-context + direct-tests)
+4. Submete à OpenAI Batch API
+5. Aguarda conclusão (polling automático)
+6. Materializa as 3 variantes
+
+Para re-rodar com respostas já baixadas:
 
 ```bash
-./scripts/executar-primeira-rodada-estatistica.sh
+SKIP_BATCH_SUBMIT=sim \
+RUN_STAMP=<stamp> \
+RESPONSES_JSONL=generated/experiments/jdk-pilot/<stamp>/responses_openai_batch_generation.jsonl \
+  ./scripts/run-jdk-full-pilot.sh
 ```
 
-Execução paga, somente após o preflight retornar todos os 120 slices como prontos:
+### Passo 3 — Execução do JCov no AWS CodeBuild
+
+A medição de cobertura JCov (tier1+tier2 do JDK completo) é executada no AWS CodeBuild para aproveitar alta concorrência (72 vCPUs).
+
+#### 3.1 — Preparar dados
+
+```bash
+# Zipar os testes gerados
+cd generated/experiments/jdk-pilot/<RUN_STAMP>
+zip -r variants-generated.zip \
+  variants/wit-context/test/jdk/witup/generated \
+  variants/direct-tests/test/jdk/witup/generated
+```
+
+Upload do `variants-generated.zip` para o bucket S3 `witup-jcov-results` via console AWS.
+
+#### 3.2 — Projeto CodeBuild
+
+| Configuração | Valor |
+|---|---|
+| Nome | `witup-jcov-baseline` |
+| Imagem | `cloudarchlab/witup-evaluator:amd64` |
+| Compute | `BUILD_GENERAL1_2XLARGE` (72 vCPUs) |
+| Timeout | 480 minutos |
+| `JTREG_CONCURRENCY` | 48 |
+| Bucket de saída | `witup-jcov-results` |
+
+O buildspec executa em sequência:
+1. Instala AWS CLI
+2. Baixa testes gerados do S3
+3. Roda JCov no **baseline** (tier1+tier2 do JDK)
+4. Roda JCov no **wit-context** (testes gerados)
+5. Roda JCov no **direct-tests** (testes gerados)
+6. Merge: `baseline + wit` e `baseline + direct`
+7. Extrai métricas → `jcov-summary.json`
+8. Salva tudo no S3
+
+> Tempo estimado: ~2–4 horas com 72 vCPUs
+
+#### 3.3 — Baixar resultados
+
+Após o build, baixar do S3:
+- `jcov-summary.json` — métricas consolidadas
+- `jcov-baseline/jcov-result.xml` — XML de cobertura do baseline
+- `jcov-merged-baseline-wit.xml` — cobertura combinada
+- `jcov-merged-baseline-direct.xml` — cobertura combinada
+
+Mover para: `generated/experiments/jdk-pilot/<RUN_STAMP>/`
+
+### Passo 4 — Test Smells e Relatório Final
+
+```bash
+# Rodar smells (local, dentro do Docker)
+docker compose run --rm \
+  -e EXPERIMENT_DIR=jdk-pilot \
+  -e RUN_STAMP=<RUN_STAMP> \
+  run-smells
+
+# Gerar relatório comparativo final
+SKIP_BATCH_SUBMIT=sim \
+RUN_STAMP=<RUN_STAMP> \
+RESPONSES_JSONL=generated/experiments/jdk-pilot/<RUN_STAMP>/responses_openai_batch_generation.jsonl \
+  ./scripts/run-jdk-full-pilot.sh
+```
+
+O relatório final (`pilot-final-report.json`) consolida:
+- jtreg: 3 cenários com merge
+- JCov: branch/method/line coverage
+- Test smells: wit-context vs direct-tests
+
+---
+
+## Experimento — 7 Projetos Open Source
+
+Experimento secundário com projetos Maven (JUnit 4/5 + JaCoCo + PIT):
+
+- Apache Commons IO
+- Apache Commons Lang
+- H2 Database
+- HttpComponents Client
+- Jackson Databind
+- Joda-Time
+- Apache Log4j 2
 
 ```bash
 export OPENAI_API_KEY="sua-chave"
 CONFIRMAR_EXECUCAO_PAGA=sim ./scripts/run-article-main-batch-pipeline.sh
 ```
 
-Detalhes importantes:
+---
 
-- o modelo padrão da rodada de artigo é `gpt-5.4-mini`;
-- o backend de geração é OpenAI Batch API;
-- o modo da rodada é `strict_1call`;
-- o script seleciona 20 slices alinháveis por projeto;
-- para o commit histórico do Jackson, o harness instala um fallback local do parent POM e desativa o perfil Maven `java14+` com `-P!java14+`.
+## Pré-requisitos gerais
 
-### Opção 1: comando direto
+- Go `1.24+`
+- Docker
+- `OPENAI_API_KEY`
+- AWS CLI (opcional — apenas para upload S3 automatizado)
 
-```bash
-./bin/witup preflight-segunda-fase \
-  --config pipelines/fase-dois-guava-commons.json \
-  --check-build
-
-./bin/witup executar-segunda-fase \
-  --config pipelines/fase-dois-guava-commons.json \
-  --generation-model openai_main
-```
-
-### Opção 2: script dedicado
+## Instalação
 
 ```bash
-export OPENAI_API_KEY="sua-chave"
-export GUAVA_ROOT="/caminho/para/guava"
-export GUAVA_WIT_ANALYSIS="/caminho/para/guava-wit.json"
-export COMMONS_COLLECTIONS_ROOT="/caminho/para/commons-collections"
-export COMMONS_COLLECTIONS_WIT_ANALYSIS="/caminho/para/commons-collections-wit.json"
-
-./scripts/executar-segunda-fase.sh
+git clone https://github.com/marcelomamorim/wit-llm.git
+cd witup-llm
+make build
 ```
 
-### Gerando os baselines WIT dos dois projetos
+## Documentação
 
-Se você ainda não tiver `guava/wit.json` e `commons-collections/wit.json`, use:
-
-```bash
-./scripts/gerar-baselines-wit.sh
-```
-
-O script cria automaticamente um virtualenv local em `generated/tools/wit-venv`
-quando as dependências Python do WIT não estiverem disponíveis no Python base.
-Para o Guava, ele usa por padrão o subprojeto `guava/` dentro do checkout, que é
-o módulo principal que queremos analisar nesta fase, e faz checkout esparso
-desse subdiretório para evitar baixar/popular o workspace com módulos extras.
-
-Saídas esperadas:
-
-- `generated/wit-output/guava/wit.json`
-- `generated/wit-output/commons-collections/wit.json`
-
-### Piloto reduzido: um projeto, uma classe
-
-Antes de rodar a segunda fase completa, você pode validar o fluxo com um
-piloto menor, focado em uma única classe de um dos projetos:
-
-```bash
-export OPENAI_API_KEY="sua-chave"
-export PILOT_PROJECT_KEY="guava"
-export PILOT_PROJECT_LABEL="Google Guava"
-export PILOT_WIT_ANALYSIS="/caminho/para/guava-wit.json"
-export PILOT_TARGET_CONTAINER="com.google.common.collect.ImmutableList"
-
-./scripts/executar-piloto-segunda-fase.sh
-```
-
-O piloto usa o mesmo fluxo da fase dois, mas restringe a execução aos métodos
-da classe informada em `PILOT_TARGET_CONTAINER`.
-
-Se `PILOT_PROJECT_KEY=guava` e `PILOT_PROJECT_ROOT` não for informado, o script
-clona automaticamente o checkout em `generated/repos/guava`.
-
-### Commons IO já processado (`wit_filtered.json`)
-
-Para um estudo mais barato de iniciar, o projeto já vem com um baseline filtrado
-do `commons-io` em:
-
-- `resources/wit-replication-package/data/output/commons-io/wit_filtered.json`
-
-Você pode rodar um piloto por classe com:
-
-```bash
-export OPENAI_API_KEY="sua-chave"
-./scripts/executar-piloto-commons-io-filtrado.sh
-```
-
-O piloto usa por padrão dois contêineres para aumentar a amostra inicial do
-estudo:
-
-- `org.apache.commons.io.IOCase`
-- `org.apache.commons.io.input.BoundedReader`
-
-Se quiser forçar uma única classe no piloto, use:
-
-```bash
-export PILOT_TARGET_CONTAINER="org.apache.commons.io.input.BoundedReader"
-./scripts/executar-piloto-commons-io-filtrado.sh
-```
-
-Se quiser escolher explicitamente mais de um contêiner, use
-`PILOT_TARGET_CONTAINERS` com uma lista separada por vírgulas:
-
-```bash
-export PILOT_TARGET_CONTAINERS="org.apache.commons.io.IOCase,org.apache.commons.io.input.BoundedReader"
-./scripts/executar-piloto-commons-io-filtrado.sh
-```
-
-E, quando estiver confortável, pode rodar o estudo completo do `commons-io`
-com o baseline filtrado:
-
-```bash
-export OPENAI_API_KEY="sua-chave"
-./scripts/executar-estudo-commons-io-filtrado.sh
-```
-
-## Limpeza do workspace
-
-```bash
-./scripts/limpar-projeto.sh --confirmar
-```
-
-Isso remove artefatos gerados e recompõe o diretório de trabalho limpo para uma nova rodada.
-
-## Cobertura e qualidade
-
-Os testes automatizados do código Go foram validados com:
-
-```bash
-GOCACHE=$(pwd)/.gocache go test ./...
-```
-
-A etapa atual priorizou:
-
-- estabilizar a segunda fase;
-- tornar o fluxo reproduzível para Guava e Commons Collections;
-- simplificar o fluxo para artefatos locais em JSON, CSV e HTML.
+- [`docs/`](docs/) — documentação navegável
+- [`pipeline.example.json`](pipeline.example.json) — configuração de referência
+- [`scripts/`](scripts/) — todos os scripts de execução
 
 ## Base acadêmica
-
-Esta lista resume alguns dos trabalhos mais diretamente relacionados ao protocolo experimental e à baseline usada neste repositório.
 
 1. Diego Marcilio, Carlo A. Furia. *Lightweight precise automatic extraction of exception preconditions in java methods*. Empirical Software Engineering, 29, artigo 30, 2024. DOI: [10.1007/s10664-023-10392-x](https://doi.org/10.1007/s10664-023-10392-x)
 2. Diego Marcilio, Carlo A. Furia. *What Is Thrown? Lightweight Precise Automatic Extraction of Exception Preconditions in Java Methods*. ICSME 2022. DOI: [10.1109/ICSME55016.2022.00038](https://doi.org/10.1109/ICSME55016.2022.00038)
 3. Diego Marcilio, Carlo A. Furia. *How Java Programmers Test Exceptional Behavior*. MSR 2021. DOI: [10.1109/MSR52588.2021.00033](https://doi.org/10.1109/MSR52588.2021.00033)
 
-## Documentação
-
-A documentação navegável do projeto fica em `docs/` e no site MkDocs.
-
-Pontos de entrada mais úteis:
-
-- [`/Users/marceloamorim/Documents/unb/witup-llm/docs/index.md`](/Users/marceloamorim/Documents/unb/witup-llm/docs/index.md)
-- [`/Users/marceloamorim/Documents/unb/witup-llm/docs/overview/getting-started.md`](/Users/marceloamorim/Documents/unb/witup-llm/docs/overview/getting-started.md)
-- [`/Users/marceloamorim/Documents/unb/witup-llm/docs/overview/configuration.md`](/Users/marceloamorim/Documents/unb/witup-llm/docs/overview/configuration.md)
-
-## Contribuição
-
-Pull requests são bem-vindos, principalmente em:
-
-- robustez da geração de testes;
-- avaliação com JaCoCo/PIT;
-- suporte a novos projetos Java;
-- qualidade da visualização HTML/CSV da fase dois.
-
 ## Licença
 
-MIT. Veja [`LICENSE`](/Users/marceloamorim/Documents/unb/witup-llm/LICENSE).
+MIT. Veja [`LICENSE`](LICENSE).

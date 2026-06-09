@@ -10,7 +10,7 @@ import (
 
 func resetRegistroParaTeste() {
 	muSaida = sync.Mutex{}
-	inicializarSaida = sync.Once{}
+	inicializarSaida = &sync.Once{}
 	saida = os.Stderr
 	caminhoArquivo = ""
 }

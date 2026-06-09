@@ -21,7 +21,7 @@ const (
 
 var (
 	muSaida          sync.Mutex
-	inicializarSaida sync.Once
+	inicializarSaida           = &sync.Once{}
 	saida            io.Writer = os.Stderr
 	caminhoArquivo   string
 )

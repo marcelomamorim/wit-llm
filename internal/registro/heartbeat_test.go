@@ -17,7 +17,7 @@ func TestHeartbeatEmiteCamposEParaComCancelamento(t *testing.T) {
 	antigaOnce := inicializarSaida
 	saida = &buffer
 	caminhoArquivo = ""
-	inicializarSaida = syncOnceZerada()
+	inicializarSaida = &sync.Once{}
 	defer func() {
 		saida = antigaSaida
 		caminhoArquivo = antigoCaminho
@@ -44,8 +44,4 @@ func TestHeartbeatEmiteCamposEParaComCancelamento(t *testing.T) {
 	if antes != depois {
 		t.Fatalf("heartbeat continuou escrevendo após cancelamento")
 	}
-}
-
-func syncOnceZerada() sync.Once {
-	return sync.Once{}
 }
