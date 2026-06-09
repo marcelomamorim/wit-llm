@@ -19,6 +19,7 @@ set -euo pipefail
 
 EXPERIMENT_DIR="${EXPERIMENT_DIR:-jdk-global-impact-study}"
 RUN_STAMP="${RUN_STAMP:-}"
+JTREG_CONCURRENCY="${JTREG_CONCURRENCY:-1}"
 
 if [[ -z "$RUN_STAMP" ]]; then
   printf 'erro: RUN_STAMP é obrigatório.\n' >&2
@@ -47,7 +48,7 @@ fi
 
 mkdir -p "${OUT}"
 printf '[jcov-baseline] OUT=%s\n' "${OUT}"
-printf '[jcov-baseline] tiers=tier1+tier2 concurrency=1\n'
+printf '[jcov-baseline] tiers=tier1+tier2 concurrency=%s\n' "${JTREG_CONCURRENCY}"
 
 # Wrapper seletivo: injeta JCov apenas no MainWrapper (testes reais)
 WRAPPER=/tmp/wrapper-jdk-baseline
@@ -74,7 +75,7 @@ printf '[jcov-baseline] iniciando jtreg tier1+tier2 com JCov...\n'
   -w:"${OUT}/work" \
   -agentvm -automatic -ignore:quiet \
   -verbose:summary -retain:fail,error \
-  -concurrency:1 -timeoutFactor:2 \
+  -concurrency:"${JTREG_CONCURRENCY}" -timeoutFactor:2 \
   "${JDK_SRC}/test/jdk:tier1" \
   "${JDK_SRC}/test/jdk:tier2"
 
