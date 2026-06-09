@@ -173,17 +173,119 @@ Upload do `variants-generated.zip` para o bucket S3 `witup-jcov-results` via con
 | `JTREG_CONCURRENCY` | 48 |
 | Bucket de saída | `witup-jcov-results` |
 
+**Buildspec completo** (colar no campo "Insert build commands" → "Switch to editor"):
+
+```yaml
+version: 0.2
+env:
+  variables:
+    EXPERIMENT_DIR: "jdk-pilot"
+    RUN_STAMP: "pilot-20260607T041241Z"
+    JTREG_CONCURRENCY: "48"
+    S3_BUCKET: "witup-jcov-results"
+    JCOV_JAR: "/opt/jcov/JCOV_BUILD/jcov_3.0/jcov.jar"
+    TEST_JDK: "/opt/test-jdk"
+    JDK_SRC: "/opt/openjdk-src"
+
+phases:
+  pre_build:
+    commands:
+      - echo "Instalando AWS CLI..."
+      - curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+      - unzip -q /tmp/awscliv2.zip -d /tmp
+      - /tmp/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli
+      - aws --version
+      - echo "Corrigindo concorrencia no script (imagem tem hardcoded=1)..."
+      - sed -i "s/-concurrency:1/-concurrency:${JTREG_CONCURRENCY}/g" /data/scripts/run-jcov-baseline-docker.sh
+      - grep "concurrency" /data/scripts/run-jcov-baseline-docker.sh
+      - export RUN_DIR=/data/generated/experiments/$EXPERIMENT_DIR/$RUN_STAMP
+      - mkdir -p $RUN_DIR/jcov-baseline $RUN_DIR/jcov-results/wit-context $RUN_DIR/jcov-results/direct-tests
+      - mkdir -p $RUN_DIR/variants/wit-context $RUN_DIR/variants/direct-tests
+      - echo "Baixando testes gerados do S3..."
+      - aws s3 cp s3://$S3_BUCKET/variants-generated.zip /tmp/variants-generated.zip
+      - unzip -o /tmp/variants-generated.zip -d $RUN_DIR
+
+  build:
+    commands:
+      - export RUN_DIR=/data/generated/experiments/$EXPERIMENT_DIR/$RUN_STAMP
+      - echo "=== 1/3 JCov BASELINE (tier1+tier2, concurrency=$JTREG_CONCURRENCY) ==="
+      - EXPERIMENT_DIR=$EXPERIMENT_DIR RUN_STAMP=$RUN_STAMP JTREG_CONCURRENCY=$JTREG_CONCURRENCY bash /data/scripts/run-jcov-baseline-docker.sh
+      - echo "=== 2/3 JCov WIT-CONTEXT ==="
+      - EXPERIMENT_DIR=$EXPERIMENT_DIR RUN_STAMP=$RUN_STAMP JTREG_CONCURRENCY=$JTREG_CONCURRENCY JCOV_VARIANT=wit-context bash /data/scripts/run-jcov-docker.sh
+      - echo "=== 3/3 JCov DIRECT-TESTS ==="
+      - EXPERIMENT_DIR=$EXPERIMENT_DIR RUN_STAMP=$RUN_STAMP JTREG_CONCURRENCY=$JTREG_CONCURRENCY JCOV_VARIANT=direct-tests bash /data/scripts/run-jcov-docker.sh
+
+  post_build:
+    commands:
+      - export RUN_DIR=/data/generated/experiments/$EXPERIMENT_DIR/$RUN_STAMP
+      - echo "=== Merge baseline + wit-context ==="
+      - java -jar $JCOV_JAR Merger -output $RUN_DIR/jcov-merged-baseline-wit.xml $RUN_DIR/jcov-baseline/jcov-result.xml $RUN_DIR/jcov-results/wit-context/jcov-result.xml || echo "AVISO merge wit falhou"
+      - echo "=== Merge baseline + direct-tests ==="
+      - java -jar $JCOV_JAR Merger -output $RUN_DIR/jcov-merged-baseline-direct.xml $RUN_DIR/jcov-baseline/jcov-result.xml $RUN_DIR/jcov-results/direct-tests/jcov-result.xml || echo "AVISO merge direct falhou"
+      - echo "=== Extraindo metricas ==="
+      - |
+        python3 << 'PYEOF'
+        import json, os, xml.etree.ElementTree as ET
+        run_dir = os.environ.get('RUN_DIR', '/data/generated/experiments/jdk-pilot/pilot-20260607T041241Z')
+        BRANCH_TAGS = {'cond','case','default','fall','tg','catch','br','goto'}
+        METHOD_TAGS = {'methenter'}
+        def extract(p):
+            if not os.path.exists(p): return {}
+            b_cov=b_unc=m_cov=m_unc=0; lc=set(); lu=set()
+            for el in ET.parse(p).getroot().iter():
+                tag = el.tag.split('}')[-1] if '}' in el.tag else el.tag
+                if tag not in (BRANCH_TAGS|METHOD_TAGS) or 'count' not in el.attrib: continue
+                c=int(el.get('count','0')); ln=el.get('sl') or el.get('line') or el.get('pos','')
+                try: ln=int(ln)
+                except: ln=None
+                if tag in METHOD_TAGS: m_cov,m_unc = (m_cov+1,m_unc) if c>0 else (m_cov,m_unc+1)
+                else: b_cov,b_unc = (b_cov+1,b_unc) if c>0 else (b_cov,b_unc+1)
+                if ln: (lc if c>0 else lu).add(ln)
+            bt=b_cov+b_unc; mt=m_cov+m_unc; lt=len(lc)+len(lu-lc)
+            return {'covered_branches':b_cov,'total_branches':bt,'branch_coverage_pct':round(b_cov*100/bt,1) if bt else 0,
+                    'covered_methods':m_cov,'total_methods':mt,'method_coverage_pct':round(m_cov*100/mt,1) if mt else 0,
+                    'covered_lines':len(lc),'total_lines':lt,'line_coverage_pct':round(len(lc)*100/lt,1) if lt else 0}
+        results={
+            'baseline':        extract(f'{run_dir}/jcov-baseline/jcov-result.xml'),
+            'wit-context':     extract(f'{run_dir}/jcov-results/wit-context/jcov-result.xml'),
+            'direct-tests':    extract(f'{run_dir}/jcov-results/direct-tests/jcov-result.xml'),
+            'baseline+wit':    extract(f'{run_dir}/jcov-merged-baseline-wit.xml'),
+            'baseline+direct': extract(f'{run_dir}/jcov-merged-baseline-direct.xml'),
+        }
+        out=f'{run_dir}/jcov-summary.json'
+        with open(out,'w') as f: json.dump(results,f,indent=2)
+        print(f"\n{'Cenario':<22} {'Branch%':>8} {'Method%':>8} {'Line%':>7}")
+        print('-'*48)
+        for k,v in results.items():
+            if v: print(f"{k:<22} {v.get('branch_coverage_pct',0):>7}% {v.get('method_coverage_pct',0):>7}% {v.get('line_coverage_pct',0):>6}%")
+        print(f"\nSalvo em {out}")
+        PYEOF
+      - echo "=== Upload para S3 ==="
+      - aws s3 sync $RUN_DIR/jcov-baseline   s3://$S3_BUCKET/$RUN_STAMP/jcov-baseline/
+      - aws s3 sync $RUN_DIR/jcov-results    s3://$S3_BUCKET/$RUN_STAMP/jcov-results/
+      - aws s3 cp   $RUN_DIR/jcov-merged-baseline-wit.xml    s3://$S3_BUCKET/$RUN_STAMP/
+      - aws s3 cp   $RUN_DIR/jcov-merged-baseline-direct.xml s3://$S3_BUCKET/$RUN_STAMP/
+      - aws s3 cp   $RUN_DIR/jcov-summary.json               s3://$S3_BUCKET/$RUN_STAMP/
+
+artifacts:
+  files:
+    - jcov-summary.json
+  base-directory: /tmp
+```
+
+> **Nota:** o `sed` no `pre_build` é necessário porque a imagem Docker atual tem `-concurrency:1` hardcoded em `run-jcov-baseline-docker.sh`. Versões futuras da imagem já incluem o fix (`JTREG_CONCURRENCY` configurável).
+
 O buildspec executa em sequência:
-1. Instala AWS CLI
+1. Instala AWS CLI + corrige concorrência via `sed`
 2. Baixa testes gerados do S3
-3. Roda JCov no **baseline** via `run-jcov-baseline-docker.sh` (tier1+tier2 do JDK)
+3. Roda JCov no **baseline** via `run-jcov-baseline-docker.sh` (tier1+tier2, concurrency=48)
 4. Roda JCov no **wit-context** via `run-jcov-docker.sh`
 5. Roda JCov no **direct-tests** via `run-jcov-docker.sh`
 6. Merge: `baseline + wit` e `baseline + direct` via `java -jar jcov.jar Merger`
 7. Extrai métricas (branch/method/line) → `jcov-summary.json`
 8. Salva tudo no S3
 
-> Tempo estimado: ~2–4 horas com 72 vCPUs
+> Tempo estimado: ~2–4 horas com 72 vCPUs e concurrency=48
 
 #### 3.3 — Baixar resultados
 
