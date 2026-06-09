@@ -1,0 +1,61 @@
+name: Build evaluator (amd64) → Docker Hub
+
+# Disparo manual via GitHub Actions → "Run workflow"
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag da imagem no Docker Hub'
+        required: false
+        default: 'amd64'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360   # 6h — build do JDK do zero leva ~40min no Actions
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        # O build precisa de ~20GB; runners têm 14GB livres por padrão.
+        # Remove pacotes desnecessários para liberar espaço.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get clean
+          df -h
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login no Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build witup-llm/jdk-builder (amd64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/jdk-builder/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: witup-llm/jdk-builder:latest
+          cache-from: type=gha,scope=jdk-builder
+          cache-to: type=gha,mode=max,scope=jdk-builder
+
+      - name: Build witup-llm/evaluator (amd64) e push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/evaluator/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            cloudarchlab/witup-evaluator:${{ github.event.inputs.tag || 'amd64' }}
+            cloudarchlab/witup-evaluator:latest-amd64
+          cache-from: type=gha,scope=evaluator
+          cache-to: type=gha,mode=max,scope=evaluator
