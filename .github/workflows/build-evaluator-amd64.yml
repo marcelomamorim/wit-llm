@@ -26,36 +26,25 @@ jobs:
           sudo apt-get clean
           df -h
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Login no Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
-      - name: Build witup-llm/jdk-builder (amd64)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/jdk-builder/Dockerfile
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: witup-llm/jdk-builder:latest
-          cache-from: type=gha,scope=jdk-builder
-          cache-to: type=gha,mode=max,scope=jdk-builder
+      - name: Build jdk-builder (amd64)
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            -t witup-llm/jdk-builder:latest \
+            -f docker/jdk-builder/Dockerfile \
+            .
 
-      - name: Build witup-llm/evaluator (amd64) e push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: docker/evaluator/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            cloudarchlab/witup-evaluator:${{ github.event.inputs.tag || 'amd64' }}
-            cloudarchlab/witup-evaluator:latest-amd64
-          cache-from: type=gha,scope=evaluator
-          cache-to: type=gha,mode=max,scope=evaluator
+      - name: Build evaluator (amd64) e push
+        run: |
+          TAG="${{ github.event.inputs.tag || 'amd64' }}"
+          docker build \
+            --platform linux/amd64 \
+            -t cloudarchlab/witup-evaluator:${TAG} \
+            -t cloudarchlab/witup-evaluator:latest-amd64 \
+            -f docker/evaluator/Dockerfile \
+            .
+          docker push cloudarchlab/witup-evaluator:${TAG}
+          docker push cloudarchlab/witup-evaluator:latest-amd64
