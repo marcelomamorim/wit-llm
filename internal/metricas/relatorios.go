@@ -210,7 +210,6 @@ func normalizarEncodingXML(dados []byte) []byte {
 	return reEncodingXML.ReplaceAll(dados, []byte(`${1}UTF-8${3}`))
 }
 
-
 // ExtrairCoberturaJaCoCo lê um relatório XML do JaCoCo e devolve a cobertura
 // percentual do contador solicitado.
 func ExtrairCoberturaJaCoCo(caminhoXML, tipoContador string) (float64, error) {
