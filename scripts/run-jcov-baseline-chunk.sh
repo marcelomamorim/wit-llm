@@ -98,6 +98,20 @@ fi
 if [[ -f "${JCOV_RESULT}" ]]; then
   ls -lh "${JCOV_RESULT}"
   printf '[jcov-chunk] jcov-result.xml gerado com sucesso.\n'
+
+  # Extrair métricas completas
+  ANALYZE_SCRIPT="/data/scripts/analyze_jcov.py"
+  if [ ! -f "${ANALYZE_SCRIPT}" ]; then
+    printf '[jcov-chunk] Baixando analyze_jcov.py...\n'
+    curl -sf https://raw.githubusercontent.com/marcelomamorim/wit-llm/main/scripts/analyze_jcov.py \
+      -o "${ANALYZE_SCRIPT}"
+    chmod +x "${ANALYZE_SCRIPT}"
+  fi
+  python3 "${ANALYZE_SCRIPT}" \
+    "${JCOV_RESULT}" \
+    --variant "${CHUNK_ID}" \
+    --output "${OUT}/summary.json"
+  printf '[jcov-chunk] summary.json escrito.\n'
 else
   printf 'AVISO: jcov-result.xml não encontrado.\n' >&2
   exit 1
