@@ -23,23 +23,18 @@ log() { printf '[start-jcov] %s\n' "$*"; }
 
 start_build() {
   local desc="$1"; shift
-  # Escreve JSON num arquivo temporário para evitar que o AWS CLI
-  # interprete vírgulas nos valores como separadores de lista
   local tmp
   tmp=$(mktemp /tmp/codebuild_input_XXXXXX.json)
-  python3 - "${PROJECT}" "$@" > "${tmp}" << 'PYEOF'
+  # Gera JSON via python3 sem heredoc (evita bug de parsing com curl | bash)
+  python3 -c "
 import json, sys
 project = sys.argv[1]
 env_vars = []
 for arg in sys.argv[2:]:
-    name, value = arg.split("=", 1)
-    env_vars.append({"name": name, "value": value, "type": "PLAINTEXT"})
-print(json.dumps({
-    "projectName": project,
-    "timeoutInMinutesOverride": 45,
-    "environmentVariablesOverride": env_vars
-}))
-PYEOF
+    name, value = arg.split('=', 1)
+    env_vars.append({'name': name, 'value': value, 'type': 'PLAINTEXT'})
+print(json.dumps({'projectName': project, 'timeoutInMinutesOverride': 45, 'environmentVariablesOverride': env_vars}))
+" "${PROJECT}" "$@" > "${tmp}"
   local ids
   ids=$(aws codebuild start-build \
     --cli-input-json "file://${tmp}" \
