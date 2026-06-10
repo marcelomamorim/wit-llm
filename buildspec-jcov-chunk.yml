@@ -9,14 +9,14 @@ version: 0.2
 #   EXPERIMENT_DIR   : jdk-pilot
 #   RUN_STAMP        : pilot-YYYYMMDDTHHMMSSZ
 #   JTREG_CONCURRENCY: default 1
-#   S3_BUCKET        : wit-llm-jcov-results
+#   S3_BUCKET        : witup-jcov-results
 
 env:
   variables:
     EXPERIMENT_DIR: "jdk-pilot"
     RUN_STAMP: "pilot-20260607T041241Z"
     JTREG_CONCURRENCY: "1"
-    S3_BUCKET: "wit-llm-jcov-results"
+    S3_BUCKET: "witup-jcov-results"
     JCOV_JAR: "/opt/jcov/JCOV_BUILD/jcov_3.0/jcov.jar"
     TEST_JDK: "/opt/test-jdk"
     JDK_SRC: "/opt/openjdk-src"
@@ -31,6 +31,10 @@ phases:
       - aws --version
       - export RUN_DIR=/data/generated/experiments/$EXPERIMENT_DIR/$RUN_STAMP
       - mkdir -p $RUN_DIR/jcov-baseline $RUN_DIR/jcov-baseline-chunks $RUN_DIR/jcov-results/wit-context $RUN_DIR/jcov-results/direct-tests
+      - echo "Baixando scripts atualizados do GitHub..."
+      - curl -sf https://raw.githubusercontent.com/marcelomamorim/wit-llm/main/scripts/run-jcov-baseline-chunk.sh -o /data/scripts/run-jcov-baseline-chunk.sh
+      - curl -sf https://raw.githubusercontent.com/marcelomamorim/wit-llm/main/scripts/run-jcov-merge.sh -o /data/scripts/run-jcov-merge.sh
+      - chmod +x /data/scripts/run-jcov-baseline-chunk.sh /data/scripts/run-jcov-merge.sh
       # Para generated e merge: baixar chunks já produzidos do S3
       - |
         if [ "${JCOV_MODE}" = "generated" ]; then
