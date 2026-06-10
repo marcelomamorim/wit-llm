@@ -94,13 +94,24 @@ set -e
 printf '[jcov-chunk] jtreg encerrado (exit=%d)\n' "${JTREG_EXIT}"
 
 # Mesclar arquivos UUID residuais
+# UUID files são gerados quando múltiplos JVMs tentam escrever no mesmo XML simultaneamente.
+# Se o merge falhar (ex: arquivo corrompido com proxy class), descarta os UUID files e
+# mantém o jcov-result.xml principal, que já contém a cobertura acumulada.
 UUID_FILES=$(find "${OUT}" -maxdepth 1 -name "jcov-result.xml.*" ! -name "*.lock" 2>/dev/null || true)
 if [[ -n "${UUID_FILES}" ]]; then
-  printf '[jcov-chunk] mesclando arquivos UUID residuais...\n'
+  printf '[jcov-chunk] encontrados arquivos UUID residuais — tentando merge...\n'
+  set +e
   java -jar "${JCOV_JAR}" Merger \
     -output "${JCOV_RESULT}" \
     -boe skip \
     "${JCOV_RESULT}" ${UUID_FILES} 2>&1 | tail -5
+  MERGE_EXIT=$?
+  set -e
+  if [[ "${MERGE_EXIT}" -ne 0 ]]; then
+    printf '[jcov-chunk] AVISO: merge falhou (exit=%d) — descartando UUID files e mantendo XML principal\n' "${MERGE_EXIT}"
+  else
+    printf '[jcov-chunk] merge OK\n'
+  fi
   rm -f ${UUID_FILES}
 fi
 
