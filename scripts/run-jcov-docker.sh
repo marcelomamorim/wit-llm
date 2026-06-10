@@ -177,7 +177,8 @@ WRAPPER
       set +e
       java -jar "${JCOV_JAR}" Merger \
         -output "${jcov_result_file}" \
-        "${jcov_result_file}" ${uuid_files} 2>&1 | tail -3
+        -boe skip \
+        "${jcov_result_file}" ${uuid_files} 2>&1 | tail -5
       local merge_exit=$?
       set -e
       if [ "${merge_exit}" -eq 0 ]; then

@@ -91,7 +91,8 @@ if [[ -n "${UUID_FILES}" ]]; then
   printf '[jcov-chunk] mesclando arquivos UUID residuais...\n'
   java -jar "${JCOV_JAR}" Merger \
     -output "${JCOV_RESULT}" \
-    "${JCOV_RESULT}" ${UUID_FILES} 2>&1 | tail -3
+    -boe skip \
+    "${JCOV_RESULT}" ${UUID_FILES} 2>&1 | tail -5
   rm -f ${UUID_FILES}
 fi
 
