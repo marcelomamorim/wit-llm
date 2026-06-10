@@ -61,12 +61,20 @@ WRAP
 chmod +x "${WRAPPER}/bin/java"
 
 # Converter JCOV_TEST_PATHS (vírgula) em argumentos jtreg
+# Suporta dois formatos:
+#   :group_name  -> ${JDK_SRC}/test/jdk:group_name  (respeita TEST.groups, tier exato)
+#   path/subdir  -> ${JDK_SRC}/test/jdk/path/subdir  (todos os testes do diretório)
 JTREG_ARGS=()
 IFS=',' read -ra PATHS <<< "${JCOV_TEST_PATHS}"
 for p in "${PATHS[@]}"; do
   p="${p// /}"  # trim spaces
   [[ -z "${p}" ]] && continue
-  JTREG_ARGS+=("${JDK_SRC}/test/jdk/${p}")
+  if [[ "${p}" == :* ]]; then
+    # group specifier: :tier1_part1 -> test/jdk:tier1_part1
+    JTREG_ARGS+=("${JDK_SRC}/test/jdk${p}")
+  else
+    JTREG_ARGS+=("${JDK_SRC}/test/jdk/${p}")
+  fi
 done
 
 printf '[jcov-chunk] iniciando jtreg (%d paths)...\n' "${#JTREG_ARGS[@]}"
