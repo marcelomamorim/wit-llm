@@ -23,17 +23,22 @@ log() { printf '[start-jcov] %s\n' "$*"; }
 
 start_build() {
   local desc="$1"; shift
-  local vars=("$@")
-  local override_vars=()
-  for v in "${vars[@]}"; do
-    IFS='=' read -r name value <<< "${v}"
-    override_vars+=("name=${name},value=${value},type=PLAINTEXT")
+  # Constrói JSON array de env vars para evitar problemas com valores que contêm vírgulas
+  local json="["
+  local first=1
+  for v in "$@"; do
+    local name="${v%%=*}"
+    local value="${v#*=}"
+    [[ "${first}" -eq 0 ]] && json+=","
+    json+="{\"name\":\"${name}\",\"value\":\"${value}\",\"type\":\"PLAINTEXT\"}"
+    first=0
   done
+  json+="]"
   local ids
   ids=$(aws codebuild start-build \
     --project-name "${PROJECT}" \
     --timeout-in-minutes-override 45 \
-    --environment-variables-override "${override_vars[@]}" \
+    --environment-variables-override "${json}" \
     --query "build.id" --output text)
   log "✓ ${desc}: ${ids}"
 }
