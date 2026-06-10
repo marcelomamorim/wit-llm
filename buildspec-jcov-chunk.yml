@@ -1,0 +1,100 @@
+version: 0.2
+
+# Buildspec parametrizado para JCov em lotes.
+# Controlado pelas env vars:
+#   JCOV_MODE        : "baseline-chunk" | "generated" | "merge"
+#   CHUNK_ID         : ex: chunk-1 (apenas para baseline-chunk)
+#   JCOV_TEST_PATHS  : paths jtreg separados por vírgula (apenas para baseline-chunk)
+#   JCOV_VARIANT     : "wit-context" | "direct-tests" (apenas para generated)
+#   EXPERIMENT_DIR   : jdk-pilot
+#   RUN_STAMP        : pilot-YYYYMMDDTHHMMSSZ
+#   JTREG_CONCURRENCY: default 1
+#   S3_BUCKET        : wit-llm-jcov-results
+
+env:
+  variables:
+    EXPERIMENT_DIR: "jdk-pilot"
+    RUN_STAMP: "pilot-20260607T041241Z"
+    JTREG_CONCURRENCY: "1"
+    S3_BUCKET: "wit-llm-jcov-results"
+    JCOV_JAR: "/opt/jcov/JCOV_BUILD/jcov_3.0/jcov.jar"
+    TEST_JDK: "/opt/test-jdk"
+    JDK_SRC: "/opt/openjdk-src"
+
+phases:
+  pre_build:
+    commands:
+      - echo "=== PRE_BUILD: JCOV_MODE=${JCOV_MODE} CHUNK_ID=${CHUNK_ID:-n/a} ==="
+      - curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+      - unzip -q /tmp/awscliv2.zip -d /tmp
+      - /tmp/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli
+      - aws --version
+      - export RUN_DIR=/data/generated/experiments/$EXPERIMENT_DIR/$RUN_STAMP
+      - mkdir -p $RUN_DIR/jcov-baseline $RUN_DIR/jcov-baseline-chunks $RUN_DIR/jcov-results/wit-context $RUN_DIR/jcov-results/direct-tests
+      # Para generated e merge: baixar chunks já produzidos do S3
+      - |
+        if [ "${JCOV_MODE}" = "generated" ]; then
+          echo "Baixando variants-generated.zip do S3..."
+          aws s3 cp s3://$S3_BUCKET/variants-generated.zip /tmp/variants-generated.zip
+          unzip -o /tmp/variants-generated.zip -d $RUN_DIR
+          echo "Unzip concluído."
+        fi
+      - |
+        if [ "${JCOV_MODE}" = "merge" ]; then
+          echo "Baixando chunks do baseline do S3..."
+          aws s3 sync s3://$S3_BUCKET/$RUN_STAMP/jcov-baseline-chunks/ $RUN_DIR/jcov-baseline-chunks/
+          echo "Sync concluído."
+        fi
+
+  build:
+    commands:
+      - export RUN_DIR=/data/generated/experiments/$EXPERIMENT_DIR/$RUN_STAMP
+      - |
+        if [ "${JCOV_MODE}" = "baseline-chunk" ]; then
+          echo "=== Rodando baseline chunk ${CHUNK_ID} ==="
+          EXPERIMENT_DIR=$EXPERIMENT_DIR \
+          RUN_STAMP=$RUN_STAMP \
+          CHUNK_ID=$CHUNK_ID \
+          JCOV_TEST_PATHS="$JCOV_TEST_PATHS" \
+          JTREG_CONCURRENCY=$JTREG_CONCURRENCY \
+          bash /data/scripts/run-jcov-baseline-chunk.sh
+        elif [ "${JCOV_MODE}" = "generated" ]; then
+          echo "=== Rodando JCov variante ${JCOV_VARIANT} ==="
+          EXPERIMENT_DIR=$EXPERIMENT_DIR \
+          RUN_STAMP=$RUN_STAMP \
+          JCOV_VARIANT=$JCOV_VARIANT \
+          JTREG_CONCURRENCY=$JTREG_CONCURRENCY \
+          bash /data/scripts/run-jcov-docker.sh
+        elif [ "${JCOV_MODE}" = "merge" ]; then
+          echo "=== Mesclando chunks do baseline ==="
+          EXPERIMENT_DIR=$EXPERIMENT_DIR \
+          RUN_STAMP=$RUN_STAMP \
+          bash /data/scripts/run-jcov-merge.sh
+        else
+          echo "ERRO: JCOV_MODE inválido: ${JCOV_MODE}" >&2
+          exit 1
+        fi
+
+  post_build:
+    commands:
+      - export RUN_DIR=/data/generated/experiments/$EXPERIMENT_DIR/$RUN_STAMP
+      - |
+        if [ "${JCOV_MODE}" = "baseline-chunk" ]; then
+          echo "Subindo chunk ${CHUNK_ID} para S3..."
+          aws s3 cp \
+            $RUN_DIR/jcov-baseline-chunks/${CHUNK_ID}/jcov-result.xml \
+            s3://$S3_BUCKET/$RUN_STAMP/jcov-baseline-chunks/${CHUNK_ID}/jcov-result.xml
+          echo "Upload concluído: s3://$S3_BUCKET/$RUN_STAMP/jcov-baseline-chunks/${CHUNK_ID}/jcov-result.xml"
+        elif [ "${JCOV_MODE}" = "generated" ]; then
+          echo "Subindo resultados JCov ${JCOV_VARIANT} para S3..."
+          aws s3 sync \
+            $RUN_DIR/jcov-results/${JCOV_VARIANT}/ \
+            s3://$S3_BUCKET/$RUN_STAMP/jcov-results/${JCOV_VARIANT}/
+          echo "Upload concluído."
+        elif [ "${JCOV_MODE}" = "merge" ]; then
+          echo "Subindo jcov-result.xml final para S3..."
+          aws s3 cp \
+            $RUN_DIR/jcov-baseline/jcov-result.xml \
+            s3://$S3_BUCKET/$RUN_STAMP/jcov-baseline/jcov-result.xml
+          echo "Upload concluído: s3://$S3_BUCKET/$RUN_STAMP/jcov-baseline/jcov-result.xml"
+        fi
