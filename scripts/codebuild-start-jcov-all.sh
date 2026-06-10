@@ -113,7 +113,7 @@ start_build "baseline chunk-4a (security crypto)" \
 start_build "baseline chunk-4b (ssl-core)" \
   "JCOV_MODE=baseline-chunk" \
   "CHUNK_ID=chunk-4b" \
-  "JCOV_TEST_PATHS=javax/net/ssl/ALPN,javax/net/ssl/FixingJavadocs,javax/net/ssl/HttpsURLConnection,javax/net/ssl/sanity,javax/net/ssl/ServerName,javax/net/ssl/SSLEngine,javax/net/ssl/SSLEngineResult,javax/net/ssl/SSLParameters,javax/net/ssl/SSLServerSocket,javax/net/ssl/SSLSession,javax/net/ssl/Stapling,javax/net/ssl/templates,javax/net/ssl/TLS,javax/net/ssl/finalize,javax/net/ssl/GetInstance,javax/net/ssl/Fix5070632.java,javax/net" \
+  "JCOV_TEST_PATHS=javax/net/ssl/ALPN,javax/net/ssl/FixingJavadocs,javax/net/ssl/HttpsURLConnection,javax/net/ssl/sanity,javax/net/ssl/ServerName,javax/net/ssl/SSLEngine,javax/net/ssl/SSLEngineResult,javax/net/ssl/SSLParameters,javax/net/ssl/SSLServerSocket,javax/net/ssl/SSLSession,javax/net/ssl/Stapling,javax/net/ssl/templates,javax/net/ssl/TLS,javax/net/ssl/finalize,javax/net/ssl/ciphersuites,javax/net/ssl/etc,javax/net/ssl/GetInstance.java,javax/net/ssl/Fix5070632.java,javax/net" \
   "RUN_STAMP=${RUN_STAMP}" \
   "EXPERIMENT_DIR=jdk-pilot" \
   "JTREG_CONCURRENCY=${CONCURRENCY}"
