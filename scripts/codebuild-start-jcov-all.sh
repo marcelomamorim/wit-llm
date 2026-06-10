@@ -23,23 +23,28 @@ log() { printf '[start-jcov] %s\n' "$*"; }
 
 start_build() {
   local desc="$1"; shift
-  # Constrói JSON array de env vars para evitar problemas com valores que contêm vírgulas
-  local json="["
-  local first=1
-  for v in "$@"; do
-    local name="${v%%=*}"
-    local value="${v#*=}"
-    [[ "${first}" -eq 0 ]] && json+=","
-    json+="{\"name\":\"${name}\",\"value\":\"${value}\",\"type\":\"PLAINTEXT\"}"
-    first=0
-  done
-  json+="]"
+  # Escreve JSON num arquivo temporário para evitar que o AWS CLI
+  # interprete vírgulas nos valores como separadores de lista
+  local tmp
+  tmp=$(mktemp /tmp/codebuild_input_XXXXXX.json)
+  python3 - "${PROJECT}" "$@" > "${tmp}" << 'PYEOF'
+import json, sys
+project = sys.argv[1]
+env_vars = []
+for arg in sys.argv[2:]:
+    name, value = arg.split("=", 1)
+    env_vars.append({"name": name, "value": value, "type": "PLAINTEXT"})
+print(json.dumps({
+    "projectName": project,
+    "timeoutInMinutesOverride": 45,
+    "environmentVariablesOverride": env_vars
+}))
+PYEOF
   local ids
   ids=$(aws codebuild start-build \
-    --project-name "${PROJECT}" \
-    --timeout-in-minutes-override 45 \
-    --environment-variables-override "${json}" \
+    --cli-input-json "file://${tmp}" \
     --query "build.id" --output text)
+  rm -f "${tmp}"
   log "✓ ${desc}: ${ids}"
 }
 
