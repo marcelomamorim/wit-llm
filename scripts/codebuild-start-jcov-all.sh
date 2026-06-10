@@ -64,11 +64,20 @@ start_build "baseline chunk-1a (java/lang core)" \
   "EXPERIMENT_DIR=jdk-pilot" \
   "JTREG_CONCURRENCY=${CONCURRENCY}"
 
-# chunk-1b: java/lang/invoke + java/lang/instrument (pesados)
-start_build "baseline chunk-1b (java/lang invoke+instrument)" \
+# chunk-1b: java/lang/invoke (pesado sozinho)
+start_build "baseline chunk-1b (java/lang/invoke)" \
   "JCOV_MODE=baseline-chunk" \
   "CHUNK_ID=chunk-1b" \
-  "JCOV_TEST_PATHS=java/lang/invoke,java/lang/instrument" \
+  "JCOV_TEST_PATHS=java/lang/invoke" \
+  "RUN_STAMP=${RUN_STAMP}" \
+  "EXPERIMENT_DIR=jdk-pilot" \
+  "JTREG_CONCURRENCY=${CONCURRENCY}"
+
+# chunk-1c: java/lang/instrument (pesado sozinho)
+start_build "baseline chunk-1c (java/lang/instrument)" \
+  "JCOV_MODE=baseline-chunk" \
+  "CHUNK_ID=chunk-1c" \
+  "JCOV_TEST_PATHS=java/lang/instrument" \
   "RUN_STAMP=${RUN_STAMP}" \
   "EXPERIMENT_DIR=jdk-pilot" \
   "JTREG_CONCURRENCY=${CONCURRENCY}"
@@ -100,11 +109,20 @@ start_build "baseline chunk-4a (security crypto)" \
   "EXPERIMENT_DIR=jdk-pilot" \
   "JTREG_CONCURRENCY=${CONCURRENCY}"
 
-# chunk-4b: javax/net/ssl (isolado — muitos testes lentos)
-start_build "baseline chunk-4b (javax/net/ssl)" \
+# chunk-4b: ssl core (sem DTLS/TLSv1x que são os mais lentos)
+start_build "baseline chunk-4b (ssl-core)" \
   "JCOV_MODE=baseline-chunk" \
   "CHUNK_ID=chunk-4b" \
-  "JCOV_TEST_PATHS=javax/net/ssl,javax/net" \
+  "JCOV_TEST_PATHS=javax/net/ssl/ALPN,javax/net/ssl/FixingJavadocs,javax/net/ssl/HttpsURLConnection,javax/net/ssl/sanity,javax/net/ssl/ServerName,javax/net/ssl/SSLEngine,javax/net/ssl/SSLEngineResult,javax/net/ssl/SSLParameters,javax/net/ssl/SSLServerSocket,javax/net/ssl/SSLSession,javax/net/ssl/Stapling,javax/net/ssl/templates,javax/net/ssl/TLS,javax/net/ssl/finalize,javax/net/ssl/GetInstance,javax/net/ssl/Fix5070632.java,javax/net" \
+  "RUN_STAMP=${RUN_STAMP}" \
+  "EXPERIMENT_DIR=jdk-pilot" \
+  "JTREG_CONCURRENCY=${CONCURRENCY}"
+
+# chunk-4c: ssl DTLS + TLSv1x (os mais lentos)
+start_build "baseline chunk-4c (ssl-dtls-tlsv1x)" \
+  "JCOV_MODE=baseline-chunk" \
+  "CHUNK_ID=chunk-4c" \
+  "JCOV_TEST_PATHS=javax/net/ssl/DTLS,javax/net/ssl/DTLSv10,javax/net/ssl/TLSCommon,javax/net/ssl/TLSv1,javax/net/ssl/TLSv11,javax/net/ssl/TLSv12,javax/net/ssl/interop" \
   "RUN_STAMP=${RUN_STAMP}" \
   "EXPERIMENT_DIR=jdk-pilot" \
   "JTREG_CONCURRENCY=${CONCURRENCY}"
@@ -118,11 +136,29 @@ start_build "baseline chunk-5 (tools+io+nio tier2)" \
   "EXPERIMENT_DIR=jdk-pilot" \
   "JTREG_CONCURRENCY=${CONCURRENCY}"
 
-# chunk-6a: java/net/httpclient (isolado — muito pesado)
-start_build "baseline chunk-6a (java/net/httpclient)" \
+# chunk-6a: httpclient root (testes .java direto em java/net/httpclient/)
+start_build "baseline chunk-6a (httpclient-root)" \
   "JCOV_MODE=baseline-chunk" \
   "CHUNK_ID=chunk-6a" \
-  "JCOV_TEST_PATHS=java/net/httpclient" \
+  "JCOV_TEST_PATHS=java/net/httpclient/security,java/net/httpclient/offline,java/net/httpclient/AbstractThrowingPushPromises.java,java/net/httpclient/BasicAuthTest.java,java/net/httpclient/BufferingSubscriberCancelTest.java,java/net/httpclient/BufferingSubscriberErrorCompleteTest.java,java/net/httpclient/BufferingSubscriberTest.java,java/net/httpclient/ConnectExceptionTest.java,java/net/httpclient/ConnectTimeoutNoProxyAsync.java,java/net/httpclient/ConnectTimeoutNoProxySync.java,java/net/httpclient/DigestEchoClient.java,java/net/httpclient/FlowAdaptersCompileOnly.java,java/net/httpclient/HeadersTest.java,java/net/httpclient/HeadersTest1.java,java/net/httpclient/HeadersTest2.java,java/net/httpclient/HttpClientBuilderTest.java,java/net/httpclient/HttpHeadersOf.java,java/net/httpclient/HttpRequestBuilderTest.java,java/net/httpclient/HttpResponseInputStreamTest.java,java/net/httpclient/ImmutableHeaders.java,java/net/httpclient/InterruptedBlockingSend.java,java/net/httpclient/LineAdaptersCompileOnly.java,java/net/httpclient/LineStreamsAndSurrogatesTest.java,java/net/httpclient/LineSubscribersAndSurrogatesTest.java,java/net/httpclient/MessageHeadersTest.java,java/net/httpclient/MethodsTest.java,java/net/httpclient/MultiAuthTest.java,java/net/httpclient/ProxyAuthDisabledSchemes.java,java/net/httpclient/ProxyAuthTest.java,java/net/httpclient/RequestBuilderTest.java,java/net/httpclient/RetryPost.java,java/net/httpclient/ShortRequestBody.java,java/net/httpclient/SmallTimeout.java,java/net/httpclient/SplitResponse.java,java/net/httpclient/examples" \
+  "RUN_STAMP=${RUN_STAMP}" \
+  "EXPERIMENT_DIR=jdk-pilot" \
+  "JTREG_CONCURRENCY=${CONCURRENCY}"
+
+# chunk-6b: httpclient/http2
+start_build "baseline chunk-6b (httpclient-http2)" \
+  "JCOV_MODE=baseline-chunk" \
+  "CHUNK_ID=chunk-6b" \
+  "JCOV_TEST_PATHS=java/net/httpclient/http2" \
+  "RUN_STAMP=${RUN_STAMP}" \
+  "EXPERIMENT_DIR=jdk-pilot" \
+  "JTREG_CONCURRENCY=${CONCURRENCY}"
+
+# chunk-6c: httpclient/websocket + whitebox + testes lentos restantes
+start_build "baseline chunk-6c (httpclient-websocket+whitebox)" \
+  "JCOV_MODE=baseline-chunk" \
+  "CHUNK_ID=chunk-6c" \
+  "JCOV_TEST_PATHS=java/net/httpclient/websocket,java/net/httpclient/whitebox,java/net/httpclient/ssltest,java/net/httpclient/BasicRedirectTest.java,java/net/httpclient/CancelledResponse.java,java/net/httpclient/ConcurrentResponses.java,java/net/httpclient/ConnectTimeoutHandshakeAsync.java,java/net/httpclient/ConnectTimeoutHandshakeSync.java,java/net/httpclient/CookieHeaderTest.java,java/net/httpclient/CustomRequestPublisher.java,java/net/httpclient/CustomResponseSubscriber.java,java/net/httpclient/DependentActionsTest.java,java/net/httpclient/DependentPromiseActionsTest.java,java/net/httpclient/DigestEchoClientSSL.java,java/net/httpclient/EncodedCharsInURI.java,java/net/httpclient/EscapedOctetsInURI.java,java/net/httpclient/ExpectContinue.java,java/net/httpclient/FlowAdapterPublisherTest.java,java/net/httpclient/FlowAdapterSubscriberTest.java,java/net/httpclient/HandshakeFailureTest.java,java/net/httpclient/HeadTest.java,java/net/httpclient/HttpsTunnelTest.java,java/net/httpclient/ImmutableFlowItems.java,java/net/httpclient/InvalidInputStreamSubscriptionRequest.java,java/net/httpclient/InvalidSSLContextTest.java,java/net/httpclient/InvalidSubscriptionRequest.java,java/net/httpclient/LineBodyHandlerTest.java,java/net/httpclient/MappingResponseSubscriber.java,java/net/httpclient/MaxStreams.java,java/net/httpclient/NoBodyPartOne.java,java/net/httpclient/NoBodyPartTwo.java,java/net/httpclient/NonAsciiCharsInURI.java,java/net/httpclient/ProxyAuthDisabledSchemesSSL.java,java/net/httpclient/ProxyTest.java,java/net/httpclient/RedirectMethodChange.java,java/net/httpclient/RedirectWithCookie.java,java/net/httpclient/RequestBodyTest.java,java/net/httpclient/ResponseBodyBeforeError.java,java/net/httpclient/ResponsePublisher.java,java/net/httpclient/RetryWithCookie.java,java/net/httpclient/ServerCloseTest.java,java/net/httpclient/ShortResponseBody.java,java/net/httpclient/ShortResponseBodyWithRetry.java,java/net/httpclient/SmokeTest.java,java/net/httpclient/SpecialHeadersTest.java" \
   "RUN_STAMP=${RUN_STAMP}" \
   "EXPERIMENT_DIR=jdk-pilot" \
   "JTREG_CONCURRENCY=${CONCURRENCY}"
@@ -155,7 +191,7 @@ start_build "generated direct-tests" \
 
 log ""
 log "════════════════════════════════════════"
-log "11 builds disparados!"
+log "14 builds disparados! (9 baseline + 2 generated + 1 merge)"
 log ""
 log "Aguarde todos completarem (~45 min) e então rode o merge:"
 log ""
