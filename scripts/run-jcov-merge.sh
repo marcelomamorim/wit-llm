@@ -52,24 +52,32 @@ DYNAMIC_PREFIXES = (
     'sun/reflect/Generated',
 )
 
-NS = 'http://java.sun.com/jcov/namespace'
-ET.register_namespace('', NS)
-ET.register_namespace('xsi', 'http://www.w3.org/2001/XMLSchema-instance')
-
 tree = ET.parse(src)
 root = tree.getroot()
 
+# Detecta namespace do root (pode ser ausente nos chunks brutos do JCov)
+tag = root.tag
+ns_prefix = tag.split('}')[0][1:] if tag.startswith('{') else ''
+if ns_prefix:
+    ET.register_namespace('', ns_prefix)
+    ET.register_namespace('xsi', 'http://www.w3.org/2001/XMLSchema-instance')
+    p_tag = f'{{{ns_prefix}}}package'
+    c_tag = f'{{{ns_prefix}}}class'
+else:
+    p_tag = 'package'
+    c_tag = 'class'
+
 removed = 0
-for pkg in root.findall(f'{{{NS}}}package'):
+for pkg in root.iter(p_tag):
     to_remove = [
-        cls for cls in pkg.findall(f'{{{NS}}}class')
+        cls for cls in pkg.findall(c_tag)
         if any(cls.get('name', '').startswith(p) for p in DYNAMIC_PREFIXES)
     ]
     for cls in to_remove:
         pkg.remove(cls)
         removed += 1
 
-print(f'  [{chunk_name}] removidas {removed} classes dinâmicas', flush=True)
+print(f'  [{chunk_name}] removidas {removed} classes dinâmicas (ns={ns_prefix or "none"})', flush=True)
 tree.write(dst, encoding='unicode', xml_declaration=True)
 PYEOF
   CLEAN_XMLS+=("${clean_xml}")
