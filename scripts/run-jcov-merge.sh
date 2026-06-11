@@ -34,9 +34,17 @@ for x in "${XMLS[@]}"; do printf '  %s\n' "${x}"; done
 [[ "${#XMLS[@]}" -gt 0 ]] || { echo "erro: nenhum jcov-result.xml encontrado em ${CHUNKS_DIR}" >&2; exit 1; }
 
 printf '[jcov-merge] mesclando → %s\n' "${OUTPUT}"
+# -boe skip: ignora arquivos com erros de proxy ($ProxyN) em vez de abortar
 java -jar "${JCOV_JAR}" Merger \
+  -boe skip \
   -output "${OUTPUT}" \
-  "${XMLS[@]}"
+  "${XMLS[@]}" || true
+
+# Verificar se o XML foi gerado mesmo com erros de proxy
+if [[ ! -f "${OUTPUT}" ]]; then
+  echo "erro: merge falhou — ${OUTPUT} não foi gerado" >&2
+  exit 1
+fi
 
 ls -lh "${OUTPUT}"
 printf '[jcov-merge] merge concluído.\n'
