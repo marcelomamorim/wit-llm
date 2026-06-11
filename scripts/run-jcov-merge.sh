@@ -33,14 +33,44 @@ for x in "${XMLS[@]}"; do printf '  %s\n' "${x}"; done
 
 [[ "${#XMLS[@]}" -gt 0 ]] || { echo "erro: nenhum jcov-result.xml encontrado em ${CHUNKS_DIR}" >&2; exit 1; }
 
+CLEAN_XMLS=()
+TMPDIR_XMLS=$(mktemp -d)
+
+printf '[jcov-merge] pré-filtrando proxy classes dos chunks...\n'
+for xml in "${XMLS[@]}"; do
+  chunk_name=$(basename "$(dirname "${xml}")")
+  clean_xml="${TMPDIR_XMLS}/${chunk_name}-clean.xml"
+  # Remove blocos <class name="com/sun/proxy/$Proxy..."> ... </class>
+  python3 - "${xml}" "${clean_xml}" <<'PYEOF'
+import sys, re
+
+src, dst = sys.argv[1], sys.argv[2]
+with open(src, 'r', encoding='utf-8', errors='replace') as f:
+    content = f.read()
+
+# Remove class elements for dynamic proxy classes
+content = re.sub(
+    r'<class[^>]*name="com/sun/proxy/\$Proxy[^"]*"[^>]*/?>(?:.*?</class>)?',
+    '',
+    content,
+    flags=re.DOTALL
+)
+
+with open(dst, 'w', encoding='utf-8') as f:
+    f.write(content)
+PYEOF
+  CLEAN_XMLS+=("${clean_xml}")
+done
+
 printf '[jcov-merge] mesclando → %s\n' "${OUTPUT}"
-# -boe skip: ignora arquivos com erros de proxy ($ProxyN) em vez de abortar
 java -jar "${JCOV_JAR}" Merger \
   -boe skip \
   -output "${OUTPUT}" \
-  "${XMLS[@]}" || true
+  "${CLEAN_XMLS[@]}" || true
 
-# Verificar se o XML foi gerado mesmo com erros de proxy
+rm -rf "${TMPDIR_XMLS}"
+
+# Verificar se o XML foi gerado
 if [[ ! -f "${OUTPUT}" ]]; then
   echo "erro: merge falhou — ${OUTPUT} não foi gerado" >&2
   exit 1
