@@ -36,28 +36,41 @@ for x in "${XMLS[@]}"; do printf '  %s\n' "${x}"; done
 CLEAN_XMLS=()
 TMPDIR_XMLS=$(mktemp -d)
 
-printf '[jcov-merge] pré-filtrando proxy classes dos chunks...\n'
+printf '[jcov-merge] pré-filtrando classes dinâmicas dos chunks...\n'
 for xml in "${XMLS[@]}"; do
   chunk_name=$(basename "$(dirname "${xml}")")
   clean_xml="${TMPDIR_XMLS}/${chunk_name}-clean.xml"
-  # Remove blocos <class name="com/sun/proxy/$Proxy..."> ... </class>
-  python3 - "${xml}" "${clean_xml}" <<'PYEOF'
-import sys, re
+  python3 - "${xml}" "${clean_xml}" "${chunk_name}" <<'PYEOF'
+import sys
+import xml.etree.ElementTree as ET
 
-src, dst = sys.argv[1], sys.argv[2]
-with open(src, 'r', encoding='utf-8', errors='replace') as f:
-    content = f.read()
+src, dst, chunk_name = sys.argv[1], sys.argv[2], sys.argv[3]
 
-# Remove class elements for dynamic proxy classes
-content = re.sub(
-    r'<class[^>]*name="com/sun/proxy/\$Proxy[^"]*"[^>]*/?>(?:.*?</class>)?',
-    '',
-    content,
-    flags=re.DOTALL
+DYNAMIC_PREFIXES = (
+    'com/sun/proxy/$Proxy',
+    'jdk/internal/reflect/Generated',
+    'sun/reflect/Generated',
 )
 
-with open(dst, 'w', encoding='utf-8') as f:
-    f.write(content)
+NS = 'http://java.sun.com/jcov/namespace'
+ET.register_namespace('', NS)
+ET.register_namespace('xsi', 'http://www.w3.org/2001/XMLSchema-instance')
+
+tree = ET.parse(src)
+root = tree.getroot()
+
+removed = 0
+for pkg in root.findall(f'{{{NS}}}package'):
+    to_remove = [
+        cls for cls in pkg.findall(f'{{{NS}}}class')
+        if any(cls.get('name', '').startswith(p) for p in DYNAMIC_PREFIXES)
+    ]
+    for cls in to_remove:
+        pkg.remove(cls)
+        removed += 1
+
+print(f'  [{chunk_name}] removidas {removed} classes dinâmicas', flush=True)
+tree.write(dst, encoding='unicode', xml_declaration=True)
 PYEOF
   CLEAN_XMLS+=("${clean_xml}")
 done
