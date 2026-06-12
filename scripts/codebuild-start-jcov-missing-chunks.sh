@@ -92,7 +92,7 @@ start_build "chunk-t2-nio-jdk" \
 start_build "chunk-t2-net-basic" \
   "JCOV_MODE=baseline-chunk" \
   "CHUNK_ID=chunk-t2-net-basic" \
-  "JCOV_TEST_PATHS=java/net/Authenticator,java/net/BindException,java/net/CookieHandler,java/net/DatagramPacket,java/net/DatagramSocket,java/net/DatagramSocketImpl,java/net/HttpCookie,java/net/InetAddress,java/net/MulticastSocket,java/net/NetworkInterface,java/net/ProxySelector,java/net/ResponseCache,java/net/Socket,java/net/SocketOption,java/net/SocketPermission,java/net/URI,java/net/URL,java/net/URLClassLoader,java/net/URLConnection,java/net/ipv6,java/net/spi,java/net/ftp,com/sun/net/httpserver,sun/net,jdk/net" \
+  "JCOV_TEST_PATHS=java/net/Authenticator,java/net/BindException,java/net/CookieHandler,java/net/DatagramPacket,java/net/DatagramSocket,java/net/DatagramSocketImpl,java/net/HttpCookie,java/net/HttpURLConnection,java/net/InetAddress,java/net/Inet4Address,java/net/Inet6Address,java/net/InetSocketAddress,java/net/MulticastSocket,java/net/NetworkInterface,java/net/ProxySelector,java/net/ResponseCache,java/net/ServerSocket,java/net/Socket,java/net/SocketOption,java/net/SocketPermission,java/net/Socks,java/net/URI,java/net/URL,java/net/URLClassLoader,java/net/URLConnection,java/net/URLDecoder,java/net/URLEncoder,java/net/URLPermission,java/net/ipv6tests,java/net/spi,com/sun/net/httpserver,sun/net,jdk/net" \
   "RUN_STAMP=${RUN_STAMP}" \
   "EXPERIMENT_DIR=jdk-pilot" \
   "JTREG_CONCURRENCY=${CONCURRENCY}"
