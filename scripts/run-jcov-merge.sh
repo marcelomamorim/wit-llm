@@ -54,6 +54,11 @@ DYNAMIC_PACKAGES = {
 }
 # Prefixos de nome de classe dinâmica dentro de outros pacotes
 DYNAMIC_CLASS_PREFIXES = ('$Proxy', 'Generated')
+# Classes estáticas com estrutura inconsistente entre chunks (carregamento diferente por JVM)
+INCONSISTENT_CLASSES = {
+    ('sun.security.provider', 'SeedGenerator'),
+    ('javax.naming.spi', 'NamingManager'),
+}
 
 tree = ET.parse(src)
 root = tree.getroot()
@@ -77,6 +82,7 @@ for pkg in root.iter(p_tag):
         cls for cls in pkg.findall(c_tag)
         if pname in DYNAMIC_PACKAGES
         or any(cls.get('name', '').startswith(p) for p in DYNAMIC_CLASS_PREFIXES)
+        or (pname, cls.get('name', '')) in INCONSISTENT_CLASSES
     ]
     for cls in to_remove:
         pkg.remove(cls)
