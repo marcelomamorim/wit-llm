@@ -172,6 +172,66 @@ start_build "baseline chunk-6b (net-basic+sql+text+time)" \
   "EXPERIMENT_DIR=jdk-pilot" \
   "JTREG_CONCURRENCY=${CONCURRENCY}"
 
+# ── Novos chunks para completar tier1+tier2 ──────────────────────────────────
+
+# chunk-t1-jdk-internal: jdk/internal/* + jdk/lambda + jdk/modules + vm
+# (parte de :jdk_lang que estava faltando no chunk-1a)
+start_build "baseline chunk-t1-jdk-internal (jdk/internal+lambda+modules+vm)" \
+  "JCOV_MODE=baseline-chunk" \
+  "CHUNK_ID=chunk-t1-jdk-internal" \
+  "JCOV_TEST_PATHS=jdk/internal/reflect,jdk/internal/loader,jdk/internal/misc,jdk/internal/ref,jdk/internal/jimage,jdk/internal/math,jdk/lambda,jdk/modules,vm" \
+  "RUN_STAMP=${RUN_STAMP}" \
+  "EXPERIMENT_DIR=jdk-pilot" \
+  "JTREG_CONCURRENCY=${CONCURRENCY}"
+
+# chunk-t1-util-remaining: java/util restante não coberto pelo chunk-2
+# (usa group specifier :jdk_util para garantir cobertura completa)
+start_build "baseline chunk-t1-util-remaining (:jdk_util completo)" \
+  "JCOV_MODE=baseline-chunk" \
+  "CHUNK_ID=chunk-t1-util-remaining" \
+  "JCOV_TEST_PATHS=:jdk_util" \
+  "RUN_STAMP=${RUN_STAMP}" \
+  "EXPERIMENT_DIR=jdk-pilot" \
+  "JTREG_CONCURRENCY=${CONCURRENCY}"
+
+# chunk-t1-svc-sanity: :jdk_svc_sanity (tier1_part3)
+# (jdi sanity + jfr sanity — testes rápidos de sanidade)
+start_build "baseline chunk-t1-svc-sanity (:jdk_svc_sanity)" \
+  "JCOV_MODE=baseline-chunk" \
+  "CHUNK_ID=chunk-t1-svc-sanity" \
+  "JCOV_TEST_PATHS=:jdk_svc_sanity" \
+  "RUN_STAMP=${RUN_STAMP}" \
+  "EXPERIMENT_DIR=jdk-pilot" \
+  "JTREG_CONCURRENCY=${CONCURRENCY}"
+
+# chunk-t2-other: jdk_other + jdk_text + jdk_time (tier2_part2)
+# java/sql, javax/*, java/text, java/time, com/sun/jndi
+start_build "baseline chunk-t2-other (sql+xml+naming+text+time)" \
+  "JCOV_MODE=baseline-chunk" \
+  "CHUNK_ID=chunk-t2-other" \
+  "JCOV_TEST_PATHS=java/sql,javax/sql,javax/transaction,javax/rmi,javax/naming,javax/script,javax/smartcardio,javax/xml,com/sun/jndi,java/text,sun/text,java/time,java/util/Arrays/TimSortStackSize2.java" \
+  "RUN_STAMP=${RUN_STAMP}" \
+  "EXPERIMENT_DIR=jdk-pilot" \
+  "JTREG_CONCURRENCY=${CONCURRENCY}"
+
+# chunk-t2-nio-jdk: jdk/nio + jdk/internal/jrtfs + sun/tools (tier2_part2)
+start_build "baseline chunk-t2-nio-jdk (jdk/nio+jrtfs+sun/tools)" \
+  "JCOV_MODE=baseline-chunk" \
+  "CHUNK_ID=chunk-t2-nio-jdk" \
+  "JCOV_TEST_PATHS=jdk/nio,jdk/internal/jrtfs,sun/tools/java,sun/tools/jrunscript" \
+  "RUN_STAMP=${RUN_STAMP}" \
+  "EXPERIMENT_DIR=jdk-pilot" \
+  "JTREG_CONCURRENCY=${CONCURRENCY}"
+
+# chunk-t2-net-basic: java/net básico (exceto httpclient) + sun/net + jdk/net (tier2_part3)
+start_build "baseline chunk-t2-net-basic (java/net+sun/net+jdk/net)" \
+  "JCOV_MODE=baseline-chunk" \
+  "CHUNK_ID=chunk-t2-net-basic" \
+  "JCOV_TEST_PATHS=java/net/Authenticator,java/net/BindException,java/net/CookieHandler,java/net/DatagramPacket,java/net/DatagramSocket,java/net/DatagramSocketImpl,java/net/HttpCookie,java/net/InetAddress,java/net/MulticastSocket,java/net/NetworkInterface,java/net/ProxySelector,java/net/ResponseCache,java/net/Socket,java/net/SocketOption,java/net/SocketPermission,java/net/URI,java/net/URL,java/net/URLClassLoader,java/net/URLConnection,java/net/ipv6,java/net/spi,java/net/ftp,com/sun/net/httpserver,sun/net,jdk/net" \
+  "RUN_STAMP=${RUN_STAMP}" \
+  "EXPERIMENT_DIR=jdk-pilot" \
+  "JTREG_CONCURRENCY=${CONCURRENCY}"
+
 log ""
 log "=== Disparando builds generated (wit-context + direct-tests) em paralelo ==="
 
