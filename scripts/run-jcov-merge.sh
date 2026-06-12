@@ -22,10 +22,20 @@ OUTPUT="${BASE}/jcov-baseline/jcov-result.xml"
 
 mkdir -p "$(dirname "${OUTPUT}")"
 
-# Coletar todos os XMLs dos chunks
+# Chunks de tier3 excluídos do baseline (não fazem parte de tier1+tier2)
+# chunk-1c = java/lang/instrument (:jdk_instrument, tier3/svc)
+EXCLUDE_CHUNKS="${EXCLUDE_CHUNKS:-chunk-1c}"
+
+# Coletar todos os XMLs dos chunks (excluindo tier3)
 XMLS=()
 for xml in "${CHUNKS_DIR}"/*/jcov-result.xml; do
-  [[ -f "${xml}" ]] && XMLS+=("${xml}")
+  [[ -f "${xml}" ]] || continue
+  chunk_id=$(basename "$(dirname "${xml}")")
+  if echo ",${EXCLUDE_CHUNKS}," | grep -q ",${chunk_id},"; then
+    printf '[jcov-merge] EXCLUINDO chunk tier3: %s\n' "${chunk_id}"
+    continue
+  fi
+  XMLS+=("${xml}")
 done
 
 printf '[jcov-merge] chunks encontrados: %d\n' "${#XMLS[@]}"
