@@ -46,16 +46,19 @@ import xml.etree.ElementTree as ET
 
 src, dst, chunk_name = sys.argv[1], sys.argv[2], sys.argv[3]
 
-DYNAMIC_PREFIXES = (
-    'com/sun/proxy/$Proxy',
-    'jdk/internal/reflect/Generated',
-    'sun/reflect/Generated',
-)
+# Pacotes cujas classes são geradas dinamicamente pelo JVM (sem código-fonte)
+DYNAMIC_PACKAGES = {
+    'com.sun.proxy',
+    'jdk.internal.reflect',
+    'sun.reflect',
+}
+# Prefixos de nome de classe dinâmica dentro de outros pacotes
+DYNAMIC_CLASS_PREFIXES = ('$Proxy', 'Generated')
 
 tree = ET.parse(src)
 root = tree.getroot()
 
-# Detecta namespace do root (pode ser ausente nos chunks brutos do JCov)
+# Detecta namespace do root
 tag = root.tag
 ns_prefix = tag.split('}')[0][1:] if tag.startswith('{') else ''
 if ns_prefix:
@@ -69,9 +72,11 @@ else:
 
 removed = 0
 for pkg in root.iter(p_tag):
+    pname = pkg.get('name', '')
     to_remove = [
         cls for cls in pkg.findall(c_tag)
-        if any(cls.get('name', '').startswith(p) for p in DYNAMIC_PREFIXES)
+        if pname in DYNAMIC_PACKAGES
+        or any(cls.get('name', '').startswith(p) for p in DYNAMIC_CLASS_PREFIXES)
     ]
     for cls in to_remove:
         pkg.remove(cls)
