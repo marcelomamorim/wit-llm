@@ -56,15 +56,13 @@ import xml.etree.ElementTree as ET
 
 src, dst, chunk_name = sys.argv[1], sys.argv[2], sys.argv[3]
 
-# Pacotes cujas classes são geradas dinamicamente pelo JVM (sem código-fonte)
-DYNAMIC_PACKAGES = {
-    'com.sun.proxy',
-    'jdk.internal.reflect',
-    'sun.reflect',
+# Pacotes 100% dinâmicos (todos os seus membros são gerados em runtime)
+FULLY_DYNAMIC_PACKAGES = {
+    'com.sun.proxy',   # java.lang.reflect.Proxy — todos são $ProxyN
 }
-# Prefixos de nome de classe dinâmica dentro de outros pacotes
+# Prefixos de classes dinâmicas geradas em runtime (em qualquer pacote)
 DYNAMIC_CLASS_PREFIXES = ('$Proxy', 'Generated')
-# Classes estáticas com estrutura inconsistente entre chunks (carregamento diferente por JVM)
+# Classes estáticas com estrutura inconsistente entre chunks
 INCONSISTENT_CLASSES = {
     ('sun.security.provider', 'SeedGenerator'),
     ('javax.naming.spi', 'NamingManager'),
@@ -90,7 +88,7 @@ for pkg in root.iter(p_tag):
     pname = pkg.get('name', '')
     to_remove = [
         cls for cls in pkg.findall(c_tag)
-        if pname in DYNAMIC_PACKAGES
+        if pname in FULLY_DYNAMIC_PACKAGES
         or any(cls.get('name', '').startswith(p) for p in DYNAMIC_CLASS_PREFIXES)
         or (pname, cls.get('name', '')) in INCONSISTENT_CLASSES
     ]
