@@ -22,9 +22,12 @@ OUTPUT="${BASE}/jcov-baseline/jcov-result.xml"
 
 mkdir -p "$(dirname "${OUTPUT}")"
 
-# Chunks de tier3 excluídos do baseline (não fazem parte de tier1+tier2)
-# chunk-1c = java/lang/instrument (:jdk_instrument, tier3/svc)
-EXCLUDE_CHUNKS="${EXCLUDE_CHUNKS:-chunk-1c}"
+# Chunks excluídos do baseline:
+# chunk-1c  = java/lang/instrument (tier3/svc — fora de tier1+tier2)
+# chunk-4b  = javax/net/ssl core (68.4% falha — testes exigem infra TLS não disponível no CodeBuild)
+# chunk-4c  = javax/net/ssl DTLS+TLSv1x (74.6% falha — idem)
+# chunk-6b  = httpclient/http2 (42.1% falha — HTTP/2 requer servidor ativo)
+EXCLUDE_CHUNKS="${EXCLUDE_CHUNKS:-chunk-1c,chunk-4b,chunk-4c,chunk-6b}"
 
 # Coletar todos os XMLs dos chunks (excluindo tier3)
 XMLS=()
