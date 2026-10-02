@@ -205,7 +205,17 @@ func extrairMetodosJava(path, projectRoot string) ([]dominio.DescritorMetodo, er
 		nomeContainer = nomePacote + "." + nomeContainer
 	}
 
-	caminhoRelativo, _ := filepath.Rel(projectRoot, path)
+	// coletarArquivosFonte devolve caminhos absolutos; se projectRoot vier
+	// relativo, filepath.Rel falha e o caminho sai vazio — o que silenciosamente
+	// impede o alinhamento com o relatório WIT. Normaliza antes de relativizar.
+	raizAbs := projectRoot
+	if abs, err := filepath.Abs(projectRoot); err == nil {
+		raizAbs = abs
+	}
+	caminhoRelativo, err := filepath.Rel(raizAbs, path)
+	if err != nil {
+		return nil, fmt.Errorf("ao relativizar %q contra a raiz %q: %w", path, raizAbs, err)
+	}
 	caminhoRelativo = filepath.ToSlash(caminhoRelativo)
 
 	metodos := []dominio.DescritorMetodo{}
