@@ -1,0 +1,91 @@
+name: shards
+# 48 shards pareados (2 cenários × 24) de uma variante, 20 em paralelo.
+# Inputs e resultados ficam no S3: o repositório não guarda teste gerado nenhum.
+on:
+  workflow_dispatch:
+    inputs:
+      stamp:
+        description: 'stamp da variante (ex.: jdk-v4-20261004)'
+        required: true
+      bucket:
+        description: 'bucket S3'
+        default: 'witup-jcov-results'
+      conc:
+        description: 'jtreg -conc por job'
+        default: '4'
+jobs:
+  shard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      packages: read
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        cenario: [direct-tests, wit-context]
+        shard: ['00','01','02','03','04','05','06','07','08','09','10','11',
+                '12','13','14','15','16','17','18','19','20','21','22','23']
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: us-east-1
+      BUCKET: ${{ inputs.bucket }}
+      STAMP: ${{ inputs.stamp }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: liberar disco
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+
+      - name: pular se já concluído
+        id: skip
+        run: |
+          K="s3://$BUCKET/$STAMP/paired-results/${{ matrix.cenario }}/${{ matrix.shard }}/jcov/jcov-result.xml"
+          if aws s3 ls "$K" >/dev/null 2>&1; then
+            echo "já existe, nada a fazer: $K"; echo 'done=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'done=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: baixar input
+        if: steps.skip.outputs.done != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p in out
+          aws s3 cp "s3://$BUCKET/$STAMP/inputs/paired-shard-${{ matrix.shard }}.zip" in/ --quiet
+          ls -lh in/
+
+      - name: login no GHCR
+        if: steps.skip.outputs.done != 'true'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: jtreg + JCov
+        if: steps.skip.outputs.done != 'true'
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD/in:/in:ro" -v "$PWD/out:/out" -v "$PWD/shard.sh:/shard.sh:ro" \
+            -e JCOV_VARIANT='${{ matrix.cenario }}' \
+            -e SHARD_ID='${{ matrix.shard }}' \
+            -e JTREG_CONCURRENCY='${{ inputs.conc }}' \
+            "ghcr.io/${{ github.repository }}/evaluator:amd64" \
+            bash /shard.sh 2>&1 | tee out/run.log
+          test -s out/jcov-result.xml || { echo 'ERRO: sem jcov-result.xml'; exit 1; }
+
+      - name: subir resultado
+        if: steps.skip.outputs.done != 'true'
+        run: |
+          set -euo pipefail
+          D="s3://$BUCKET/$STAMP/paired-results/${{ matrix.cenario }}/${{ matrix.shard }}"
+          aws s3 cp out/jcov-result.xml "$D/jcov/jcov-result.xml" --quiet
+          aws s3 cp "out/jtr-${{ matrix.cenario }}-${{ matrix.shard }}.tgz" "$D/jtr.tgz" --quiet
+          aws s3 cp out/run.log "$D/run.log" --quiet
+          echo "✅ $D"
+
+      - name: diagnóstico na falha
+        if: failure()
+        run: tail -60 out/jtreg-tail.log out/run.log 2>/dev/null || true

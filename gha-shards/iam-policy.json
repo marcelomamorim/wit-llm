@@ -1,0 +1,37 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LerInputsDasVariantes",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::witup-jcov-results/jdk-v4-20261004/inputs/*",
+        "arn:aws:s3:::witup-jcov-results/jdk-v3a-20261004/inputs/*"
+      ]
+    },
+    {
+      "Sid": "EscreverResultados",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": [
+        "arn:aws:s3:::witup-jcov-results/jdk-v4-20261004/paired-results/*",
+        "arn:aws:s3:::witup-jcov-results/jdk-v3a-20261004/paired-results/*"
+      ]
+    },
+    {
+      "Sid": "ListarParaDetectarShardJaFeito",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::witup-jcov-results",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "jdk-v4-20261004/*",
+            "jdk-v3a-20261004/*"
+          ]
+        }
+      }
+    }
+  ]
+}

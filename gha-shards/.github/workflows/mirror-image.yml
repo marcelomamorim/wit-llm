@@ -1,0 +1,33 @@
+name: mirror-image
+# Espelha a imagem do avaliador (6,98 GB) do Docker Hub para o GHCR.
+# Roda UMA vez. Os 96 jobs de shard puxam do GHCR, que não tem rate limit para
+# pacote público — 96 pulls do Docker Hub estourariam o limite de 100/6h.
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'imagem de origem'
+        default: 'cloudarchlab/witup-evaluator:amd64'
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      packages: write
+    steps:
+      - name: liberar disco
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+      - name: login no GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: pull + push
+        run: |
+          set -euo pipefail
+          SRC='${{ inputs.source }}'
+          DST="ghcr.io/${{ github.repository }}/evaluator:amd64"
+          docker pull --platform linux/amd64 "$SRC"
+          docker tag "$SRC" "$DST"
+          docker push "$DST"
+          echo "espelhada em $DST"
