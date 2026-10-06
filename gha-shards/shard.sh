@@ -8,7 +8,8 @@ JCOV_JAR=/opt/jcov/JCOV_BUILD/jcov_3.0/jcov.jar
 RUN="/work/$V-$SH_ID"; mkdir -p "$RUN"; cd "$RUN"
 
 unzip -q -o "/in/paired-shard-$SH_ID.zip" -d "$RUN"
-if [ "$V" = direct-tests ]; then rm -rf "$RUN/variants/wit-context"; else rm -rf "$RUN/variants/direct-tests"; fi
+# mantém só o braço deste job; o zip traz todos os braços do par
+find "$RUN/variants" -mindepth 1 -maxdepth 1 -type d ! -name "$V" -exec rm -rf {} +
 VT="$RUN/variants/$V/test"
 cp /opt/openjdk-src/test/jdk/TEST.ROOT   "$VT/jdk/TEST.ROOT"
 cp /opt/openjdk-src/test/jdk/TEST.groups "$VT/jdk/TEST.groups"
@@ -35,9 +36,11 @@ WRAP
 chmod +x "$W/bin/java"
 export JCOV_OUT="$OUT"
 
-echo "[$(date +%T)] jtreg+JCov iniciando ($(find "$VT" -name '*.java' | wc -l) testes)"
+TESTS=$(find "$VT/jdk" -maxdepth 2 -type d -name generated | head -1)
+[ -n "$TESTS" ] || { echo "ERRO: não achei o diretório de testes sob $VT/jdk"; exit 1; }
+echo "[$(date +%T)] jtreg+JCov iniciando ($(find "$TESTS" -name '*.java' | wc -l) testes em $TESTS)"
 /opt/jtreg/bin/jtreg -jdk:"$W" -w:"$RUN/w" -r:"$RUN/r" -va \
-  -conc:"${JTREG_CONCURRENCY:-4}" -timeout:4 "$VT/jdk/witup/generated" > "$RUN/jtreg.log" 2>&1
+  -conc:"${JTREG_CONCURRENCY:-4}" -timeout:4 "$TESTS" > "$RUN/jtreg.log" 2>&1
 echo "[$(date +%T)] jtreg fim"
 
 ls -lh "$OUT" 2>/dev/null | awk '{print "  jcov-result.xml: "$5}' || echo "  SEM XML"

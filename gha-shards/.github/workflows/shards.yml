@@ -1,15 +1,15 @@
 name: shards
-# 48 shards pareados (2 cenários × 24) de uma variante, 20 em paralelo.
-# Inputs e resultados ficam no S3: o repositório não guarda teste gerado nenhum.
+# Executa shards de uma suíte jtreg com cobertura JCov, em paralelo.
+# Entradas e saídas ficam em S3. Nomes de bucket, run e braços vêm de secrets,
+# não de inputs: inputs de workflow_dispatch aparecem no histórico público do
+# run, secrets são mascarados pelo GitHub nos logs.
 on:
   workflow_dispatch:
     inputs:
-      stamp:
-        description: 'stamp da variante (ex.: jdk-v4-20261004)'
+      run:
+        description: 'qual RUN_STAMP usar: 1 ou 2'
         required: true
-      bucket:
-        description: 'bucket S3'
-        default: 'witup-jcov-results'
+        default: '1'
       conc:
         description: 'jtreg -conc por job'
         default: '4'
@@ -23,17 +23,41 @@ jobs:
       fail-fast: false
       max-parallel: 20
       matrix:
-        cenario: [direct-tests, wit-context]
+        arm: [a, b]
         shard: ['00','01','02','03','04','05','06','07','08','09','10','11',
                 '12','13','14','15','16','17','18','19','20','21','22','23']
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: us-east-1
-      BUCKET: ${{ inputs.bucket }}
-      STAMP: ${{ inputs.stamp }}
+      SHARD: ${{ matrix.shard }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: resolver bucket, run e braço
+        env:
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          STAMP_1: ${{ secrets.RUN_STAMP_1 }}
+          STAMP_2: ${{ secrets.RUN_STAMP_2 }}
+          ARM_A: ${{ secrets.ARM_A }}
+          ARM_B: ${{ secrets.ARM_B }}
+        run: |
+          set -euo pipefail
+          case '${{ inputs.run }}' in
+            1) STAMP="$STAMP_1" ;;
+            2) STAMP="$STAMP_2" ;;
+            *) echo "input 'run' deve ser 1 ou 2"; exit 1 ;;
+          esac
+          case '${{ matrix.arm }}' in
+            a) ARM="$ARM_A" ;;
+            b) ARM="$ARM_B" ;;
+          esac
+          for v in S3_BUCKET STAMP ARM; do
+            eval "x=\$$v"
+            [ -n "$x" ] || { echo "secret que resolve $v está vazio"; exit 1; }
+          done
+          { echo "BUCKET=$S3_BUCKET"; echo "STAMP=$STAMP"; echo "ARM=$ARM"; } >> "$GITHUB_ENV"
+          echo "resolvido (valores mascarados nos logs)"
 
       - name: liberar disco
         run: |
@@ -44,9 +68,8 @@ jobs:
       - name: pular se já concluído
         id: skip
         run: |
-          K="s3://$BUCKET/$STAMP/paired-results/${{ matrix.cenario }}/${{ matrix.shard }}/jcov/jcov-result.xml"
-          if aws s3 ls "$K" >/dev/null 2>&1; then
-            echo "já existe, nada a fazer: $K"; echo 'done=true' >> "$GITHUB_OUTPUT"
+          if aws s3 ls "s3://$BUCKET/$STAMP/paired-results/$ARM/$SHARD/jcov/jcov-result.xml" >/dev/null 2>&1; then
+            echo 'shard já concluído'; echo 'done=true' >> "$GITHUB_OUTPUT"
           else
             echo 'done=false' >> "$GITHUB_OUTPUT"
           fi
@@ -56,7 +79,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p in out
-          aws s3 cp "s3://$BUCKET/$STAMP/inputs/paired-shard-${{ matrix.shard }}.zip" in/ --quiet
+          aws s3 cp "s3://$BUCKET/$STAMP/inputs/paired-shard-$SHARD.zip" in/ --quiet
           ls -lh in/
 
       - name: login no GHCR
@@ -69,8 +92,7 @@ jobs:
           set -euo pipefail
           docker run --rm \
             -v "$PWD/in:/in:ro" -v "$PWD/out:/out" -v "$PWD/shard.sh:/shard.sh:ro" \
-            -e JCOV_VARIANT='${{ matrix.cenario }}' \
-            -e SHARD_ID='${{ matrix.shard }}' \
+            -e JCOV_VARIANT="$ARM" -e SHARD_ID="$SHARD" \
             -e JTREG_CONCURRENCY='${{ inputs.conc }}' \
             "ghcr.io/${{ github.repository }}/evaluator:amd64" \
             bash /shard.sh 2>&1 | tee out/run.log
@@ -80,11 +102,11 @@ jobs:
         if: steps.skip.outputs.done != 'true'
         run: |
           set -euo pipefail
-          D="s3://$BUCKET/$STAMP/paired-results/${{ matrix.cenario }}/${{ matrix.shard }}"
+          D="s3://$BUCKET/$STAMP/paired-results/$ARM/$SHARD"
           aws s3 cp out/jcov-result.xml "$D/jcov/jcov-result.xml" --quiet
-          aws s3 cp "out/jtr-${{ matrix.cenario }}-${{ matrix.shard }}.tgz" "$D/jtr.tgz" --quiet
+          aws s3 cp "out/jtr-$ARM-$SHARD.tgz" "$D/jtr.tgz" --quiet
           aws s3 cp out/run.log "$D/run.log" --quiet
-          echo "✅ $D"
+          echo 'resultado enviado'
 
       - name: diagnóstico na falha
         if: failure()
