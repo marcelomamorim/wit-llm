@@ -212,6 +212,45 @@ cobertura.
 
 ## Cobertura restrita aos métodos-alvo
 
+### O experimento do artigo, remesclado em 09/10
+
+O merge do `paired-20260706-full02` foi refeito com o pacote `com.sun.proxy`
+removido e o Merger em modo **estrito**. O buildspec original usava
+`-boe skip` nas quatro invocações e os logs de merge estão com 0 bytes no S3,
+então não havia como saber se algum shard fora descartado.
+
+**Resultado: zero descartes.** 12 dos 48 XML tinham `com.sun.proxy` (8 Direct,
+4 WIT), mas naquele run não colidiram. Os números publicados foram calculados
+sobre 24 shards em cada braço.
+
+Medindo com denominador restrito aos métodos-alvo (união, 2.551 métodos,
+idêntico nos três braços), **o sinal inverte em métodos alcançados**:
+
+| métrica | direct | wit | razão | vence |
+| --- | --- | --- | --- | --- |
+| métodos alcançados | 1.831 | **1.850** | 1,0104 | **WIT** |
+| blocks | 9.610 | 9.434 | 0,9817 | Direct |
+| branches | 6.156 | 6.013 | 0,9768 | Direct |
+| lines | 14.249 | 14.215 | 0,9976 | Direct |
+
+Comparado ao publicado, que usa contagem global:
+
+| | publicado (global) | restrito aos alvos |
+| --- | --- | --- |
+| métodos | Direct +2.396 · WIT +2.253 | Direct +700 · **WIT +719** |
+| branches | Direct +6.076 · WIT +5.320 | Direct +2.468 · WIT +2.325 |
+
+A contagem global soma todas as classes do XML, inclusive as classes de teste
+geradas, cujo universo difere entre braços — baseline 4.016 classes, Direct
+4.165, WIT 4.163. É o mesmo defeito da linha `ALL:` do RepGen. Em branches e
+blocks o Direct vence nas duas contagens, então essa parte da narrativa se
+mantém.
+
+Efeito prático: **o experimento do artigo passa a seguir o mesmo padrão das
+quatro variantes** — WIT vence alcance, Direct vence profundidade. Cautela ao
+reportar: a inversão é de 1,0104×, 19 métodos em 1.831.
+
+
 O WIT vence **métodos alcançados nas quatro condições** (1,004–1,028×). Em
 blocks e branches o Direct vence em 3 de 4, e as inversões do WIT são de
 magnitude ≤1,011×.

@@ -790,14 +790,98 @@ exceção, para.</p>
   <!-- V3a meth 1.0279 depth 0.9534 -->
   <g><circle cx="752" cy="208.6" r="7" fill="var(--warn)"/>
      <text class="val" x="752" y="192" text-anchor="middle">V3a</text></g>
+  <!-- experimento do artigo: meth 1.0104 depth 0.9668 -->
+  <g><circle cx="349" cy="193.2" r="8" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+     <text class="val" x="349" y="176" text-anchor="middle" fill="var(--accent)" font-weight="700">artigo</text></g>
 </svg>
-<figcaption>Os quatro pontos ficam à direita da linha vertical — o WIT alcança
+<figcaption>O círculo vazado é o <b>experimento do artigo</b>, remesclado em 09/10. Os cinco pontos ficam à direita da linha vertical — o WIT alcança
 mais métodos em <b>todas</b> as condições. Três deles ficam abaixo da
-horizontal: menos profundidade. O V2 é o único que empata nos dois eixos.
+horizontal: menos profundidade. O V2 é o único que empata nos dois eixos. O experimento do artigo cai bem no meio do padrão das variantes.
 Há uma regularidade sugestiva — quanto maior o ganho de alcance, maior a perda
 de profundidade — mas são quatro pontos, então é hipótese, não relação
 estabelecida.</figcaption>
 </figure>
+
+
+<h3>6.1 · O experimento do artigo, remesclado</h3>
+<p>O merge do experimento publicado (<code>paired-20260706-full02</code>) foi
+refeito em 09/10 com as duas correções. Antes disso havia uma dúvida aberta: o
+buildspec original usava <code>-boe skip</code> nas quatro invocações do Merger,
+e os logs que registrariam descarte estão com <b>0 bytes</b> no S3.</p>
+
+<div class="note good">
+  <h4 class="cw">Dúvida encerrada: zero descartes</h4>
+  <p style="margin:0" class="small">12 dos 48 XML tinham <code>com.sun.proxy</code>
+  — 8 no Direct, 4 no WIT — a mesma condição que descartou 10 shards nas
+  variantes. Mas o merge em modo estrito completou <b>sem nenhum descarte</b>:
+  naquele run os proxies não colidiram. Os números publicados foram calculados
+  sobre 24 shards em cada braço.</p>
+</div>
+
+<p>O que apareceu foi outra coisa. Medindo com o denominador restrito aos
+métodos-alvo, <b>o sinal inverte em métodos alcançados</b>.</p>
+
+<figure>
+<svg viewBox="0 0 860 260" role="img" aria-label="Contagem global contra restrita, experimento do artigo">
+  <text class="ttl" x="0" y="14">Métodos alcançados: como a contagem muda o vencedor</text>
+
+  <text class="lbl" x="150" y="46" text-anchor="middle" font-weight="650" fill="var(--fg)">CONTAGEM GLOBAL</text>
+  <text class="lbl" x="150" y="64" text-anchor="middle" font-size="11">o que está publicado</text>
+  <line class="ax" x1="40" y1="190" x2="300" y2="190"/>
+  <rect x="76"  y="82"  width="56" height="108" fill="var(--dir)" opacity=".85" rx="2"/>
+  <rect x="150" y="92.4" width="56" height="97.6" fill="var(--wit)" opacity=".85" rx="2"/>
+  <text class="val" x="104" y="76" text-anchor="middle" fill="var(--dir)" font-weight="700">+2.396</text>
+  <text class="val" x="178" y="86" text-anchor="middle" fill="var(--wit)">+2.253</text>
+  <text class="lbl" x="104" y="208" text-anchor="middle">Direct</text>
+  <text class="lbl" x="178" y="208" text-anchor="middle">WIT</text>
+  <text class="lbl" x="150" y="234" text-anchor="middle" fill="var(--dir)" font-weight="650">Direct vence</text>
+  <text class="lbl" x="150" y="252" text-anchor="middle" font-size="11" opacity=".75">universos de classes diferentes</text>
+
+  <line class="gr" x1="430" y1="40" x2="430" y2="250" stroke-dasharray="4 4"/>
+
+  <text class="lbl" x="640" y="46" text-anchor="middle" font-weight="650" fill="var(--fg)">RESTRITA AOS ALVOS</text>
+  <text class="lbl" x="640" y="64" text-anchor="middle" font-size="11">denominador idêntico, 2.551 métodos</text>
+  <line class="ax" x1="520" y1="190" x2="790" y2="190"/>
+  <rect x="566" y="87.4" width="56" height="102.6" fill="var(--dir)" opacity=".85" rx="2"/>
+  <rect x="640" y="85"   width="56" height="105"   fill="var(--wit)" opacity=".9"  rx="2"/>
+  <text class="val" x="594" y="81" text-anchor="middle" fill="var(--dir)">+700</text>
+  <text class="val" x="668" y="79" text-anchor="middle" fill="var(--wit)" font-weight="700">+719</text>
+  <text class="lbl" x="594" y="208" text-anchor="middle">Direct</text>
+  <text class="lbl" x="668" y="208" text-anchor="middle">WIT</text>
+  <text class="lbl" x="640" y="234" text-anchor="middle" fill="var(--wit)" font-weight="650">WIT vence</text>
+  <text class="lbl" x="640" y="252" text-anchor="middle" font-size="11" opacity=".75">mesma base nos três braços</text>
+</svg>
+<figcaption>A contagem global soma <b>todas</b> as classes do XML, inclusive as
+classes de teste geradas — e esse universo difere entre braços: baseline 4.016
+classes, Direct 4.165, WIT 4.163. Dividir numeradores de universos distintos é o
+mesmo defeito da linha <code>ALL:</code> do RepGen. Restrito aos 4.417
+métodos-alvo, com base idêntica, o WIT alcança mais.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th>Métrica</th><th class="n">direct</th><th class="n">wit</th>
+    <th class="n">razão</th><th>vence</th></tr></thead>
+  <tbody>
+    <tr><td>métodos alcançados</td><td class="n">1.831</td><td class="n">1.850</td>
+      <td class="n win cw">1,0104</td><td class="cw">WIT</td></tr>
+    <tr><td>blocks</td><td class="n">9.610</td><td class="n">9.434</td>
+      <td class="n">0,9817</td><td class="cd">Direct</td></tr>
+    <tr><td>branches</td><td class="n">6.156</td><td class="n">6.013</td>
+      <td class="n">0,9768</td><td class="cd">Direct</td></tr>
+    <tr><td>lines</td><td class="n">14.249</td><td class="n">14.215</td>
+      <td class="n">0,9976</td><td class="cd">Direct</td></tr>
+  </tbody>
+</table>
+
+<p>Em branches e blocks o Direct vence nas duas contagens — essa parte da
+narrativa publicada se mantém. O efeito prático é que <b>o experimento do artigo
+passa a seguir o mesmo padrão das quatro variantes</b>: WIT vence alcance,
+Direct vence profundidade. Antes a contagem global escondia a metade do alcance.</p>
+
+<p class="small mut">Cautela ao reportar: a inversão é de 1,0104× — 19 métodos
+em 1.831. A formulação defensável é <i>"o WIT alcança ao menos tantos
+métodos-alvo quanto o Direct, e a vantagem global aparente do Direct é artefato
+da contagem"</i>, não <i>"o WIT vence alcance"</i> com ênfase.</p>
 
 <h2>7 · Detecção de defeito: a mutação</h2>
 <p>A mutação dirigida é o que transforma "os testes verificam mais" em "os
@@ -948,7 +1032,7 @@ parecendo sucesso</b>.</p>
   <tbody>
     <tr><td>Merge do JCov com <code>-boe skip</code></td>
         <td>terminava com sucesso, XML parecia normal</td>
-        <td>10 shards descartados em silêncio; braços com tamanhos diferentes</td>
+        <td>10 shards descartados em silêncio nas variantes; <b>experimento do artigo verificado: 0 descartes</b></td>
         <td class="cw">corrigido</td></tr>
     <tr><td>Driver do CodeBuild sem retry</td>
         <td>todos os builds reportavam SUCCEEDED</td>
