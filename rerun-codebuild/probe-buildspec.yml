@@ -1,0 +1,9 @@
+version: 0.2
+phases:
+  build:
+    commands:
+      - echo "=== permission probe ==="
+      - id
+      - /opt/test-jdk/bin/java -version 2>&1 | head -1
+      - test -x "$JTREG_HOME/bin/jtreg" && echo "jtreg OK"
+      - echo "probe concluido"

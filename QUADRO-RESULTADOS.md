@@ -328,10 +328,15 @@ porque proxies, lambdas e acessores de reflexão recebem nome sequencial por JVM
   braço nem pelo baseline, e ficam fora de qualquer medida.
 - **V3b e V3c não existem.** Zero testes gerados, o que deixa a variância de
   geração sem estimativa.
-- **Detecção de defeito ainda não medida.** Tudo aqui é conformidade de
-  contrato: o teste checa o código contra especificação derivada do próprio
-  código. Não prova que os testes detectam defeito real. Fechar essa lacuna
-  exige mutação dirigida ou replay de bugs históricos.
+- **Detecção de defeito: medida, resultado modesto.** Mutação dirigida sobre
+  817 sites pareados nas cinco condições, após corrigir o pareamento e o
+  encoding do `javac`. O WIT nunca é pior que o Direct; agregado de mortes
+  exclusivas 89 contra 63 (**1,41×**). Mas V1 e V2 estão no teto (81–89% de
+  mortes nos dois braços, discordância 0/3 e 0/0), então o sinal vem de V4
+  (13 a 1) e V3a (35 a 25). O operador é grosseiro: removido o `athrow`, o
+  método retorna, e qualquer teste com voz que alcance o site detecta. Ainda
+  mede conformidade de contrato com fonte de verdade sintética — replay de bugs
+  reais (Defects4J) segue pendente.
 
 ## Próximos passos
 
