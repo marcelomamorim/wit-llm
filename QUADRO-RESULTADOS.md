@@ -249,22 +249,26 @@ construção para a terceira.
 | Camada | Repete? | Status |
 | --- | --- | --- |
 | Análise — classificação, cobertura, razões | Sim, exatamente | Verificado: md5 idêntico em três execuções |
-| Execução — compile e pass dos testes | Parcialmente | **Variância não medida** |
+| Execução — compile e pass dos testes | **Sim, nesta amostra** | Medido: 726 testes, 0 mudaram |
 | Geração — testes produzidos pelo LLM | Não, por construção | É o que V3a/b/c mediriam; V3b e V3c nunca foram gerados |
 
 A camada de análise foi conferida empiricamente, não assumida: rodar a mesma
 análise três vezes sobre os mesmos artefatos produz saída idêntica bit a bit.
 Qualquer pessoa com os XML e os `.jtr` reproduz os números deste quadro.
 
-A camada de execução é a lacuna real. Compilação é determinística, mas a
-execução sob jtreg usa `-timeout:4` e concorrência, e teste sensível a tempo
-pode mudar de resultado entre execuções. Um shard levou 151 min contra mediana
-de 33 min, o que sugere que existem testes nessa categoria. **Sem medir, não há
-base para afirmar que as taxas de pass se repetem.**
+A camada de execução **foi medida em 09/10** e não variou. Oito shards do V4
+(quatro de cada braço) foram reexecutados no CodeBuild num prefixo separado do
+S3, e os `.jtr` das duas execuções foram comparados teste a teste: **726 testes
+em comum, 726 com o mesmo desfecho, zero mudanças** (0,00%).
 
-Medição proposta: reexecutar 8 shards já executados e comparar o resultado
-**teste por teste**. Custo aproximado de US$ 3,30 em CodeBuild, e produz o número
-que falta — a fração de testes com resultado instável entre execuções.
+Isso contraria a expectativa: o jtreg usa `-timeout:4` com concorrência, e um
+shard chegou a levar 151 min contra mediana de 33, o que sugeria testes
+sensíveis a tempo. Nesta amostra eles não se manifestaram.
+
+Escopo da afirmação: 726 testes dos 8.365 do V4 (8,7%), nos shards 00 a 03, que
+não estão entre os mais lentos. A conclusão defensável é *"não foi observada
+instabilidade em 726 testes"*, não *"não existe instabilidade"*. Ampliar a
+amostra custa ~US$ 0,33 por shard.
 
 A camada de geração não é um defeito a corrigir: reexecutar o lote na OpenAI
 produz testes diferentes, e por isso o desenho correto reporta variância entre

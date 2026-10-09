@@ -568,8 +568,8 @@ try {
       <tr><td>Análise — classificação, cobertura, razões</td>
         <td class="cw"><b>Sim, exatamente</b></td>
         <td>Verificado: md5 idêntico em 3 execuções</td></tr>
-      <tr class="hi"><td>Execução — compile e pass</td><td>Parcialmente</td>
-        <td class="cb"><b>Variância não medida</b></td></tr>
+      <tr class="hi"><td>Execução — compile e pass</td><td class="cw"><b>Sim, nesta amostra</b></td>
+        <td>Medido: 726 testes, <b>0 mudaram</b></td></tr>
       <tr><td>Geração — testes do LLM</td><td>Não, por construção</td>
         <td>V3b e V3c nunca foram gerados</td></tr>
     </tbody>
@@ -577,12 +577,12 @@ try {
   <p><b>Análise:</b> conferido empiricamente, não assumido. Rodar a mesma análise
   três vezes sobre os mesmos artefatos produz saída idêntica bit a bit. Qualquer
   pessoa com os XML e os <code>.jtr</code> reproduz todos os números.</p>
-  <p><b>Execução:</b> a lacuna real. Compilação é determinística, mas a execução
-  usa <code>-timeout:4</code> com concorrência, e teste sensível a tempo pode
-  mudar de resultado. Um shard levou 151 min contra mediana de 33 min — há testes
-  nessa categoria. <b>Sem medir, não há base para afirmar que as taxas de pass se
-  repetem.</b> Medição proposta: reexecutar 8 shards e comparar teste a teste,
-  ~US$ 3,30.</p>
+  <p><b>Execução: medido em 09/10, não variou.</b> Oito shards do V4 foram
+  reexecutados no CodeBuild e os <code>.jtr</code> comparados teste a teste:
+  <b>726 testes em comum, 726 com o mesmo desfecho, zero mudanças</b>. Contraria
+  a expectativa — o <code>-timeout:4</code> com concorrência sugeria instabilidade.
+  Escopo: 8,7% dos testes do V4, nos shards 00–03. A afirmação defensável é
+  <i>"não foi observada instabilidade em 726 testes"</i>, não <i>"não existe"</i>.</p>
   <p><b>Geração:</b> não é defeito a corrigir — reexecutar o lote produz testes
   diferentes, e por isso o desenho correto reporta variância entre amostras. Era
   o papel de V3b e V3c. Sem elas, <b>os 1,33–1,76× não têm barra de erro</b>.</p>
