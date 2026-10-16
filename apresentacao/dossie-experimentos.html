@@ -108,6 +108,32 @@
   .exp dd{margin:0}
   @media(max-width:620px){.exp dl{grid-template-columns:1fr}
     .exp dt{padding-top:8px}}
+
+  @media print{
+    @page{ size:A4; margin:14mm 12mm; }
+    :root{ --bg:#fff; --fg:#111; --mut:#555; --line:#ccc; --card:#fff;
+           --grid:#f0efec; --wit:#15573a; --dir:#8a5f1c; --bad:#8f2318;
+           --ok:#1d6340; --warn:#8a6508; --acc:#1f4a70; }
+    body{ font-size:10.5pt; background:#fff; }
+    .wrap{ max-width:none; padding:0; }
+    h1{ font-size:24pt; }
+    h2{ font-size:15pt; page-break-after:avoid; break-after:avoid; }
+    h3{ font-size:11.5pt; page-break-after:avoid; break-after:avoid; }
+    h4{ page-break-after:avoid; break-after:avoid; }
+    .parte{ page-break-before:always; break-before:page; font-size:9pt; }
+    .parte:first-of-type{ page-break-before:avoid; break-before:auto; margin-top:30px; }
+    figure, table, pre, .exp, .note, .tldr{
+      page-break-inside:avoid; break-inside:avoid; }
+    .cards{ page-break-inside:avoid; break-inside:avoid; }
+    figure{ border:1px solid var(--line); }
+    pre{ font-size:8.5pt; white-space:pre-wrap; word-break:break-word; }
+    table{ font-size:9pt; }
+    td,th{ padding:4px 6px; }
+    .exp dl{ font-size:10pt; }
+    p,li{ orphans:3; widows:3; }
+    svg{ max-height:none; }
+    a{ text-decoration:none; color:inherit; }
+  }
 </style>
 </head>
 <body><div class="wrap">
@@ -289,7 +315,7 @@ insatisfazíveis, e as entrega ao modelo.</p>
   <text class="val" x="728" y="82" font-size="10" fill="var(--wit)">g == null ⟹ NPE</text>
   <text class="lbl" x="728" y="102" font-size="11">vai no prompt do WIT</text>
   <text class="lbl" x="440" y="168" text-anchor="middle">saída: <tspan font-weight="650" fill="var(--fg)">4.417 métodos-alvo</tspan> com condições de exceção verificadas</text>
-  <text class="lbl" x="440" y="188" text-anchor="middle" font-size="11" opacity=".8">a especificação vem do próprio código — ver limites, seção 7</text>
+  <text class="lbl" x="440" y="188" text-anchor="middle" font-size="11" opacity=".8">a especificação vem do próprio código — ver limites, seção 9</text>
 </svg>
 </figure>
 
@@ -794,7 +820,218 @@ validade que outros trabalhos da área provavelmente têm sem saber.</p>
   defeitos afetaram os outros dois níveis.</p>
 </div>
 
-<h2>7 · O limite do estudo</h2>
+<h2>7 · Onde estão os dados</h2>
+<p>Tudo que sustenta os números deste documento está em dois lugares: o bucket
+S3, que guarda entradas e resultados de cada execução, e o repositório local,
+que guarda os testes gerados e as análises.</p>
+
+<h3>7.1 · S3 — execuções completas</h3>
+<p>Doze prefixos, um por execução. Cada um carrega <b>entradas e resultados
+juntos</b>, o que torna a reexecução e a auditoria triviais.</p>
+<pre>s3://witup-jcov-results/
+│
+├── <b>paired-20260706-full02/</b>    ← EXPERIMENTO PRINCIPAL (o do artigo)
+│   ├── inputs/
+│   │   ├── jcov-baseline.xml              60,6 MB  cobertura da suíte oficial
+│   │   └── paired-shard-00..23.zip                 testes dos 2 braços
+│   ├── paired-results/&lt;braço&gt;/shard-NN/
+│   │   ├── jcov/jcov-result.xml           ~14 MB   cobertura da fatia
+│   │   ├── jtr.tgz                                 resultado por teste
+│   │   └── input-SHA256SUMS                        integridade da entrada
+│   ├── final/                                      merges e relatórios
+│   └── provenance/paired-merge-buildspec.yml       como o merge foi invocado
+│
+├── jdk-v1-20261002/     V1 · instrução de oráculo    650 objetos · 879 MB
+├── jdk-v2-20261002/     V2 · modelo mini             650 objetos · 885 MB
+├── jdk-v4-20261004/     V4 · few-shot                651 objetos · 883 MB
+├── jdk-v3a-20261004/    V3a · controle (T=0,7)       649 objetos · 865 MB
+├── reteste-v4/          8 shards reexecutados (variância de execução)
+│
+├── paired-20260928-jtr01/   reexecução que colheu os .jtr → revelou o oráculo mole
+├── baseline-recheck-20260707/
+└── pilot-*/                 pilotos de junho</pre>
+<p class="small mut">Atenção a uma inconsistência de nomenclatura que já custou
+tempo: no experimento principal os diretórios são <code>shard-NN/</code>; nas
+variantes são <code>NN/</code>.</p>
+
+<h3>7.2 · Local — testes gerados e análises</h3>
+<table>
+  <thead><tr><th>Caminho</th><th class="n">Tamanho</th><th>Conteúdo</th></tr></thead>
+  <tbody>
+    <tr><td><code>~/Documents/tcc/runs/paired-20260706-full02/</code></td><td class="n">243 MB</td>
+      <td>dados do experimento principal: <code>final/</code>, <code>analysis/summary.json</code>, <code>pair-level.csv</code></td></tr>
+    <tr><td><code>~/Documents/tcc/tools/</code></td><td class="n">104 KB</td>
+      <td>scripts de análise do artigo: <code>throw_site_coverage.py</code>, <code>expath_type_match.py</code></td></tr>
+    <tr><td><code>~/Documents/tcc/HANDOFF_ESTADO_EXPERIMENTO.md</code></td><td class="n">12 KB</td>
+      <td>handoff do estado do experimento principal</td></tr>
+    <tr><td><code>generated/experiments/jdk-variantes/jdk-v*/</code></td><td class="n">~600 MB cada</td>
+      <td>testes gerados e materializados de cada variante, com <code>pairing-manifest.csv</code></td></tr>
+    <tr><td><code>rerun-codebuild/mutacao*/</code></td><td class="n">~65 MB cada</td>
+      <td>mutação por condição: <code>alvos.csv</code>, <code>testes/</code>, <code>resultado.csv</code></td></tr>
+    <tr><td><code>rerun-codebuild/merge-*/out/</code></td><td class="n">~0,9–1,3 GB</td>
+      <td>XMLs mesclados e relatórios RepGen por condição</td></tr>
+    <tr><td><code>sast2026-artifact/</code></td><td class="n">294 MB</td>
+      <td>pacote de artefato para submissão</td></tr>
+  </tbody>
+</table>
+
+<h3>7.3 · Arquivos-chave para conferir um número</h3>
+<table>
+  <thead><tr><th>Para verificar…</th><th>Olhe em…</th></tr></thead>
+  <tbody>
+    <tr><td>verificação forte que passa (1,33–1,76×)</td>
+      <td><code>rerun-codebuild/cruzar-variante.py</code> + os <code>.jtr</code> da variante</td></tr>
+    <tr><td>mira e voz por condição</td>
+      <td>mesma saída do <code>cruzar-variante.py</code>, tabela forte/frágil/outro</td></tr>
+    <tr><td>cobertura restrita</td>
+      <td><code>rerun-codebuild/cobertura-restrita.py</code> + <code>manifest.csv</code> + relatórios RepGen</td></tr>
+    <tr><td>mutação (1,41× agregado)</td>
+      <td><code>rerun-codebuild/mutacao*/resultado.csv</code>, colunas <code>site, arm, veredito</code></td></tr>
+    <tr><td>variância de execução (726/726)</td>
+      <td><code>rerun-codebuild/comparar-reteste.py</code> sobre <code>reteste/exec1</code> e <code>exec2</code></td></tr>
+    <tr><td>o resultado antes da correção de encoding</td>
+      <td><code>rerun-codebuild/mutacao*/resultado-sem-utf8.csv</code> (preservado de propósito)</td></tr>
+  </tbody>
+</table>
+
+<h2>8 · Como reexecutar</h2>
+<p>Cada estágio é independente e reentrante: pode ser repetido isoladamente a
+partir dos dados do estágio anterior. Os comandos abaixo são os que de fato
+produziram os números.</p>
+
+<div class="note info">
+  <h4 class="ca">Pré-requisitos</h4>
+  <p class="small" style="margin:0">Docker com a imagem
+  <code>cloudarchlab/witup-evaluator:amd64</code> (traz JDK 11 de teste, jtreg e
+  JCov 3.0); AWS CLI com acesso ao bucket e ao CodeBuild; Python 3.9+; chave da
+  OpenAI apenas para o estágio 1. Em Apple Silicon a imagem roda emulada —
+  use <code>--platform linux/amd64</code>, e conte com algo em torno de 35
+  minutos por variante na mutação.</p>
+</div>
+
+<h3>Estágio 1 · Geração dos testes</h3>
+<p>Cada variante é definida por três variáveis de ambiente e um arquivo de
+configuração. É isto, e só isto, que muda entre os cenários:</p>
+<pre># gerar-variantes.sh — assinatura: gerar &lt;chave&gt; &lt;golden&gt; &lt;oracle&gt; &lt;config&gt;
+
+gerar jdk-v1  0 1 v1-pilot.runtime.json   # instrução de oráculo
+gerar jdk-v2  0 0 v2.runtime.json         # modelo mini
+gerar jdk-v4  1 0 v1-pilot.runtime.json   # few-shot (modelo obrigatório)
+gerar jdk-v3a 0 0 v3.runtime.json         # controle, temperatura 0,7
+
+# o que cada flag liga, em internal/aplicacao/prompts.go:
+#   WITUP_PROMPT_GOLDEN=1  → REGRA DE OURO + MODELO OBRIGATÓRIO DE CABEÇALHO
+#   WITUP_PROMPT_ORACLE=1  → bloco ORÁCULO OBRIGATÓRIO</pre>
+<pre>bash gerar-variantes.sh          # submete os lotes à Batch API da OpenAI
+bash daemon-submissao.sh         # acompanha e colhe as respostas</pre>
+<p class="small mut">Os modelos e temperaturas ficam em
+<code>generated/configs/*.json</code>: <code>v1-pilot</code> e <code>v3</code>
+usam <code>gpt-4.1-nano</code> (T=0 e T=0,7); <code>v2</code> usa
+<code>gpt-4.1-mini</code> (T=0).</p>
+
+<h3>Estágio 2 · Execução</h3>
+<pre>bash executar-variante.sh jdk-v1
+#  1. materializa as respostas em .java pareados por método
+#  2. divide em 24 shards por braço
+#  3. envia para s3://witup-jcov-results/&lt;stamp&gt;/inputs/
+#  4. dispara 48 builds no CodeBuild (jtreg + agente JCov)
+
+bash varredura-shards.sh         # confere buracos e relança o que faltou</pre>
+<div class="note">
+  <h4 class="cb">Não use <code>-boe skip</code> no merge</h4>
+  <p class="small" style="margin:0">Essa opção descarta arquivo problemático e
+  <b>termina com sucesso</b>. Foi assim que 10 shards sumiram em silêncio nas
+  variantes. O <code>merge-jcov-estrito.sh</code> já a removeu — se houver
+  conflito, ele falha, que é o comportamento desejado.</p>
+</div>
+
+<h3>Estágio 3 · Merge da cobertura</h3>
+<pre>cd rerun-codebuild
+
+python3 tirar-proxy.py 'merge-jdk-v1/direct-tests/*.xml' \
+                       'merge-jdk-v1/wit-context/*.xml'
+#   remove com.sun.proxy: classes geradas em runtime, nomeadas $ProxyN
+#   sequencialmente por JVM — o mesmo nome carrega estruturas diferentes
+#   entre shards, e é isso que faz o Merger abortar
+
+bash merge-jcov-estrito.sh jdk-v1 jdk-v2 jdk-v4 jdk-v3a
+
+# experimento principal (layout shard-NN/, por isso script próprio):
+bash remerge-original.sh</pre>
+
+<h3>Estágio 4 · Análises</h3>
+<pre># classificação estática — produz o resultado principal
+python3 cruzar-variante.py jdk-v1 "V1 instrução"
+
+# cobertura restrita aos métodos-alvo, denominador por união
+python3 cobertura-restrita.py manifest.csv \
+    merge-jdk-v1/out/rep-baseline \
+    merge-jdk-v1/out/rep-direct-tests \
+    merge-jdk-v1/out/rep-wit-context
+
+# robustez do classificador: mesma análise com padrão mais permissivo
+python3 cruzar-variante-regex2.py jdk-v1 "V1 regex ampliado"</pre>
+
+<h3>Estágio 5 · Mutação dirigida</h3>
+<pre>python3 preparar-mutacao.py jdk-v1          # monta o diretório da condição
+python3 preparar-mutacao.py jdk-v4 mutacao-v4b   # 2º arg: destino alternativo
+#   o join é pelo pairing-manifest.csv — o hash do arquivo de teste deriva do
+#   pair_id, que INCLUI a chave da variante, então hashes do baseline não casam
+
+docker run --rm --platform linux/amd64 -m 4g \
+  -v "$PWD/mutacao-v1:/m" cloudarchlab/witup-evaluator:amd64 \
+  bash /m/rodar.sh
+
+bash remutar.sh    # refaz as cinco condições com -encoding UTF-8</pre>
+<div class="note">
+  <h4 class="cb">Dois erros a não repetir na mutação</h4>
+  <p class="small" style="margin:0 0 8px"><b>Encoding:</b> sem
+  <code>-encoding UTF-8</code> no <code>javac</code>, todo teste com acento em
+  comentário é contado como "não compila". O braço WIT escreve acento muito mais
+  — era viés sistemático contra ele.</p>
+  <p class="small" style="margin:0"><b>Pareamento:</b> a taxa só é comparável
+  nos sites em que <b>os dois braços</b> têm veredito válido. Comparar sobre
+  conjuntos diferentes inverteu o sinal do experimento principal, de +0,5pp para
+  −3,5pp.</p>
+</div>
+
+<h3>Estágio 6 · Variância de execução</h3>
+<pre># relança 8 shards já executados num prefixo separado, preservando o original
+aws s3 cp s3://witup-jcov-results/jdk-v4-20261004/inputs/ \
+          s3://witup-jcov-results/reteste-v4/inputs/ --recursive
+
+# depois de concluídos, compara teste a teste
+python3 comparar-reteste.py reteste/exec1 reteste/exec2</pre>
+
+<h3>Ordem mínima para reproduzir o resultado principal</h3>
+<p>Se o objetivo for apenas confirmar os 1,33–1,76×, <b>não é preciso reexecutar
+nada na nuvem</b>. A classificação estática lê o código-fonte dos testes já
+materializados e os arquivos de resultado já baixados:</p>
+<pre>cd rerun-codebuild
+for K in jdk-v1 jdk-v2 jdk-v4 jdk-v3a; do
+    python3 cruzar-variante.py $K "$K"
+done</pre>
+<p class="small">Isso roda em segundos e é determinístico — a mesma entrada
+produz saída idêntica bit a bit, verificado por md5 em três execuções. É também
+a razão de o resultado principal ter sobrevivido aos quatro defeitos de
+infraestrutura: ele não passa por merge, execução nem compilação.</p>
+
+<h3>Custos observados</h3>
+<table>
+  <thead><tr><th>Estágio</th><th class="n">Custo</th><th>Observação</th></tr></thead>
+  <tbody>
+    <tr><td>Geração (4 variantes)</td><td class="n">crédito OpenAI</td>
+      <td>V3b e V3c pararam no limite de cobrança</td></tr>
+    <tr><td>Execução (96 shards)</td><td class="n">US$ 39</td>
+      <td>CodeBuild MEDIUM; mediana de 33 min por shard</td></tr>
+    <tr><td>Reteste (8 shards)</td><td class="n">US$ 2,64</td>
+      <td>~US$ 0,33 por shard</td></tr>
+    <tr><td>Merge e mutação</td><td class="n">local</td>
+      <td>~45 min por merge, ~35 min por condição de mutação (emulado)</td></tr>
+  </tbody>
+</table>
+
+<h2>9 · O limite do estudo</h2>
 <div class="note">
   <h4 class="cb">Conformidade de contrato, não detecção de defeito real</h4>
   <p style="margin:0 0 8px">O WIT lê o código e extrai <i>"este método lança NPE
@@ -819,7 +1056,7 @@ validade que outros trabalhos da área provavelmente têm sem saber.</p>
   cabeçalho, mas também demonstra um oráculo forte.</li>
 </ul>
 
-<h2>8 · Próximos passos</h2>
+<h2>10 · Próximos passos</h2>
 <table>
   <thead><tr><th>Passo</th><th class="n">Custo</th><th>O que destrava</th></tr></thead>
   <tbody>
