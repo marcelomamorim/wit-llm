@@ -125,6 +125,7 @@
     figure, table, pre, .exp, .note, .tldr{
       page-break-inside:avoid; break-inside:avoid; }
     .cards{ page-break-inside:avoid; break-inside:avoid; }
+    .two > figure{ page-break-inside:avoid; break-inside:avoid; }
     figure{ border:1px solid var(--line); }
     pre{ font-size:8.5pt; white-space:pre-wrap; word-break:break-word; }
     table{ font-size:9pt; }
@@ -149,16 +150,15 @@
 <div class="tldr">
   <p class="q">Se entregarmos a um LLM <b>as precondições que fazem cada método
   lançar exceção</b>, ele gera testes melhores para o contrato excepcional?</p>
-  <p><b>Resposta curta: sim, mas o ganho só aparece quando o teste tem como
-  reprovar.</b> O contexto faz o modelo mirar a exceção certa 1,3–1,6× mais
-  vezes, em todas as condições testadas. Essa mira só vira teste útil quando o
-  oráculo do teste consegue sinalizar falha ao harness — e isso depende do
-  prompt, não do contexto.</p>
+  <p><b>Resposta curta: sim em direcionamento e verificação, não em cobertura de
+  código.</b> E o ganho só se materializa quando o teste tem como reprovar —
+  o que depende do prompt, não do contexto.</p>
   <p>Foram <b>cinco experimentos de geração</b> (um principal, três intervenções
   e um controle negativo) e <b>três verificações de infraestrutura</b>. Ao longo
   do caminho foram encontrados e corrigidos <b>quatro defeitos de medição</b>,
   todos com o mesmo padrão: falhavam parecendo sucesso.</p>
 </div>
+
 
 <div class="cards">
   <div class="c ok"><div class="t">Mira na exceção</div><div class="v">1,30–1,62×</div>
@@ -167,25 +167,192 @@
     <div class="d">nas 3 intervenções · 1,08× no controle</div></div>
   <div class="c ok"><div class="t">Detecção de defeito</div><div class="v">1,41×</div>
     <div class="d">mortes exclusivas, 817 sites pareados</div></div>
-  <div class="c warn"><div class="t">Cobertura de branches</div><div class="v">0,94–1,01×</div>
-    <div class="d">desvantagem do WIT: caminho de erro é curto</div></div>
+  <div class="c bad"><div class="t">Cobertura de branches</div><div class="v">0,94–1,01×</div>
+    <div class="d">Direct vence em 4 de 5 condições</div></div>
 </div>
 
-<h3>As quatro afirmações defensáveis</h3>
-<ol>
-  <li><b>O contexto WIT direciona o teste à exceção documentada</b> — 1,30–1,62×
-  mais testes capturam o tipo certo. Robusto: vale nas quatro condições,
-  inclusive no controle negativo.</li>
-  <li><b>Direcionar só vira teste útil se o oráculo tiver voz</b> — com
-  instrução explícita, modelo melhor ou exemplo no prompt, a mira converte em
-  1,33–1,76× mais testes que verificam <i>e</i> passam. Sem isso, 1,08×.</li>
-  <li><b>A vantagem é em alcance, não em profundidade</b> — o WIT toca mais
-  métodos-alvo e cobre menos ramos dentro de cada um, porque um caminho de
-  exceção é curto por natureza.</li>
-  <li><b>O WIT nunca detecta menos defeitos que o Direct</b> — mutação dirigida
-  em 817 sites pareados: 89 mortes exclusivas do WIT contra 63 do Direct.
-  Modesto, mas consistente nas cinco condições.</li>
-</ol>
+<h3>O balanço, numa escala só</h3>
+<p>Cada barra é a faixa observada entre as condições experimentais. À direita do
+zero, o WIT vence; à esquerda, o Direct.</p>
+
+<figure>
+<svg viewBox="0 0 880 340" role="img" aria-label="Vantagens e desvantagens do WIT numa escala comum">
+  <text class="ttl" x="0" y="14">Vantagem do WIT sobre o Direct, em %</text>
+
+  <line class="gr" x1="236" y1="34" x2="236" y2="286" stroke-dasharray="3 3"/>
+  <line class="gr" x1="463" y1="34" x2="463" y2="286" stroke-dasharray="3 3"/>
+  <line class="gr" x1="690" y1="34" x2="690" y2="286" stroke-dasharray="3 3"/>
+  <line x1="406" y1="30" x2="406" y2="290" stroke="var(--fg)" stroke-width="1.5" opacity=".5"/>
+  <text class="lbl" x="236" y="306" text-anchor="middle" font-size="11">−30%</text>
+  <text class="lbl" x="406" y="306" text-anchor="middle" font-size="11" font-weight="650" fill="var(--fg)">0</text>
+  <text class="lbl" x="463" y="306" text-anchor="middle" font-size="11">+10%</text>
+  <text class="lbl" x="690" y="306" text-anchor="middle" font-size="11">+50%</text>
+
+  <text class="lbl" x="300" y="326" text-anchor="middle" font-size="11" fill="var(--dir)" font-weight="650">← Direct vence</text>
+  <text class="lbl" x="560" y="326" text-anchor="middle" font-size="11" fill="var(--wit)" font-weight="650">WIT vence →</text>
+
+  <!-- favoráveis -->
+  <text class="lbl" x="228" y="54" text-anchor="end" font-weight="650" fill="var(--fg)">verificação forte que passa</text>
+  <rect x="592" y="42" width="242" height="17" fill="var(--wit)" opacity=".85" rx="2"/>
+  <text class="val" x="826" y="55" font-size="10.5" text-anchor="end" fill="#fff" font-weight="700">+33 a +76%</text>
+
+  <text class="lbl" x="228" y="84" text-anchor="end" font-weight="650" fill="var(--fg)">mira na exceção documentada</text>
+  <rect x="575" y="72" width="181" height="17" fill="var(--wit)" opacity=".85" rx="2"/>
+  <text class="val" x="766" y="85" font-size="10.5" fill="var(--wit)">+30 a +62%</text>
+
+  <text class="lbl" x="228" y="114" text-anchor="end" font-weight="650" fill="var(--fg)">detecção de defeito (mutação)</text>
+  <rect x="406" y="102" width="232" height="17" fill="var(--wit)" opacity=".85" rx="2"/>
+  <text class="val" x="648" y="115" font-size="10.5" fill="var(--wit)">+41% agregado</text>
+
+  <text class="lbl" x="228" y="144" text-anchor="end" font-weight="650" fill="var(--fg)">aprovação dos que compilam</text>
+  <rect x="423" y="132" width="54" height="17" fill="var(--wit)" opacity=".85" rx="2"/>
+  <text class="val" x="487" y="145" font-size="10.5" fill="var(--wit)">+3 a +12%</text>
+
+  <text class="lbl" x="228" y="174" text-anchor="end" font-weight="650" fill="var(--fg)">métodos-alvo alcançados</text>
+  <rect x="408" y="162" width="14" height="17" fill="var(--wit)" opacity=".85" rx="2"/>
+  <text class="val" x="432" y="175" font-size="10.5" fill="var(--wit)">+0,4 a +2,8%</text>
+
+  <line class="gr" x1="20" y1="192" x2="860" y2="192"/>
+
+  <!-- desfavoráveis -->
+  <text class="lbl" x="228" y="214" text-anchor="end" font-weight="650" fill="var(--fg)">blocks cobertos</text>
+  <rect x="386" y="202" width="23" height="17" fill="var(--dir)" opacity=".85" rx="2"/>
+  <text class="val" x="378" y="215" text-anchor="end" font-size="10.5" fill="var(--dir)">−3,5 a +0,6%</text>
+
+  <text class="lbl" x="228" y="244" text-anchor="end" font-weight="650" fill="var(--fg)">branches cobertos</text>
+  <rect x="374" y="232" width="35" height="17" fill="var(--dir)" opacity=".85" rx="2"/>
+  <text class="val" x="366" y="245" text-anchor="end" font-size="10.5" fill="var(--dir)">−5,6 a +0,5%</text>
+
+  <text class="lbl" x="228" y="274" text-anchor="end" font-weight="650" fill="var(--fg)">compilação dos testes sem mira</text>
+  <rect x="229" y="262" width="98" height="17" fill="var(--bad)" opacity=".85" rx="2"/>
+  <text class="val" x="335" y="275" font-size="10.5" fill="var(--bad)" font-weight="700">−31 a −14%</text>
+</svg>
+<figcaption>As cinco barras de cima são favoráveis ao WIT; as três de baixo,
+desfavoráveis. A assimetria de magnitude importa: as vantagens são de dezenas
+de pontos percentuais, as desvantagens em cobertura são de poucos pontos — mas
+a última barra, a compilação dos testes que não miram, é uma desvantagem
+grande e consistente.</figcaption>
+</figure>
+
+<h3>A favor do WIT</h3>
+
+<p><b>1 · Direciona o teste à exceção documentada</b> — 1,30–1,62× mais testes
+capturam o tipo certo. É o resultado mais robusto: vale nas quatro condições,
+<b>inclusive no controle negativo</b>, o que mostra que vem do contexto e não do
+prompt.</p>
+
+<p>O mesmo método, os dois braços. O Direct nunca passa <code>null</code> porque
+não sabe que essa condição existe:</p>
+<div class="two">
+  <figure style="padding:14px 16px;margin:0">
+    <div class="small mut" style="margin-bottom:6px"><b class="cd">DIRECT</b> ·
+      <code>Arrays.setAll</code></div>
+<pre>double[] array = new double[5];
+IntToDoubleFunction gen = i -> i * 2.0;
+Arrays.setAll(array, gen);
+
+for (int i = 0; i &lt; array.length; i++) {
+    if (array[i] != i * 2.0) {
+        throw new AssertionError(
+            "Unexpected value at " + i);
+    }
+}</pre>
+  </figure>
+  <figure style="padding:14px 16px;margin:0">
+    <div class="small mut" style="margin-bottom:6px"><b class="cw">WIT</b> ·
+      o mesmo arquivo</div>
+<pre>double[] array = {1.0, 2.0, 3.0};
+try {
+    Arrays.setAll(array, <b>null</b>);
+    throw new AssertionError(
+      "Expected NPE was not thrown");
+} catch (<b>NullPointerException</b> e) {
+    // esperado
+} catch (Throwable t) {
+    throw new AssertionError(
+      "Unexpected type: " + t);
+}</pre>
+  </figure>
+</div>
+
+<p><b>2 · Essa mira converte em verificação útil</b> — quando o oráculo tem como
+reprovar, 1,33–1,76× mais testes verificam o contrato <i>e</i> passam. Em
+números absolutos, no melhor caso são 1.195 testes úteis contra 681: <b>514 a
+mais, sem custo adicional de geração</b>.</p>
+
+<p><b>3 · Detecta ao menos tantos defeitos quanto o Direct</b> — mutação
+dirigida em 817 sites pareados: 89 mortes exclusivas do WIT contra 63 do
+Direct. Em nenhuma das cinco condições o Direct supera.</p>
+
+<p><b>4 · Os testes do WIT compilam e passam um pouco mais</b> — a taxa de
+aprovação entre os que compilam é 3 a 12 pontos percentuais maior, nas quatro
+condições.</p>
+
+<h3>Contra o WIT</h3>
+
+<p><b>1 · Cobre menos código dentro de cada método</b> — o Direct vence em
+blocks e branches em quatro das cinco condições. A causa está <b>no mesmo
+exemplo acima</b>: o teste Direct percorre um laço de cinco elementos e verifica
+cinco valores; o teste WIT faz <b>uma</b> chamada e para.</p>
+<p class="small">Um caminho de exceção é curto por natureza. Passa
+<code>null</code>, confirma que a exceção certa veio, encerra. Isso é uma
+propriedade do que se está testando, não um defeito do método — mas significa
+que <b>apresentar cobertura como métrica principal desfavorece o WIT</b>.</p>
+
+<p><b>2 · Quando o WIT erra o alvo, erra pior</b> — este é o achado
+desfavorável mais consistente. Nos testes que <i>não</i> miram exceção nenhuma,
+o WIT compila de 7 a 11 pontos percentuais <b>abaixo</b> do Direct, nas quatro
+condições:</p>
+<table>
+  <thead><tr><th>Condição</th><th class="n">Direct compila</th>
+    <th class="n">WIT compila</th><th class="n">diferença</th></tr></thead>
+  <tbody>
+    <tr><td>V1 instrução</td><td class="n">35,8%</td><td class="n">24,6%</td>
+      <td class="n cb">−11,2pp</td></tr>
+    <tr><td>V2 modelo mini</td><td class="n">46,2%</td><td class="n">39,8%</td>
+      <td class="n cb">−6,4pp</td></tr>
+    <tr><td>V4 few-shot</td><td class="n">38,5%</td><td class="n">28,1%</td>
+      <td class="n cb">−10,4pp</td></tr>
+    <tr><td>V3a controle</td><td class="n">35,5%</td><td class="n">26,6%</td>
+      <td class="n cb">−8,9pp</td></tr>
+  </tbody>
+</table>
+<p>Um exemplo real, do braço WIT, que não compilou. O teste é logicamente bem
+formado e tem oráculo forte — mas usa uma classe que não é pública:</p>
+<figure style="padding:14px 16px">
+<div class="small mut" style="margin-bottom:6px">
+  <code>Normalizer2WitupTest_P65663701f6d0.java</code> · V1, braço WIT</div>
+<pre>import <span style="background:rgba(169,50,38,.16);border-radius:3px;padding:0 3px">sun.text.normalizer.Normalizer2</span>;
+
+public class Normalizer2WitupTest_P65663701f6d0 {
+    public static void main(String[] args) { testGetNFKDInstance(); }
+
+    public static void testGetNFKDInstance() {
+        try {
+            Normalizer2 result = Normalizer2.getNFKDInstance();
+            if (result == null) {
+                throw new AssertionError("FAIL: getNFKDInstance() returned null");
+            }
+        } catch (Throwable t) {
+            throw new AssertionError("FAIL: ... threw an exception: " + t);
+        }
+    }
+}</pre>
+<figcaption><code>error: Normalizer2 is not public in sun.text.normalizer;
+cannot be accessed from outside package</code> — o modelo inventou um acesso
+que não existe. Quando o contexto WIT não leva a uma condição de exceção
+construível, o que sobra tende a ser mais frágil que o palpite genérico do
+Direct.</figcaption>
+</figure>
+
+<p><b>3 · Todo o ganho depende do oráculo ter voz</b> — no controle de
+temperatura, onde 59,5% dos testes mirados ficam sem mecanismo de reprovação, a
+vantagem cai de 1,33–1,76× para <b>1,075×</b>. O contexto sozinho não entrega
+nada: ele precisa de um prompt que exija o oráculo.</p>
+
+<p><b>4 · A taxa de compilação é baixa nos dois braços</b> — entre 42% e 56%.
+É limitação do método como um todo, não do WIT, mas significa que
+aproximadamente metade do orçamento de geração é desperdiçada.</p>
 
 <h3>As três ressalvas honestas</h3>
 <ul>
