@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	provedoresSuportados = map[string]bool{"ollama": true, "openai_compatible": true}
+	provedoresSuportados = map[string]bool{"ollama": true, "openai_compatible": true, "openai": true, "gemini": true, "anthropic": true}
 	exclusoesPadrao      = []string{
 		".git",
 		"target",
@@ -179,13 +179,13 @@ func aplicarPadroes(cfg *dominio.ConfigAplicacao) error {
 		if modelo.SegundosTimeout == 0 {
 			modelo.SegundosTimeout = 180
 		}
-		if modelo.Provedor == "openai_compatible" {
+		if modelo.Provedor == "openai_compatible" || modelo.Provedor == "openai" {
 			modelo.EsforcoRaciocinio = normalizarEsforcoRaciocinio(modelo.EsforcoRaciocinio)
 		}
-		if strings.TrimSpace(modelo.RetencaoCachePrompt) == "" && modelo.Provedor == "openai_compatible" {
+		if strings.TrimSpace(modelo.RetencaoCachePrompt) == "" && (modelo.Provedor == "openai_compatible" || modelo.Provedor == "openai") {
 			modelo.RetencaoCachePrompt = "24h"
 		}
-		if strings.TrimSpace(modelo.NivelServico) == "" && modelo.Provedor == "openai_compatible" {
+		if strings.TrimSpace(modelo.NivelServico) == "" && (modelo.Provedor == "openai_compatible" || modelo.Provedor == "openai") {
 			modelo.NivelServico = "auto"
 		}
 		cfg.Modelos[chave] = modelo
@@ -325,11 +325,11 @@ func validar(cfg *dominio.ConfigAplicacao) error {
 		if modelo.MaximoTokensSaida < 0 {
 			return fmt.Errorf("models.%s.max_output_tokens deve ser >= 0", chave)
 		}
-		if modelo.Provedor == "openai_compatible" {
+		if modelo.Provedor == "openai_compatible" || modelo.Provedor == "openai" {
 			switch modelo.EsforcoRaciocinio {
-			case "", "none", "low", "medium", "high", "xhigh":
+			case "", "none", "low", "medium", "high", "xhigh", "max":
 			default:
-				return fmt.Errorf("models.%s.reasoning_effort=%q não suportado; use none, low, medium, high ou xhigh", chave, modelo.EsforcoRaciocinio)
+				return fmt.Errorf("models.%s.reasoning_effort=%q não suportado; use none, low, medium, high, xhigh ou max", chave, modelo.EsforcoRaciocinio)
 			}
 		}
 	}

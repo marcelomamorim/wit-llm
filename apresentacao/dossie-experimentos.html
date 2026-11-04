@@ -1,0 +1,1241 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dossiê dos Experimentos</title>
+<style>
+  :root{
+    --bg:#fbfaf8; --fg:#1a1a18; --mut:#6b6b63; --line:#e3e0d9; --card:#fff;
+    --wit:#1f6f4a; --dir:#b07b2a; --bad:#a93226; --ok:#2e7d52; --warn:#b8860b;
+    --grid:#eceae4; --acc:#2b5c8a;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --bg:#16171a; --fg:#e9e7e2; --mut:#9b9992; --line:#2d3034; --card:#1e2023;
+    --wit:#5fbf8f; --dir:#d9a35f; --bad:#e8847a; --ok:#5fbf8f; --warn:#d9b35f;
+    --grid:#26282c; --acc:#7fb3e0;}}
+  :root[data-theme="dark"]{
+    --bg:#16171a; --fg:#e9e7e2; --mut:#9b9992; --line:#2d3034; --card:#1e2023;
+    --wit:#5fbf8f; --dir:#d9a35f; --bad:#e8847a; --ok:#5fbf8f; --warn:#d9b35f;
+    --grid:#26282c; --acc:#7fb3e0;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);
+       font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:38px 16px 100px}
+
+  h1{font-size:38px;line-height:1.1;letter-spacing:-.024em;margin:0 0 8px}
+  .parte{font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+         color:var(--acc);font-weight:700;margin:56px 0 6px;
+         padding-top:26px;border-top:2px solid var(--acc)}
+  h2{font-size:25px;letter-spacing:-.016em;margin:40px 0 8px;padding-top:20px;
+     border-top:1px solid var(--line)}
+  .parte + h2{border-top:none;padding-top:0;margin-top:4px}
+  h3{font-size:17px;margin:28px 0 8px}
+  h4{font-size:14.5px;margin:20px 0 6px}
+  p{margin:0 0 12px;max-width:76ch}
+  .sub{color:var(--mut);font-size:15px;margin:0 0 4px}
+  .mut{color:var(--mut)} .small{font-size:14px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--grid);
+       padding:.1em .34em;border-radius:4px}
+
+  .tldr{background:var(--card);border:1px solid var(--line);border-radius:12px;
+        padding:22px 24px;margin:24px 0}
+  .tldr p:last-child{margin-bottom:0}
+  .tldr .q{font-size:19px;line-height:1.45;font-weight:600;letter-spacing:-.01em;
+           margin-bottom:14px}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(212px,1fr));
+         gap:12px;margin:22px 0}
+  .c{background:var(--card);border:1px solid var(--line);border-left-width:3px;
+     border-radius:9px;padding:13px 15px}
+  .c.ok{border-left-color:var(--ok)} .c.warn{border-left-color:var(--warn)}
+  .c.bad{border-left-color:var(--bad)} .c.acc{border-left-color:var(--acc)}
+  .c .t{font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+        color:var(--mut);font-weight:650;margin-bottom:5px}
+  .c .v{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.15}
+  .c .d{font-size:12.5px;color:var(--mut);margin-top:5px;line-height:1.42}
+
+  figure{margin:20px 0;background:var(--card);border:1px solid var(--line);
+         border-radius:10px;padding:18px 18px 12px}
+  figure.flat{background:none;border:none;padding:0}
+  figcaption{font-size:13.5px;color:var(--mut);margin-top:10px;line-height:1.5}
+  svg{display:block;width:100%;height:auto}
+  svg text{font-family:var(--sans);fill:var(--fg)}
+  svg .lbl{font-size:12px;fill:var(--mut)}
+  svg .val{font-size:11.5px;font-family:var(--mono)}
+  svg .ttl{font-size:13px;font-weight:650}
+  svg .ax{stroke:var(--line);stroke-width:1}
+  svg .gr{stroke:var(--grid);stroke-width:1}
+
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:14px 0}
+  th,td{border-bottom:1px solid var(--line);padding:7px 9px;text-align:left;
+        vertical-align:top}
+  th{font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;
+     color:var(--mut);font-weight:650}
+  td.n{text-align:right;font-family:var(--mono);font-size:13px;white-space:nowrap}
+  tr.ctl td{background:rgba(184,134,11,.08)}
+  .cw{color:var(--wit);font-weight:650} .cd{color:var(--dir);font-weight:650}
+  .cb{color:var(--bad);font-weight:650} .ca{color:var(--acc);font-weight:650}
+
+  .note{border-left:3px solid var(--bad);background:var(--card);
+        border-radius:0 9px 9px 0;padding:14px 16px;margin:18px 0}
+  .note.good{border-left-color:var(--ok)}
+  .note.info{border-left-color:var(--acc)}
+  .note h4{margin:0 0 7px;font-size:14px;letter-spacing:.02em}
+  .note p:last-child{margin-bottom:0}
+
+  pre{font-family:var(--mono);font-size:12px;line-height:1.5;background:var(--grid);
+      border-radius:7px;padding:12px 14px;overflow-x:auto;margin:0}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}
+  @media(max-width:780px){.two{grid-template-columns:1fr}}
+  ul,ol{padding-left:20px;max-width:76ch} li{margin-bottom:6px}
+  .key{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);margin:2px 0 4px}
+  .key i{display:inline-block;width:11px;height:11px;border-radius:2px;
+         margin-right:5px;vertical-align:-1px}
+  .exp{background:var(--card);border:1px solid var(--line);border-radius:10px;
+       padding:16px 18px;margin:18px 0}
+  .exp .cab{display:flex;align-items:baseline;gap:10px;margin-bottom:4px;flex-wrap:wrap}
+  .exp .id{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--acc);
+           border:1px solid var(--acc);border-radius:4px;padding:1px 7px}
+  .exp .nom{font-size:17px;font-weight:650;letter-spacing:-.01em}
+  .exp .dt{font-size:12.5px;color:var(--mut);font-family:var(--mono)}
+  .exp dl{margin:10px 0 0;display:grid;grid-template-columns:auto 1fr;gap:5px 14px;
+          font-size:14.5px}
+  .exp dt{font-size:11px;letter-spacing:.07em;text-transform:uppercase;
+          color:var(--mut);font-weight:650;padding-top:3px}
+  .exp dd{margin:0}
+  @media(max-width:620px){.exp dl{grid-template-columns:1fr}
+    .exp dt{padding-top:8px}}
+
+  @media print{
+    @page{ size:A4; margin:14mm 12mm; }
+    :root{ --bg:#fff; --fg:#111; --mut:#555; --line:#ccc; --card:#fff;
+           --grid:#f0efec; --wit:#15573a; --dir:#8a5f1c; --bad:#8f2318;
+           --ok:#1d6340; --warn:#8a6508; --acc:#1f4a70; }
+    body{ font-size:10.5pt; background:#fff; }
+    .wrap{ max-width:none; padding:0; }
+    h1{ font-size:24pt; }
+    h2{ font-size:15pt; page-break-after:avoid; break-after:avoid; }
+    h3{ font-size:11.5pt; page-break-after:avoid; break-after:avoid; }
+    h4{ page-break-after:avoid; break-after:avoid; }
+    .parte{ page-break-before:always; break-before:page; font-size:9pt; }
+    .parte:first-of-type{ page-break-before:avoid; break-before:auto; margin-top:30px; }
+    figure, table, pre, .exp, .note, .tldr{
+      page-break-inside:avoid; break-inside:avoid; }
+    .cards{ page-break-inside:avoid; break-inside:avoid; }
+    .two > figure{ page-break-inside:avoid; break-inside:avoid; }
+    figure{ border:1px solid var(--line); }
+    pre{ font-size:8.5pt; white-space:pre-wrap; word-break:break-word; }
+    table{ font-size:9pt; }
+    td,th{ padding:4px 6px; }
+    .exp dl{ font-size:10pt; }
+    p,li{ orphans:3; widows:3; }
+    svg{ max-height:none; }
+    a{ text-decoration:none; color:inherit; }
+  }
+</style>
+</head>
+<body><div class="wrap">
+
+<p class="sub">OpenJDK 11 · WIT vs Direct · atualizado 16/10/2026</p>
+<h1>Dossiê dos experimentos</h1>
+<p class="sub">Tudo que foi executado, com hipótese, método, resultado e ressalva.</p>
+
+<!-- ══════════════════ PARTE I ══════════════════ -->
+<p class="parte">Parte I — Introdução resumida</p>
+<h2>Em três minutos</h2>
+
+<div class="tldr">
+  <p class="q">Se entregarmos a um LLM <b>as precondições que fazem cada método
+  lançar exceção</b>, ele gera testes melhores para o contrato excepcional?</p>
+  <p><b>Resposta curta: sim em direcionamento e verificação, não em cobertura de
+  código.</b> E o ganho só se materializa quando o teste tem como reprovar —
+  o que depende do prompt, não do contexto.</p>
+  <p>Foram <b>cinco experimentos de geração</b> (um principal, três intervenções
+  e um controle negativo) e <b>três verificações de infraestrutura</b>. Ao longo
+  do caminho foram encontrados e corrigidos <b>quatro defeitos de medição</b>,
+  todos com o mesmo padrão: falhavam parecendo sucesso.</p>
+</div>
+
+
+<div class="cards">
+  <div class="c ok"><div class="t">Mira na exceção</div><div class="v">1,30–1,62×</div>
+    <div class="d">nas 4 condições, inclusive no controle</div></div>
+  <div class="c ok"><div class="t">Verificação que passa</div><div class="v">1,33–1,76×</div>
+    <div class="d">nas 3 intervenções · 1,08× no controle</div></div>
+  <div class="c ok"><div class="t">Detecção de defeito</div><div class="v">1,41×</div>
+    <div class="d">mortes exclusivas, 817 sites pareados</div></div>
+  <div class="c bad"><div class="t">Cobertura de branches</div><div class="v">0,94–1,01×</div>
+    <div class="d">Direct vence em 4 de 5 condições</div></div>
+</div>
+
+<h3>O balanço, numa escala só</h3>
+<p>Cada barra é a faixa observada entre as condições experimentais. À direita do
+zero, o WIT vence; à esquerda, o Direct.</p>
+
+<figure>
+<svg viewBox="0 0 880 340" role="img" aria-label="Vantagens e desvantagens do WIT numa escala comum">
+  <text class="ttl" x="0" y="14">Vantagem do WIT sobre o Direct, em %</text>
+
+  <line class="gr" x1="236" y1="34" x2="236" y2="286" stroke-dasharray="3 3"/>
+  <line class="gr" x1="463" y1="34" x2="463" y2="286" stroke-dasharray="3 3"/>
+  <line class="gr" x1="690" y1="34" x2="690" y2="286" stroke-dasharray="3 3"/>
+  <line x1="406" y1="30" x2="406" y2="290" stroke="var(--fg)" stroke-width="1.5" opacity=".5"/>
+  <text class="lbl" x="236" y="306" text-anchor="middle" font-size="11">−30%</text>
+  <text class="lbl" x="406" y="306" text-anchor="middle" font-size="11" font-weight="650" fill="var(--fg)">0</text>
+  <text class="lbl" x="463" y="306" text-anchor="middle" font-size="11">+10%</text>
+  <text class="lbl" x="690" y="306" text-anchor="middle" font-size="11">+50%</text>
+
+  <text class="lbl" x="300" y="326" text-anchor="middle" font-size="11" fill="var(--dir)" font-weight="650">← Direct vence</text>
+  <text class="lbl" x="560" y="326" text-anchor="middle" font-size="11" fill="var(--wit)" font-weight="650">WIT vence →</text>
+
+  <!-- favoráveis -->
+  <text class="lbl" x="228" y="54" text-anchor="end" font-weight="650" fill="var(--fg)">verificação forte que passa</text>
+  <rect x="592" y="42" width="242" height="17" fill="var(--wit)" opacity=".85" rx="2"/>
+  <text class="val" x="826" y="55" font-size="10.5" text-anchor="end" fill="#fff" font-weight="700">+33 a +76%</text>
+
+  <text class="lbl" x="228" y="84" text-anchor="end" font-weight="650" fill="var(--fg)">mira na exceção documentada</text>
+  <rect x="575" y="72" width="181" height="17" fill="var(--wit)" opacity=".85" rx="2"/>
+  <text class="val" x="766" y="85" font-size="10.5" fill="var(--wit)">+30 a +62%</text>
+
+  <text class="lbl" x="228" y="114" text-anchor="end" font-weight="650" fill="var(--fg)">detecção de defeito (mutação)</text>
+  <rect x="406" y="102" width="232" height="17" fill="var(--wit)" opacity=".85" rx="2"/>
+  <text class="val" x="648" y="115" font-size="10.5" fill="var(--wit)">+41% agregado</text>
+
+  <text class="lbl" x="228" y="144" text-anchor="end" font-weight="650" fill="var(--fg)">aprovação dos que compilam</text>
+  <rect x="423" y="132" width="54" height="17" fill="var(--wit)" opacity=".85" rx="2"/>
+  <text class="val" x="487" y="145" font-size="10.5" fill="var(--wit)">+3 a +12%</text>
+
+  <text class="lbl" x="228" y="174" text-anchor="end" font-weight="650" fill="var(--fg)">métodos-alvo alcançados</text>
+  <rect x="408" y="162" width="14" height="17" fill="var(--wit)" opacity=".85" rx="2"/>
+  <text class="val" x="432" y="175" font-size="10.5" fill="var(--wit)">+0,4 a +2,8%</text>
+
+  <line class="gr" x1="20" y1="192" x2="860" y2="192"/>
+
+  <!-- desfavoráveis -->
+  <text class="lbl" x="228" y="214" text-anchor="end" font-weight="650" fill="var(--fg)">blocks cobertos</text>
+  <rect x="386" y="202" width="23" height="17" fill="var(--dir)" opacity=".85" rx="2"/>
+  <text class="val" x="378" y="215" text-anchor="end" font-size="10.5" fill="var(--dir)">−3,5 a +0,6%</text>
+
+  <text class="lbl" x="228" y="244" text-anchor="end" font-weight="650" fill="var(--fg)">branches cobertos</text>
+  <rect x="374" y="232" width="35" height="17" fill="var(--dir)" opacity=".85" rx="2"/>
+  <text class="val" x="366" y="245" text-anchor="end" font-size="10.5" fill="var(--dir)">−5,6 a +0,5%</text>
+
+  <text class="lbl" x="228" y="274" text-anchor="end" font-weight="650" fill="var(--fg)">compilação dos testes sem mira</text>
+  <rect x="229" y="262" width="98" height="17" fill="var(--bad)" opacity=".85" rx="2"/>
+  <text class="val" x="335" y="275" font-size="10.5" fill="var(--bad)" font-weight="700">−31 a −14%</text>
+</svg>
+<figcaption>As cinco barras de cima são favoráveis ao WIT; as três de baixo,
+desfavoráveis. A assimetria de magnitude importa: as vantagens são de dezenas
+de pontos percentuais, as desvantagens em cobertura são de poucos pontos — mas
+a última barra, a compilação dos testes que não miram, é uma desvantagem
+grande e consistente.</figcaption>
+</figure>
+
+<h3>A favor do WIT</h3>
+
+<p><b>1 · Direciona o teste à exceção documentada</b> — 1,30–1,62× mais testes
+capturam o tipo certo. É o resultado mais robusto: vale nas quatro condições,
+<b>inclusive no controle negativo</b>, o que mostra que vem do contexto e não do
+prompt.</p>
+
+<p>O mesmo método, os dois braços. O Direct nunca passa <code>null</code> porque
+não sabe que essa condição existe:</p>
+<div class="two">
+  <figure style="padding:14px 16px;margin:0">
+    <div class="small mut" style="margin-bottom:6px"><b class="cd">DIRECT</b> ·
+      <code>Arrays.setAll</code></div>
+<pre>double[] array = new double[5];
+IntToDoubleFunction gen = i -> i * 2.0;
+Arrays.setAll(array, gen);
+
+for (int i = 0; i &lt; array.length; i++) {
+    if (array[i] != i * 2.0) {
+        throw new AssertionError(
+            "Unexpected value at " + i);
+    }
+}</pre>
+  </figure>
+  <figure style="padding:14px 16px;margin:0">
+    <div class="small mut" style="margin-bottom:6px"><b class="cw">WIT</b> ·
+      o mesmo arquivo</div>
+<pre>double[] array = {1.0, 2.0, 3.0};
+try {
+    Arrays.setAll(array, <b>null</b>);
+    throw new AssertionError(
+      "Expected NPE was not thrown");
+} catch (<b>NullPointerException</b> e) {
+    // esperado
+} catch (Throwable t) {
+    throw new AssertionError(
+      "Unexpected type: " + t);
+}</pre>
+  </figure>
+</div>
+
+<p><b>2 · Essa mira converte em verificação útil</b> — quando o oráculo tem como
+reprovar, 1,33–1,76× mais testes verificam o contrato <i>e</i> passam. Em
+números absolutos, no melhor caso são 1.195 testes úteis contra 681: <b>514 a
+mais, sem custo adicional de geração</b>.</p>
+
+<p><b>3 · Detecta ao menos tantos defeitos quanto o Direct</b> — mutação
+dirigida em 817 sites pareados: 89 mortes exclusivas do WIT contra 63 do
+Direct. Em nenhuma das cinco condições o Direct supera.</p>
+
+<p><b>4 · Os testes do WIT compilam e passam um pouco mais</b> — a taxa de
+aprovação entre os que compilam é 3 a 12 pontos percentuais maior, nas quatro
+condições.</p>
+
+<h3>Contra o WIT</h3>
+
+<p><b>1 · Cobre menos código dentro de cada método</b> — o Direct vence em
+blocks e branches em quatro das cinco condições. A causa está <b>no mesmo
+exemplo acima</b>: o teste Direct percorre um laço de cinco elementos e verifica
+cinco valores; o teste WIT faz <b>uma</b> chamada e para.</p>
+<p class="small">Um caminho de exceção é curto por natureza. Passa
+<code>null</code>, confirma que a exceção certa veio, encerra. Isso é uma
+propriedade do que se está testando, não um defeito do método — mas significa
+que <b>apresentar cobertura como métrica principal desfavorece o WIT</b>.</p>
+
+<p><b>2 · Quando o WIT erra o alvo, erra pior</b> — este é o achado
+desfavorável mais consistente. Nos testes que <i>não</i> miram exceção nenhuma,
+o WIT compila de 7 a 11 pontos percentuais <b>abaixo</b> do Direct, nas quatro
+condições:</p>
+<table>
+  <thead><tr><th>Condição</th><th class="n">Direct compila</th>
+    <th class="n">WIT compila</th><th class="n">diferença</th></tr></thead>
+  <tbody>
+    <tr><td>V1 instrução</td><td class="n">35,8%</td><td class="n">24,6%</td>
+      <td class="n cb">−11,2pp</td></tr>
+    <tr><td>V2 modelo mini</td><td class="n">46,2%</td><td class="n">39,8%</td>
+      <td class="n cb">−6,4pp</td></tr>
+    <tr><td>V4 few-shot</td><td class="n">38,5%</td><td class="n">28,1%</td>
+      <td class="n cb">−10,4pp</td></tr>
+    <tr><td>V3a controle</td><td class="n">35,5%</td><td class="n">26,6%</td>
+      <td class="n cb">−8,9pp</td></tr>
+  </tbody>
+</table>
+<p>Um exemplo real, do braço WIT, que não compilou. O teste é logicamente bem
+formado e tem oráculo forte — mas usa uma classe que não é pública:</p>
+<figure style="padding:14px 16px">
+<div class="small mut" style="margin-bottom:6px">
+  <code>Normalizer2WitupTest_P65663701f6d0.java</code> · V1, braço WIT</div>
+<pre>import <span style="background:rgba(169,50,38,.16);border-radius:3px;padding:0 3px">sun.text.normalizer.Normalizer2</span>;
+
+public class Normalizer2WitupTest_P65663701f6d0 {
+    public static void main(String[] args) { testGetNFKDInstance(); }
+
+    public static void testGetNFKDInstance() {
+        try {
+            Normalizer2 result = Normalizer2.getNFKDInstance();
+            if (result == null) {
+                throw new AssertionError("FAIL: getNFKDInstance() returned null");
+            }
+        } catch (Throwable t) {
+            throw new AssertionError("FAIL: ... threw an exception: " + t);
+        }
+    }
+}</pre>
+<figcaption><code>error: Normalizer2 is not public in sun.text.normalizer;
+cannot be accessed from outside package</code> — o modelo inventou um acesso
+que não existe. Quando o contexto WIT não leva a uma condição de exceção
+construível, o que sobra tende a ser mais frágil que o palpite genérico do
+Direct.</figcaption>
+</figure>
+
+<p><b>3 · Todo o ganho depende do oráculo ter voz</b> — no controle de
+temperatura, onde 59,5% dos testes mirados ficam sem mecanismo de reprovação, a
+vantagem cai de 1,33–1,76× para <b>1,075×</b>. O contexto sozinho não entrega
+nada: ele precisa de um prompt que exija o oráculo.</p>
+
+<p><b>4 · A taxa de compilação é baixa nos dois braços</b> — entre 42% e 56%.
+É limitação do método como um todo, não do WIT, mas significa que
+aproximadamente metade do orçamento de geração é desperdiçada.</p>
+
+<h3>As três ressalvas honestas</h3>
+<ul>
+  <li><b>Sem barra de erro.</b> As réplicas V3b e V3c nunca foram geradas —
+  pararam no limite de cobrança da OpenAI. Não se sabe quanto da diferença entre
+  1,33× e 1,76× é efeito e quanto é ruído de amostragem.</li>
+  <li><b>A especificação vem do próprio código.</b> O WIT lê o código para
+  descobrir qual exceção é lançada; o teste então confere isso. Se o código
+  tivesse um bug, o teste confirmaria o bug. Mede <b>conformidade de contrato</b>,
+  não detecção de defeito real.</li>
+  <li><b>O operador de mutação é grosseiro.</b> Remover o <code>athrow</code>
+  faz o método retornar em vez de lançar — qualquer teste com voz que alcance o
+  site detecta. Ele mede alcance mais que precisão do oráculo.</li>
+</ul>
+
+<h2>Linha do tempo</h2>
+
+<figure>
+<svg viewBox="0 0 1000 340" role="img" aria-label="Linha do tempo dos experimentos, de junho a outubro de 2026">
+  <defs><marker id="seta" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 z" fill="var(--mut)"/></marker></defs>
+
+  <line class="ax" x1="36" y1="172" x2="972" y2="172" stroke-width="2" marker-end="url(#seta)"/>
+
+  <circle cx="70" cy="172" r="6" fill="var(--mut)"/>
+  <text class="val" x="70" y="200" text-anchor="middle" fill="var(--mut)">14/06</text>
+  <text class="lbl" x="70" y="218" text-anchor="middle" font-size="11">pilotos</text>
+
+  <circle cx="196" cy="172" r="9" fill="var(--acc)"/>
+  <text class="val" x="196" y="140" text-anchor="middle" font-weight="700" fill="var(--acc)">06/07</text>
+  <text class="lbl" x="196" y="122" text-anchor="middle" font-size="12" font-weight="650" fill="var(--fg)">EXPERIMENTO PRINCIPAL</text>
+  <text class="lbl" x="196" y="104" text-anchor="middle" font-size="11">4.125 pares · o do artigo</text>
+
+  <circle cx="286" cy="172" r="5" fill="var(--mut)"/>
+  <text class="val" x="286" y="200" text-anchor="middle" fill="var(--mut)">07/07</text>
+  <text class="lbl" x="286" y="218" text-anchor="middle" font-size="11">reconferência</text>
+
+  <circle cx="376" cy="172" r="5" fill="var(--mut)"/>
+  <text class="val" x="376" y="140" text-anchor="middle" fill="var(--mut)">25/07</text>
+  <text class="lbl" x="376" y="122" text-anchor="middle" font-size="11">throw-sites</text>
+
+  <circle cx="486" cy="172" r="5" fill="var(--mut)"/>
+  <text class="val" x="486" y="200" text-anchor="middle" fill="var(--mut)">28/09</text>
+  <text class="lbl" x="486" y="218" text-anchor="middle" font-size="11">colheita dos .jtr</text>
+  <text class="lbl" x="486" y="234" text-anchor="middle" font-size="10.5" opacity=".8">revela o oráculo mole</text>
+
+  <circle cx="610" cy="172" r="8" fill="var(--wit)"/>
+  <text class="val" x="610" y="140" text-anchor="middle" font-weight="700" fill="var(--wit)">02/10</text>
+  <text class="lbl" x="610" y="122" text-anchor="middle" font-size="11.5" font-weight="650" fill="var(--fg)">V1 · V2</text>
+  <text class="lbl" x="610" y="104" text-anchor="middle" font-size="11">instrução · modelo</text>
+
+  <circle cx="712" cy="172" r="8" fill="var(--wit)"/>
+  <text class="val" x="712" y="200" text-anchor="middle" font-weight="700" fill="var(--wit)">04/10</text>
+  <text class="lbl" x="712" y="218" text-anchor="middle" font-size="11.5" font-weight="650" fill="var(--fg)">V4 · V3a</text>
+  <text class="lbl" x="712" y="234" text-anchor="middle" font-size="11">few-shot · controle</text>
+
+  <circle cx="812" cy="172" r="6" fill="var(--bad)"/>
+  <text class="val" x="812" y="140" text-anchor="middle" fill="var(--bad)" font-weight="700">07/10</text>
+  <text class="lbl" x="812" y="122" text-anchor="middle" font-size="11">merge silencioso</text>
+  <text class="lbl" x="812" y="104" text-anchor="middle" font-size="10.5" opacity=".8">10 shards perdidos</text>
+
+  <circle cx="890" cy="172" r="6" fill="var(--ok)"/>
+  <text class="val" x="890" y="200" text-anchor="middle" fill="var(--ok)" font-weight="700">08/10</text>
+  <text class="lbl" x="890" y="218" text-anchor="middle" font-size="11">regex validado</text>
+
+  <circle cx="952" cy="172" r="8" fill="var(--ok)"/>
+  <text class="val" x="952" y="140" text-anchor="middle" fill="var(--ok)" font-weight="700">09/10</text>
+  <text class="lbl" x="952" y="122" text-anchor="middle" font-size="11.5" font-weight="650" fill="var(--fg)">3 verificações</text>
+
+  <text class="lbl" x="70"  y="300" text-anchor="middle" font-size="11.5" font-weight="650" opacity=".5">— jun —</text>
+  <text class="lbl" x="286" y="300" text-anchor="middle" font-size="11.5" font-weight="650" opacity=".5">— jul —</text>
+  <text class="lbl" x="486" y="300" text-anchor="middle" font-size="11.5" font-weight="650" opacity=".5">— set —</text>
+  <text class="lbl" x="790" y="300" text-anchor="middle" font-size="11.5" font-weight="650" opacity=".5">— out —</text>
+  <text class="lbl" x="500" y="330" text-anchor="middle" font-size="11" opacity=".75">em 09/10: variância de execução · mutação refeita · remerge do experimento principal</text>
+</svg>
+<figcaption>Azul: o experimento que gerou o artigo. Verde-escuro: as quatro
+variantes de geração. Vermelho: defeito de infraestrutura descoberto. Verde:
+verificação concluída. O intervalo de julho a setembro corresponde à mineração
+de resultados sobre os dados já coletados.</figcaption>
+</figure>
+
+<h3>O fio condutor</h3>
+<p>Em <b>julho</b> o experimento principal mostrou algo incômodo: o WIT vencia em
+aprovação de testes, mas empatava em verificação de exceção. Em <b>setembro</b>,
+ao colher os arquivos de resultado individuais, apareceu a causa — boa parte dos
+testes <b>mirava a exceção certa e não conseguia reprovar</b>. Em <b>outubro</b>
+foram geradas quatro variantes para testar se esse "oráculo mole" era artefato
+do prompt. Era. E corrigi-lo revelou uma vantagem do WIT que estava escondida.</p>
+
+<!-- ══════════════════ PARTE II ══════════════════ -->
+<p class="parte">Parte II — Detalhamento</p>
+<h2>1 · O problema</h2>
+
+<p>Peça a um modelo "escreva testes para <code>Arrays.setAll</code>" e ele
+escreve testes do caminho normal: argumentos válidos, confere o resultado. É
+útil, mas deixa de fora o que a documentação promete sobre erro.</p>
+
+<p>O JDK documenta, para milhares de métodos, qual exceção é lançada e sob qual
+condição. É especificação escrita, verificável — e normalmente ignorada na
+geração de testes. O <b>contexto WIT</b> extrai essas condições por análise
+estática, verifica cada uma com um resolvedor SMT para descartar as
+insatisfazíveis, e as entrega ao modelo.</p>
+
+<figure>
+<svg viewBox="0 0 880 200" role="img" aria-label="Como a precondição de exceção é extraída e entregue ao modelo">
+  <defs><marker id="s2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 z" fill="var(--mut)"/></marker></defs>
+  <rect x="6" y="28" width="248" height="100" rx="8" fill="var(--grid)" stroke="var(--line)"/>
+  <text class="lbl" x="20" y="48" font-weight="650" fill="var(--fg)">fonte do JDK</text>
+  <text class="val" x="20" y="70" font-size="10">static void setAll(double[] a,</text>
+  <text class="val" x="20" y="85" font-size="10">        IntToDoubleFunction g) {</text>
+  <text class="val" x="20" y="100" font-size="10" fill="var(--wit)">  Objects.requireNonNull(g);</text>
+  <text class="val" x="20" y="115" font-size="10">  for (...) a[i] = g.apply(i); }</text>
+  <path d="M258 78 h38" class="ax" stroke="var(--mut)" marker-end="url(#s2)"/>
+  <rect x="300" y="40" width="172" height="76" rx="8" fill="var(--card)" stroke="var(--line)"/>
+  <text class="lbl" x="314" y="60" font-weight="650" fill="var(--fg)">análise estática</text>
+  <text class="lbl" x="314" y="80" font-size="11.5">segue o fluxo até cada</text>
+  <text class="lbl" x="314" y="96" font-size="11.5">instrução que lança</text>
+  <path d="M476 78 h38" class="ax" stroke="var(--mut)" marker-end="url(#s2)"/>
+  <rect x="518" y="40" width="150" height="76" rx="8" fill="var(--card)" stroke="var(--line)"/>
+  <text class="lbl" x="532" y="60" font-weight="650" fill="var(--fg)">SMT</text>
+  <text class="lbl" x="532" y="80" font-size="11.5">a condição é</text>
+  <text class="lbl" x="532" y="96" font-size="11.5">satisfazível?</text>
+  <path d="M672 78 h38" class="ax" stroke="var(--mut)" marker-end="url(#s2)"/>
+  <rect x="714" y="40" width="160" height="76" rx="8" fill="var(--card)" stroke="var(--wit)" stroke-width="1.8"/>
+  <text class="lbl" x="728" y="60" font-weight="650" fill="var(--wit)">precondição</text>
+  <text class="val" x="728" y="82" font-size="10" fill="var(--wit)">g == null ⟹ NPE</text>
+  <text class="lbl" x="728" y="102" font-size="11">vai no prompt do WIT</text>
+  <text class="lbl" x="440" y="168" text-anchor="middle">saída: <tspan font-weight="650" fill="var(--fg)">4.417 métodos-alvo</tspan> com condições de exceção verificadas</text>
+  <text class="lbl" x="440" y="188" text-anchor="middle" font-size="11" opacity=".8">a especificação vem do próprio código — ver limites, seção 9</text>
+</svg>
+</figure>
+
+<h2>2 · Os conceitos, com código real</h2>
+<p>Todos os exemplos são testes <b>efetivamente gerados</b> no experimento.</p>
+
+<h3>2.1 · O oráculo e a regra implícita do jtreg</h3>
+<p>Oráculo é o critério que decide se um teste aprova ou reprova. Sob o jtreg, um
+teste é um <code>public static void main</code> e a regra é uma só:</p>
+<pre style="border-left:3px solid var(--acc)">APROVA  se main() retorna normalmente
+REPROVA se main() lança qualquer exceção</pre>
+<p>Disso decorre a consequência central deste trabalho: <b>imprimir uma mensagem
+de falha não reprova o teste</b>.</p>
+
+<h3>2.2 · Mira — o teste aponta para a exceção certa?</h3>
+<p>É o eixo que o contexto WIT influencia: ele diz ao modelo <i>onde</i> está a
+exceção. Mesmo método, mesmo arquivo, braços diferentes:</p>
+<div class="two">
+  <figure style="padding:14px 16px;margin:0">
+    <div class="small mut" style="margin-bottom:6px"><b class="cd">SEM MIRA</b> · braço Direct</div>
+<pre>double[] array = new double[5];
+IntToDoubleFunction gen = i -> i * 2.0;
+Arrays.setAll(array, gen);
+
+for (int i = 0; i &lt; array.length; i++) {
+    if (array[i] != i * 2.0) {
+        throw new AssertionError(
+            "Unexpected value at " + i);
+    }
+}</pre>
+    <figcaption>Testa o caminho normal. Nunca passa <code>null</code> — não sabe
+    que a condição existe.</figcaption>
+  </figure>
+  <figure style="padding:14px 16px;margin:0">
+    <div class="small mut" style="margin-bottom:6px"><b class="cw">COM MIRA</b> · braço WIT</div>
+<pre>double[] array = {1.0, 2.0, 3.0};
+try {
+    Arrays.setAll(array, <b>null</b>);
+    throw new AssertionError(
+      "Expected NPE was not thrown");
+} catch (<b>NullPointerException</b> e) {
+    // esperado
+} catch (Throwable t) {
+    throw new AssertionError(
+      "Unexpected type: " + t);
+}</pre>
+    <figcaption>Vai à condição documentada e exige o tipo exato — o
+    <code>catch (Throwable)</code> rejeita a exceção errada.</figcaption>
+  </figure>
+</div>
+<p class="small"><b>Repare na troca:</b> o Direct percorre um laço de cinco
+elementos; o WIT faz <b>uma</b> chamada e para. Mais verificação de contrato,
+menos cobertura de código — no mesmo método. É a explicação mecânica do
+resultado 3.</p>
+
+<h3>2.3 · Voz — o teste consegue reprovar?</h3>
+<p>Sem voz, o teste executa o código, observa o erro e <b>aprova mesmo
+assim</b>:</p>
+<figure style="padding:14px 16px">
+<div class="small mut" style="margin-bottom:6px">
+  <code>ArrayListWitupTest_P43cd15ea8027.java</code> · braço WIT · classificado <b class="cb">FRÁGIL</b></div>
+<pre>ArrayList&lt;Object&gt; list = new ArrayList&lt;&gt;();
+list.add("element");
+try {
+    list.retainAll(null);
+    <span style="background:rgba(169,50,38,.16);border-radius:3px;padding:0 3px">System.out.println("FAILED: Expected NullPointerException not thrown.");</span>
+} catch (NullPointerException e) {
+    System.out.println("PASSED: NullPointerException thrown as expected.");
+}</pre>
+<figcaption>A mira está certa. Mas se <code>retainAll(null)</code> deixar de
+lançar — o bug que queremos pegar — o teste imprime <code>FAILED:</code> e
+<b>retorna normalmente</b>. O jtreg aprova. O defeito passa.</figcaption>
+</figure>
+<p>Mecanismos que contam como voz, porque fazem <code>main</code> lançar ou
+encerrar com código de erro:</p>
+<pre>throw new AssertionError(...)     throw new RuntimeException(...)
+System.exit(1)                    Asserts.fail(...)
+assert cond : "msg"               ← vale: -ea ligado em todas as execuções</pre>
+
+<h3>2.4 · A classificação</h3>
+<figure>
+<svg viewBox="0 0 880 290" role="img" aria-label="Matriz mira versus voz">
+  <text class="lbl" x="104" y="32" text-anchor="end" font-size="11.5">VOZ ↑</text>
+  <text class="lbl" x="490" y="282" text-anchor="middle" font-size="11.5">MIRA →</text>
+  <rect x="112" y="22" width="368" height="112" rx="7" fill="var(--card)" stroke="var(--line)"/>
+  <text class="lbl" x="130" y="46" font-weight="700" fill="var(--fg)">outro</text>
+  <text class="lbl" x="130" y="68" font-size="11.5">reprova de verdade, mas não mira a exceção</text>
+  <text class="val" x="130" y="90" font-size="10.5" fill="var(--mut)">ex.: o teste Direct de 2.2</text>
+  <text class="val" x="130" y="112" font-size="10.5">cobre muito código · não verifica contrato</text>
+  <rect x="490" y="22" width="382" height="112" rx="7" fill="var(--card)" stroke="var(--wit)" stroke-width="2"/>
+  <text class="lbl" x="508" y="46" font-weight="700" fill="var(--wit)">FORTE</text>
+  <text class="lbl" x="508" y="68" font-size="11.5">mira a exceção documentada E reprova</text>
+  <text class="val" x="508" y="90" font-size="10.5" fill="var(--mut)">ex.: o teste WIT de 2.2</text>
+  <text class="val" x="508" y="112" font-size="10.5" fill="var(--wit)">é esta a métrica do resultado principal</text>
+  <rect x="112" y="146" width="368" height="112" rx="7" fill="var(--card)" stroke="var(--line)"/>
+  <text class="lbl" x="130" y="170" font-weight="700" fill="var(--fg)">outro</text>
+  <text class="lbl" x="130" y="192" font-size="11.5">só exercita; vale o oráculo implícito</text>
+  <text class="val" x="130" y="214" font-size="10.5">afirma apenas que "nada lançou"</text>
+  <rect x="490" y="146" width="382" height="112" rx="7" fill="var(--card)" stroke="var(--bad)" stroke-width="2"/>
+  <text class="lbl" x="508" y="170" font-weight="700" fill="var(--bad)">FRÁGIL</text>
+  <text class="lbl" x="508" y="192" font-size="11.5">mira certo, mas não consegue reprovar</text>
+  <text class="val" x="508" y="214" font-size="10.5" fill="var(--mut)">ex.: o ArrayList.retainAll de 2.3</text>
+  <text class="val" x="508" y="236" font-size="10.5" fill="var(--bad)">aprova com o bug presente — o pior caso</text>
+  <text class="lbl" x="104" y="84"  text-anchor="end" font-size="11">sim</text>
+  <text class="lbl" x="104" y="208" text-anchor="end" font-size="11">não</text>
+  <text class="lbl" x="296" y="276" text-anchor="middle" font-size="11">não</text>
+  <text class="lbl" x="680" y="276" text-anchor="middle" font-size="11">sim</text>
+</svg>
+<figcaption>A classificação é feita sobre o <b>código-fonte</b> de cada teste,
+então cobre 100% dos gerados — inclusive os que não compilam. É por isso que o
+resultado principal sobreviveu aos defeitos de infraestrutura: ele não depende
+de execução nem de cobertura.</figcaption>
+</figure>
+
+<h2>3 · Os experimentos, um a um</h2>
+
+<div class="exp">
+  <div class="cab"><span class="id">E0</span><span class="nom">Experimento principal pareado</span><span class="dt">06/07/2026</span></div>
+  <dl>
+    <dt>Hipótese</dt><dd>O contexto WIT melhora os testes gerados para métodos com exceção documentada.</dd>
+    <dt>Método</dt><dd>4.125 pares de testes (direct × wit) para os mesmos métodos, mesmo modelo, mesma temperatura. 48 shards no CodeBuild com jtreg + JCov.</dd>
+    <dt>Resultado</dt><dd>WIT vence aprovação de testes (38,96% contra 35,27%) e uso de <code>try/catch</code> (95,3% contra 72,9%). Direct vence cobertura estrutural. <b>Verificação de exceção: empate.</b></dd>
+    <dt>Problema</dt><dd>O empate em verificação não era esperado. A causa só apareceu em setembro.</dd>
+  </dl>
+</div>
+
+<div class="exp">
+  <div class="cab"><span class="id">—</span><span class="nom">Colheita dos arquivos de resultado individuais</span><span class="dt">28/09/2026</span></div>
+  <dl>
+    <dt>Motivo</dt><dd>Investigar por que a verificação empatava.</dd>
+    <dt>Achado</dt><dd><b>O oráculo mole.</b> Boa parte dos testes do braço WIT mirava a exceção certa e <b>não tinha mecanismo para reprovar</b> — imprimia a falha e o harness aprovava. A vantagem existia, mas não conseguia se expressar.</dd>
+    <dt>Pergunta aberta</dt><dd>Isso é propriedade do método ou artefato do prompt?</dd>
+  </dl>
+</div>
+
+<p>As quatro variantes abaixo nasceram dessa pergunta. Cada uma muda
+<b>exatamente uma</b> coisa no prompt-base, e três atacam explicações diferentes
+para o oráculo mole.</p>
+
+<div class="exp">
+  <div class="cab"><span class="id">V1</span><span class="nom">Instrução explícita de oráculo</span><span class="dt">02/10/2026</span></div>
+  <dl>
+    <dt>Hipótese</dt><dd>O oráculo é mole porque <b>ninguém disse ao modelo</b> que imprimir não reprova.</dd>
+    <dt>Intervenção</dt><dd>Acrescenta ao prompt: <i>"o teste DEVE sinalizar a falha ao harness — lance uma exceção ou chame System.exit(1). Apenas imprimir System.out.println("FAIL: ...") NÃO reprova o teste."</i></dd>
+    <dt>Resultado</dt><dd>Voz em <b>99,8%</b> dos testes mirados. Verificação forte que passa: <b class="cw">1,755×</b> (681 → 1.195). A maior das quatro.</dd>
+  </dl>
+</div>
+
+<div class="exp">
+  <div class="cab"><span class="id">V2</span><span class="nom">Modelo mais capaz</span><span class="dt">02/10/2026</span></div>
+  <dl>
+    <dt>Hipótese</dt><dd>O oráculo é mole por <b>limitação de capacidade</b> do modelo.</dd>
+    <dt>Intervenção</dt><dd>Prompt-base inalterado. Troca <code>gpt-4.1-nano</code> por <code>gpt-4.1-mini</code>. É a única variante em que o modelo muda.</dd>
+    <dt>Resultado</dt><dd>Voz em <b>99,9%</b> sem que ninguém pedisse. Verificação: <b class="cw">1,329×</b> (940 → 1.249) — a menor das três intervenções, porque o braço Direct também melhora.</dd>
+  </dl>
+</div>
+
+<div class="exp">
+  <div class="cab"><span class="id">V4</span><span class="nom">Exemplo no cabeçalho (few-shot)</span><span class="dt">04/10/2026</span></div>
+  <dl>
+    <dt>Hipótese</dt><dd>Demonstrar vale mais que descrever.</dd>
+    <dt>Intervenção</dt><dd>Acrescenta um modelo de cabeçalho obrigatório que <b>contém</b> um <code>throw new AssertionError("expected NPE")</code>.</dd>
+    <dt>Resultado</dt><dd>Voz em <b>97,4%</b>. Verificação: <b class="cw">1,705×</b> (655 → 1.117), praticamente empatada com a instrução explícita.</dd>
+    <dt>Ressalva</dt><dd>O exemplo foi escrito para fixar o <b>formato</b> do cabeçalho, mas inevitavelmente demonstra também um oráculo forte. Não é um teste limpo de "demonstrar vs descrever".</dd>
+  </dl>
+</div>
+
+<div class="exp" style="border-left:3px solid var(--warn)">
+  <div class="cab"><span class="id" style="color:var(--warn);border-color:var(--warn)">V3a</span><span class="nom">Temperatura 0,7 — controle negativo</span><span class="dt">04/10/2026</span></div>
+  <dl>
+    <dt>Hipótese</dt><dd><b>Nenhuma.</b> Aumentar a aleatoriedade da amostragem não tem mecanismo plausível para ensinar o modelo a reprovar um teste.</dd>
+    <dt>Papel</dt><dd>Se produzisse o mesmo ganho das três intervenções, o efeito todo seria artefato de medição.</dd>
+    <dt>Resultado</dt><dd>Voz desaba para <b class="cb">59,5%</b>. Verificação: <b>1,075×</b> — fora da faixa das intervenções. <b>O controle cumpriu seu papel.</b></dd>
+    <dt>Pendência</dt><dd>As réplicas V3b e V3c, que dariam a barra de erro, nunca foram geradas — pararam no limite de cobrança da OpenAI com zero testes.</dd>
+  </dl>
+</div>
+
+<h2>4 · Resultados consolidados</h2>
+
+<h3>4.1 · O resultado principal</h3>
+<figure>
+<svg viewBox="0 0 880 290" role="img" aria-label="Testes de verificação forte que compilam e passam">
+  <text class="ttl" x="0" y="14">Verificação forte que compila e passa</text>
+  <line class="gr" x1="56" y1="232" x2="862" y2="232"/>
+  <line class="gr" x1="56" y1="186" x2="862" y2="186"/>
+  <line class="gr" x1="56" y1="140" x2="862" y2="140"/>
+  <line class="gr" x1="56" y1="94"  x2="862" y2="94"/>
+  <line class="gr" x1="56" y1="48"  x2="862" y2="48"/>
+  <text class="lbl" x="48" y="236" text-anchor="end">0</text>
+  <text class="lbl" x="48" y="190" text-anchor="end">350</text>
+  <text class="lbl" x="48" y="144" text-anchor="end">700</text>
+  <text class="lbl" x="48" y="98"  text-anchor="end">1050</text>
+  <text class="lbl" x="48" y="52"  text-anchor="end">1400</text>
+  <line class="ax" x1="56" y1="232" x2="862" y2="232"/>
+  <g><rect x="100" y="142.4" width="54" height="89.6"  fill="var(--dir)" opacity=".85" rx="2"/>
+     <rect x="160" y="74.7"  width="54" height="157.3" fill="var(--wit)" opacity=".9"  rx="2"/>
+     <text class="val" x="127" y="136" text-anchor="middle" fill="var(--dir)">681</text>
+     <text class="val" x="187" y="68"  text-anchor="middle" fill="var(--wit)">1.195</text>
+     <text class="lbl" x="157" y="252" text-anchor="middle" font-weight="650" fill="var(--fg)">V1</text>
+     <text class="lbl" x="157" y="268" text-anchor="middle" font-size="11">instrução</text>
+     <text class="val" x="157" y="284" text-anchor="middle" fill="var(--wit)" font-weight="700">1,755×</text></g>
+  <g><rect x="296" y="108.3" width="54" height="123.7" fill="var(--dir)" opacity=".85" rx="2"/>
+     <rect x="356" y="67.7"  width="54" height="164.3" fill="var(--wit)" opacity=".9"  rx="2"/>
+     <text class="val" x="323" y="102" text-anchor="middle" fill="var(--dir)">940</text>
+     <text class="val" x="383" y="61"  text-anchor="middle" fill="var(--wit)">1.249</text>
+     <text class="lbl" x="353" y="252" text-anchor="middle" font-weight="650" fill="var(--fg)">V2</text>
+     <text class="lbl" x="353" y="268" text-anchor="middle" font-size="11">modelo mini</text>
+     <text class="val" x="353" y="284" text-anchor="middle" fill="var(--wit)" font-weight="700">1,329×</text></g>
+  <g><rect x="492" y="145.8" width="54" height="86.2"  fill="var(--dir)" opacity=".85" rx="2"/>
+     <rect x="552" y="85.0"  width="54" height="147.0" fill="var(--wit)" opacity=".9"  rx="2"/>
+     <text class="val" x="519" y="139" text-anchor="middle" fill="var(--dir)">655</text>
+     <text class="val" x="579" y="78"  text-anchor="middle" fill="var(--wit)">1.117</text>
+     <text class="lbl" x="549" y="252" text-anchor="middle" font-weight="650" fill="var(--fg)">V4</text>
+     <text class="lbl" x="549" y="268" text-anchor="middle" font-size="11">few-shot</text>
+     <text class="val" x="549" y="284" text-anchor="middle" fill="var(--wit)" font-weight="700">1,705×</text></g>
+  <g><rect x="688" y="150.0" width="54" height="82.0" fill="var(--dir)" opacity=".5" rx="2"/>
+     <rect x="748" y="143.8" width="54" height="88.2" fill="var(--wit)" opacity=".5" rx="2"/>
+     <text class="val" x="715" y="143" text-anchor="middle" fill="var(--dir)">623</text>
+     <text class="val" x="775" y="137" text-anchor="middle" fill="var(--wit)">670</text>
+     <text class="lbl" x="745" y="252" text-anchor="middle" font-weight="650" fill="var(--fg)">V3a</text>
+     <text class="lbl" x="745" y="268" text-anchor="middle" font-size="11">T=0,7 · controle</text>
+     <text class="val" x="745" y="284" text-anchor="middle">1,075×</text></g>
+  <rect x="668" y="28" width="202" height="212" fill="none" stroke="var(--warn)"
+        stroke-width="1.3" stroke-dasharray="4 3" rx="6"/>
+</svg>
+<div class="key"><span><i style="background:var(--dir)"></i>Direct</span>
+  <span><i style="background:var(--wit)"></i>WIT</span>
+  <span style="color:var(--warn)">tracejado = controle negativo</span></div>
+</figure>
+
+<h3>4.2 · Por que o controle é a peça decisiva</h3>
+<p>Os dois eixos do oráculo se comportam de forma diferente sob temperatura —
+e é isso que separa causa de coincidência.</p>
+<figure>
+<svg viewBox="0 0 880 270" role="img" aria-label="Mira estável contra voz variável">
+  <text class="lbl" x="56" y="26" font-weight="650" fill="var(--fg)">MIRA — razão WIT/Direct</text>
+  <line class="ax" x1="56" y1="180" x2="400" y2="180"/>
+  <line class="gr" x1="56" y1="122" x2="400" y2="122" stroke-dasharray="3 3"/>
+  <text class="lbl" x="50" y="126" text-anchor="end">1,0</text>
+  <text class="lbl" x="50" y="184" text-anchor="end">0</text>
+  <rect x="80"  y="90.6"  width="50" height="89.4" fill="var(--wit)" opacity=".85" rx="2"/>
+  <rect x="164" y="104.6" width="50" height="75.4" fill="var(--wit)" opacity=".85" rx="2"/>
+  <rect x="248" y="86.3"  width="50" height="93.7" fill="var(--wit)" opacity=".85" rx="2"/>
+  <rect x="332" y="88.2"  width="50" height="91.8" fill="var(--wit)" opacity=".5"  rx="2"/>
+  <text class="val" x="105" y="84"  text-anchor="middle">1,54</text>
+  <text class="val" x="189" y="98"  text-anchor="middle">1,30</text>
+  <text class="val" x="273" y="80"  text-anchor="middle">1,62</text>
+  <text class="val" x="357" y="82"  text-anchor="middle">1,59</text>
+  <text class="lbl" x="105" y="198" text-anchor="middle">V1</text>
+  <text class="lbl" x="189" y="198" text-anchor="middle">V2</text>
+  <text class="lbl" x="273" y="198" text-anchor="middle">V4</text>
+  <text class="lbl" x="357" y="198" text-anchor="middle" fill="var(--warn)">V3a</text>
+  <text class="lbl" x="228" y="226" text-anchor="middle">robusta: não depende de prompt,</text>
+  <text class="lbl" x="228" y="244" text-anchor="middle">modelo nem temperatura</text>
+
+  <text class="lbl" x="500" y="26" font-weight="650" fill="var(--fg)">VOZ — % dos mirados que reprovam</text>
+  <line class="ax" x1="500" y1="180" x2="862" y2="180"/>
+  <line class="gr" x1="500" y1="62" x2="862" y2="62" stroke-dasharray="3 3"/>
+  <text class="lbl" x="494" y="66"  text-anchor="end">100%</text>
+  <text class="lbl" x="494" y="184" text-anchor="end">0</text>
+  <rect x="524" y="62.2"  width="50" height="117.8" fill="var(--wit)" opacity=".85" rx="2"/>
+  <rect x="612" y="62.1"  width="50" height="117.9" fill="var(--wit)" opacity=".85" rx="2"/>
+  <rect x="700" y="65.1"  width="50" height="114.9" fill="var(--wit)" opacity=".85" rx="2"/>
+  <rect x="788" y="109.8" width="50" height="70.2"  fill="var(--bad)" opacity=".85" rx="2"/>
+  <text class="val" x="549" y="56"  text-anchor="middle">99,8</text>
+  <text class="val" x="637" y="56"  text-anchor="middle">99,9</text>
+  <text class="val" x="725" y="59"  text-anchor="middle">97,4</text>
+  <text class="val" x="813" y="103" text-anchor="middle" fill="var(--bad)" font-weight="700">59,5</text>
+  <text class="lbl" x="549" y="198" text-anchor="middle">V1</text>
+  <text class="lbl" x="637" y="198" text-anchor="middle">V2</text>
+  <text class="lbl" x="725" y="198" text-anchor="middle">V4</text>
+  <text class="lbl" x="813" y="198" text-anchor="middle" fill="var(--warn)">V3a</text>
+  <text class="lbl" x="681" y="226" text-anchor="middle">a temperatura destrói a voz</text>
+  <text class="lbl" x="681" y="244" text-anchor="middle">sem tocar na mira</text>
+</svg>
+<figcaption>Elevar a temperatura derruba a voz de ~99% para 59,5% e deixa a mira
+praticamente intacta (1,59×). Como o <b>ganho final desaba junto com a voz, e
+não com a mira</b>, fica demonstrado que os dois mecanismos são necessários:
+contexto para mirar, oráculo com voz para reprovar.</figcaption>
+</figure>
+
+<h3>4.3 · Alcance contra profundidade</h3>
+<p>Razão WIT/Direct, cobertura restrita aos métodos-alvo com denominador
+idêntico nos três braços. O ponto vazado é o experimento principal de julho,
+remesclado em 09/10.</p>
+<figure>
+<svg viewBox="0 0 880 320" role="img" aria-label="Alcance contra profundidade">
+  <line class="ax" x1="104" y1="258" x2="840" y2="258"/>
+  <line class="ax" x1="104" y1="34"  x2="104" y2="258"/>
+  <line class="gr" x1="104" y1="148" x2="840" y2="148" stroke-dasharray="4 3"/>
+  <line class="gr" x1="300" y1="34"  x2="300" y2="258" stroke-dasharray="4 3"/>
+  <text class="lbl" x="98" y="152" text-anchor="end">1,00</text>
+  <text class="lbl" x="98" y="56"  text-anchor="end">1,02</text>
+  <text class="lbl" x="98" y="248" text-anchor="end">0,92</text>
+  <text class="lbl" x="300" y="276" text-anchor="middle">1,000</text>
+  <text class="lbl" x="840" y="276" text-anchor="middle">1,030</text>
+  <text class="lbl" x="472" y="300" text-anchor="middle">ALCANCE — métodos-alvo atingidos →</text>
+  <text class="lbl" x="20" y="148" transform="rotate(-90 20 148)" text-anchor="middle">PROFUNDIDADE — branches/método ↑</text>
+  <text class="lbl" x="600" y="70" opacity=".6">WIT ganha nos dois</text>
+  <text class="lbl" x="130" y="244" opacity=".6">mais largo, menos fundo</text>
+  <g><circle cx="637" cy="240.6" r="7" fill="var(--wit)"/>
+     <text class="val" x="637" y="224" text-anchor="middle">V1</text></g>
+  <g><circle cx="190" cy="146.0" r="7" fill="var(--wit)"/>
+     <text class="val" x="190" y="130" text-anchor="middle">V2</text></g>
+  <g><circle cx="376" cy="187.4" r="7" fill="var(--wit)"/>
+     <text class="val" x="376" y="171" text-anchor="middle">V4</text></g>
+  <g><circle cx="788" cy="205.3" r="7" fill="var(--warn)"/>
+     <text class="val" x="788" y="189" text-anchor="middle">V3a</text></g>
+  <g><circle cx="354" cy="186.2" r="9" fill="none" stroke="var(--acc)" stroke-width="2.5"/>
+     <text class="val" x="300" y="176" text-anchor="middle" fill="var(--acc)" font-weight="700">artigo</text></g>
+</svg>
+<figcaption>Os cinco pontos ficam à direita da vertical — o WIT alcança mais
+métodos-alvo em <b>todas</b> as condições. Quatro ficam abaixo da horizontal:
+menos profundidade. O experimento do artigo cai no meio do padrão das variantes,
+o que mostra que não é um caso à parte.</figcaption>
+</figure>
+
+<h3>4.4 · Detecção de defeito — mutação dirigida</h3>
+<p>Removemos por ASM o <code>athrow</code> de um site de exceção e contamos como
+<b>morte</b> o teste que passa no código original e reprova no mutante. A taxa só
+é comparável nos sites em que <b>os dois braços</b> têm veredito válido.</p>
+<figure>
+<svg viewBox="0 0 880 290" role="img" aria-label="Mortes exclusivas por braço">
+  <text class="ttl" x="0" y="14">Mortes exclusivas: sites que só um braço detecta</text>
+  <line class="ax" x1="92" y1="208" x2="848" y2="208"/>
+  <line class="gr" x1="92" y1="148" x2="848" y2="148" stroke-dasharray="3 3"/>
+  <line class="gr" x1="92" y1="88"  x2="848" y2="88"  stroke-dasharray="3 3"/>
+  <text class="lbl" x="86" y="212" text-anchor="end">0</text>
+  <text class="lbl" x="86" y="152" text-anchor="end">20</text>
+  <text class="lbl" x="86" y="92"  text-anchor="end">40</text>
+  <g><rect x="118" y="97"  width="48" height="111" fill="var(--dir)" opacity=".8" rx="2"/>
+     <rect x="172" y="94"  width="48" height="114" fill="var(--wit)" opacity=".85" rx="2"/>
+     <text class="val" x="142" y="91" text-anchor="middle">37</text>
+     <text class="val" x="196" y="88" text-anchor="middle">38</text>
+     <text class="lbl" x="169" y="230" text-anchor="middle" font-weight="650" fill="var(--fg)">principal</text>
+     <text class="val" x="169" y="248" text-anchor="middle" font-size="11">+0,5pp</text>
+     <text class="lbl" x="169" y="266" text-anchor="middle" font-size="10.5" opacity=".75">n=208</text></g>
+  <g><rect x="268" y="207" width="48" height="1" fill="var(--dir)" opacity=".8" rx="2"/>
+     <rect x="322" y="199" width="48" height="9" fill="var(--wit)" opacity=".85" rx="2"/>
+     <text class="val" x="292" y="201" text-anchor="middle">0</text>
+     <text class="val" x="346" y="193" text-anchor="middle">3</text>
+     <text class="lbl" x="319" y="230" text-anchor="middle" font-weight="650" fill="var(--fg)">V1</text>
+     <text class="val" x="319" y="248" text-anchor="middle" font-size="11">+1,9pp</text>
+     <text class="lbl" x="319" y="266" text-anchor="middle" font-size="10.5" opacity=".75">n=162</text></g>
+  <g><rect x="418" y="207" width="48" height="1" fill="var(--dir)" opacity=".8" rx="2"/>
+     <rect x="472" y="207" width="48" height="1" fill="var(--wit)" opacity=".85" rx="2"/>
+     <text class="val" x="442" y="201" text-anchor="middle">0</text>
+     <text class="val" x="496" y="201" text-anchor="middle">0</text>
+     <text class="lbl" x="469" y="230" text-anchor="middle" font-weight="650" fill="var(--fg)">V2</text>
+     <text class="val" x="469" y="248" text-anchor="middle" font-size="11">empate</text>
+     <text class="lbl" x="469" y="266" text-anchor="middle" font-size="10.5" opacity=".75">n=170</text></g>
+  <g><rect x="568" y="133" width="48" height="75"  fill="var(--dir)" opacity=".8" rx="2"/>
+     <rect x="622" y="103" width="48" height="105" fill="var(--wit)" opacity=".85" rx="2"/>
+     <text class="val" x="592" y="127" text-anchor="middle">25</text>
+     <text class="val" x="646" y="97"  text-anchor="middle">35</text>
+     <text class="lbl" x="619" y="230" text-anchor="middle" font-weight="650" fill="var(--fg)">V3a</text>
+     <text class="val" x="619" y="248" text-anchor="middle" font-size="11">+6,7pp</text>
+     <text class="lbl" x="619" y="266" text-anchor="middle" font-size="10.5" opacity=".75">n=149</text></g>
+  <g><rect x="718" y="205" width="48" height="3"  fill="var(--dir)" opacity=".8" rx="2"/>
+     <rect x="772" y="169" width="48" height="39" fill="var(--wit)" opacity=".9" rx="2"/>
+     <text class="val" x="742" y="199" text-anchor="middle">1</text>
+     <text class="val" x="796" y="163" text-anchor="middle" font-weight="700" fill="var(--wit)">13</text>
+     <text class="lbl" x="769" y="230" text-anchor="middle" font-weight="650" fill="var(--fg)">V4</text>
+     <text class="val" x="769" y="248" text-anchor="middle" font-size="11" fill="var(--wit)" font-weight="700">+9,4pp</text>
+     <text class="lbl" x="769" y="266" text-anchor="middle" font-size="10.5" opacity=".75">n=128</text></g>
+</svg>
+<div class="key"><span><i style="background:var(--dir)"></i>só o Direct detecta</span>
+  <span><i style="background:var(--wit)"></i>só o WIT detecta</span></div>
+<figcaption><b>Agregado: 89 mortes exclusivas do WIT contra 63 do Direct</b> em
+817 sites pareados — razão 1,41×. Em nenhuma das cinco condições o Direct
+supera o WIT.</figcaption>
+</figure>
+
+<div class="note">
+  <h4 class="cb">Onde ser cauteloso com este resultado</h4>
+  <p class="small" style="margin:0 0 8px">V1 e V2 estão no <b>teto</b>: 81% a 89%
+  de mortes nos dois braços, com discordância de 0/3 e 0/0. Não há espaço para
+  discriminar. O sinal vem de duas condições, não de cinco.</p>
+  <p class="small" style="margin:0">E o operador é grosseiro: removido o
+  <code>athrow</code>, o método retorna em vez de lançar, e <b>qualquer</b> teste
+  com voz que alcance o site detecta. Um operador que lance uma exceção de
+  <b>tipo diferente</b> discriminaria melhor, porque só morreria para quem
+  verifica o tipo — que é exatamente a mira.</p>
+</div>
+
+<h2>5 · As verificações de infraestrutura</h2>
+
+<div class="exp">
+  <div class="cab"><span class="id">C1</span><span class="nom">Validação do classificador</span><span class="dt">08/10/2026</span></div>
+  <dl>
+    <dt>Risco</dt><dd>A classificação forte/frágil depende de um padrão reconhecer mecanismos de voz. Se perdesse formas legítimas de reprovar, inflaria a contagem de frágeis — e é ela que sustenta a leitura do controle negativo.</dd>
+    <dt>Método</dt><dd>Reexecutar a classificação com um padrão deliberadamente mais permissivo e ver se as razões se movem.</dd>
+    <dt>Resultado</dt><dd>Dos 1.570 frágeis examinados, apenas <b>1,1%</b> tinham mecanismo não reconhecido. V1, V2 e V4 ficam <b>idênticos</b>; V3a vai de 1,075× a 1,077× — um teste. <b class="cw">As conclusões não dependem da definição do padrão.</b></dd>
+  </dl>
+</div>
+
+<div class="exp">
+  <div class="cab"><span class="id">C2</span><span class="nom">Variância de execução</span><span class="dt">09/10/2026</span></div>
+  <dl>
+    <dt>Risco</dt><dd>O jtreg roda com <code>-timeout:4</code> e concorrência. Teste sensível a tempo pode mudar de resultado entre execuções, o que tornaria as taxas de aprovação irreprodutíveis.</dd>
+    <dt>Método</dt><dd>Reexecutar 8 shards num prefixo separado do S3, preservando o original, e comparar os arquivos de resultado <b>teste a teste</b>.</dd>
+    <dt>Resultado</dt><dd><b class="cw">726 testes em comum, 726 com o mesmo desfecho, zero mudanças.</b> Escopo: 8,7% dos testes daquela condição. A afirmação defensável é <i>"não foi observada instabilidade em 726 testes"</i>, não <i>"não existe instabilidade"</i>.</dd>
+  </dl>
+</div>
+
+<div class="exp">
+  <div class="cab"><span class="id">C3</span><span class="nom">Remerge do experimento principal</span><span class="dt">09/10/2026</span></div>
+  <dl>
+    <dt>Risco</dt><dd>O merge que produziu os números publicados usava uma opção que <b>descarta arquivo problemático e termina com sucesso</b> — a mesma que perdeu 10 shards em silêncio nas variantes. Os logs que registrariam descarte estão com 0 bytes.</dd>
+    <dt>Método</dt><dd>Refazer o merge em modo estrito, que aborta em vez de engolir, após remover o pacote <code>com.sun.proxy</code> (classes geradas em runtime, nomeadas por JVM, que colidem entre shards).</dd>
+    <dt>Resultado</dt><dd><b class="cw">Zero descartes.</b> 12 dos 48 arquivos tinham o pacote, mas naquele run não colidiram. Os números publicados foram calculados sobre 24 shards em cada braço.</dd>
+    <dt>Achado extra</dt><dd>Ver abaixo — na contagem restrita, o sinal inverte em métodos alcançados.</dd>
+  </dl>
+</div>
+
+<h3>5.1 · A inversão na contagem de métodos</h3>
+<figure>
+<svg viewBox="0 0 880 250" role="img" aria-label="Contagem global contra restrita">
+  <text class="ttl" x="0" y="14">Métodos alcançados: como a contagem muda o vencedor</text>
+  <text class="lbl" x="166" y="42" text-anchor="middle" font-weight="650" fill="var(--fg)">CONTAGEM GLOBAL</text>
+  <text class="lbl" x="166" y="60" text-anchor="middle" font-size="11">o que está publicado</text>
+  <line class="ax" x1="46" y1="184" x2="320" y2="184"/>
+  <rect x="86"  y="78"  width="56" height="106" fill="var(--dir)" opacity=".85" rx="2"/>
+  <rect x="166" y="88.3" width="56" height="95.7" fill="var(--wit)" opacity=".85" rx="2"/>
+  <text class="val" x="114" y="72" text-anchor="middle" fill="var(--dir)" font-weight="700">+2.396</text>
+  <text class="val" x="194" y="82" text-anchor="middle" fill="var(--wit)">+2.253</text>
+  <text class="lbl" x="114" y="202" text-anchor="middle">Direct</text>
+  <text class="lbl" x="194" y="202" text-anchor="middle">WIT</text>
+  <text class="lbl" x="166" y="226" text-anchor="middle" fill="var(--dir)" font-weight="650">Direct vence</text>
+  <text class="lbl" x="166" y="244" text-anchor="middle" font-size="10.5" opacity=".75">universos de classes diferentes</text>
+  <line class="gr" x1="440" y1="36" x2="440" y2="242" stroke-dasharray="4 4"/>
+  <text class="lbl" x="660" y="42" text-anchor="middle" font-weight="650" fill="var(--fg)">RESTRITA AOS ALVOS</text>
+  <text class="lbl" x="660" y="60" text-anchor="middle" font-size="11">denominador idêntico, 2.551 métodos</text>
+  <line class="ax" x1="540" y1="184" x2="820" y2="184"/>
+  <rect x="580" y="83.4" width="56" height="100.6" fill="var(--dir)" opacity=".85" rx="2"/>
+  <rect x="660" y="81"   width="56" height="103"   fill="var(--wit)" opacity=".9"  rx="2"/>
+  <text class="val" x="608" y="77" text-anchor="middle" fill="var(--dir)">+700</text>
+  <text class="val" x="688" y="75" text-anchor="middle" fill="var(--wit)" font-weight="700">+719</text>
+  <text class="lbl" x="608" y="202" text-anchor="middle">Direct</text>
+  <text class="lbl" x="688" y="202" text-anchor="middle">WIT</text>
+  <text class="lbl" x="660" y="226" text-anchor="middle" fill="var(--wit)" font-weight="650">WIT vence</text>
+  <text class="lbl" x="660" y="244" text-anchor="middle" font-size="10.5" opacity=".75">mesma base nos três braços</text>
+</svg>
+<figcaption>A contagem global soma <b>todas</b> as classes do relatório, inclusive
+as classes de teste geradas — e esse universo difere entre braços: baseline
+4.016 classes, Direct 4.165, WIT 4.163. Dividir numeradores de universos
+distintos produz números incomparáveis. Restrito aos métodos-alvo, com base
+idêntica, o WIT alcança mais.</figcaption>
+</figure>
+<table>
+  <thead><tr><th>Métrica (experimento principal)</th><th class="n">direct</th>
+    <th class="n">wit</th><th class="n">razão</th><th>vence</th></tr></thead>
+  <tbody>
+    <tr><td>métodos alcançados</td><td class="n">1.831</td><td class="n">1.850</td>
+      <td class="n cw">1,0104</td><td class="cw">WIT</td></tr>
+    <tr><td>blocks</td><td class="n">9.610</td><td class="n">9.434</td>
+      <td class="n">0,9817</td><td class="cd">Direct</td></tr>
+    <tr><td>branches</td><td class="n">6.156</td><td class="n">6.013</td>
+      <td class="n">0,9768</td><td class="cd">Direct</td></tr>
+    <tr><td>lines</td><td class="n">14.249</td><td class="n">14.215</td>
+      <td class="n">0,9976</td><td class="cd">Direct</td></tr>
+  </tbody>
+</table>
+<p class="small mut">Cautela ao reportar: a inversão é de 1,0104× — 19 métodos em
+1.831. A formulação defensável é <i>"o WIT alcança ao menos tantos métodos-alvo
+quanto o Direct, e a vantagem global aparente do Direct é artefato da
+contagem"</i>, não <i>"o WIT vence alcance"</i> com ênfase. Em branches e blocks
+o Direct vence nas duas contagens.</p>
+
+<h2>6 · Os defeitos de infraestrutura</h2>
+<p>Quatro, todos com o mesmo padrão: <b>falhavam parecendo sucesso</b>. Vale
+apresentá-los — mostram que a medição foi auditada, e cada um é uma ameaça à
+validade que outros trabalhos da área provavelmente têm sem saber.</p>
+<table>
+  <thead><tr><th>Defeito</th><th>Como se manifestava</th><th>Efeito</th><th>Estado</th></tr></thead>
+  <tbody>
+    <tr><td>Merge descartando em silêncio</td>
+      <td>terminava com sucesso; o relatório parecia normal</td>
+      <td>10 shards perdidos nas variantes; braços de tamanhos diferentes</td>
+      <td class="cw">corrigido</td></tr>
+    <tr><td>Driver sem repetição em falha</td>
+      <td>todos os builds reportavam sucesso</td>
+      <td>2 shards nunca executados</td>
+      <td class="cw">corrigido</td></tr>
+    <tr><td>Taxa de mutação não pareada</td>
+      <td>número plausível, calculado sobre bases diferentes</td>
+      <td>o baseline aparecia como −3,5pp; o valor correto é +0,5pp</td>
+      <td class="cw">corrigido</td></tr>
+    <tr><td>Compilador em US-ASCII</td>
+      <td>contado como "o teste não compila"</td>
+      <td>viés <b>sistemático contra o WIT</b>: até 95% dos descartes de um braço eram só comentário acentuado</td>
+      <td class="cw">corrigido</td></tr>
+  </tbody>
+</table>
+<div class="note info">
+  <h4 class="ca">Por que o resultado principal sobreviveu a todos eles</h4>
+  <p class="small" style="margin:0">Os três níveis de medição são independentes:
+  o estático lê o código-fonte dos testes, o de execução lê os arquivos de
+  resultado, o de cobertura mescla os relatórios. <b>O resultado principal —
+  1,33–1,76× de verificação forte — vem do nível estático</b>, que é
+  determinístico e não passa por merge, execução nem compilação. Os quatro
+  defeitos afetaram os outros dois níveis.</p>
+</div>
+
+<h2>7 · Onde estão os dados</h2>
+<p>Tudo que sustenta os números deste documento está em dois lugares: o bucket
+S3, que guarda entradas e resultados de cada execução, e o repositório local,
+que guarda os testes gerados e as análises.</p>
+
+<h3>7.1 · S3 — execuções completas</h3>
+<p>Doze prefixos, um por execução. Cada um carrega <b>entradas e resultados
+juntos</b>, o que torna a reexecução e a auditoria triviais.</p>
+<pre>s3://witup-jcov-results/
+│
+├── <b>paired-20260706-full02/</b>    ← EXPERIMENTO PRINCIPAL (o do artigo)
+│   ├── inputs/
+│   │   ├── jcov-baseline.xml              60,6 MB  cobertura da suíte oficial
+│   │   └── paired-shard-00..23.zip                 testes dos 2 braços
+│   ├── paired-results/&lt;braço&gt;/shard-NN/
+│   │   ├── jcov/jcov-result.xml           ~14 MB   cobertura da fatia
+│   │   ├── jtr.tgz                                 resultado por teste
+│   │   └── input-SHA256SUMS                        integridade da entrada
+│   ├── final/                                      merges e relatórios
+│   └── provenance/paired-merge-buildspec.yml       como o merge foi invocado
+│
+├── jdk-v1-20261002/     V1 · instrução de oráculo    650 objetos · 879 MB
+├── jdk-v2-20261002/     V2 · modelo mini             650 objetos · 885 MB
+├── jdk-v4-20261004/     V4 · few-shot                651 objetos · 883 MB
+├── jdk-v3a-20261004/    V3a · controle (T=0,7)       649 objetos · 865 MB
+├── reteste-v4/          8 shards reexecutados (variância de execução)
+│
+├── paired-20260928-jtr01/   reexecução que colheu os .jtr → revelou o oráculo mole
+├── baseline-recheck-20260707/
+└── pilot-*/                 pilotos de junho</pre>
+<p class="small mut">Atenção a uma inconsistência de nomenclatura que já custou
+tempo: no experimento principal os diretórios são <code>shard-NN/</code>; nas
+variantes são <code>NN/</code>.</p>
+
+<h3>7.2 · Local — testes gerados e análises</h3>
+<table>
+  <thead><tr><th>Caminho</th><th class="n">Tamanho</th><th>Conteúdo</th></tr></thead>
+  <tbody>
+    <tr><td><code>~/Documents/tcc/runs/paired-20260706-full02/</code></td><td class="n">243 MB</td>
+      <td>dados do experimento principal: <code>final/</code>, <code>analysis/summary.json</code>, <code>pair-level.csv</code></td></tr>
+    <tr><td><code>~/Documents/tcc/tools/</code></td><td class="n">104 KB</td>
+      <td>scripts de análise do artigo: <code>throw_site_coverage.py</code>, <code>expath_type_match.py</code></td></tr>
+    <tr><td><code>~/Documents/tcc/HANDOFF_ESTADO_EXPERIMENTO.md</code></td><td class="n">12 KB</td>
+      <td>handoff do estado do experimento principal</td></tr>
+    <tr><td><code>generated/experiments/jdk-variantes/jdk-v*/</code></td><td class="n">~600 MB cada</td>
+      <td>testes gerados e materializados de cada variante, com <code>pairing-manifest.csv</code></td></tr>
+    <tr><td><code>rerun-codebuild/mutacao*/</code></td><td class="n">~65 MB cada</td>
+      <td>mutação por condição: <code>alvos.csv</code>, <code>testes/</code>, <code>resultado.csv</code></td></tr>
+    <tr><td><code>rerun-codebuild/merge-*/out/</code></td><td class="n">~0,9–1,3 GB</td>
+      <td>XMLs mesclados e relatórios RepGen por condição</td></tr>
+    <tr><td><code>sast2026-artifact/</code></td><td class="n">294 MB</td>
+      <td>pacote de artefato para submissão</td></tr>
+  </tbody>
+</table>
+
+<h3>7.3 · Arquivos-chave para conferir um número</h3>
+<table>
+  <thead><tr><th>Para verificar…</th><th>Olhe em…</th></tr></thead>
+  <tbody>
+    <tr><td>verificação forte que passa (1,33–1,76×)</td>
+      <td><code>rerun-codebuild/cruzar-variante.py</code> + os <code>.jtr</code> da variante</td></tr>
+    <tr><td>mira e voz por condição</td>
+      <td>mesma saída do <code>cruzar-variante.py</code>, tabela forte/frágil/outro</td></tr>
+    <tr><td>cobertura restrita</td>
+      <td><code>rerun-codebuild/cobertura-restrita.py</code> + <code>manifest.csv</code> + relatórios RepGen</td></tr>
+    <tr><td>mutação (1,41× agregado)</td>
+      <td><code>rerun-codebuild/mutacao*/resultado.csv</code>, colunas <code>site, arm, veredito</code></td></tr>
+    <tr><td>variância de execução (726/726)</td>
+      <td><code>rerun-codebuild/comparar-reteste.py</code> sobre <code>reteste/exec1</code> e <code>exec2</code></td></tr>
+    <tr><td>o resultado antes da correção de encoding</td>
+      <td><code>rerun-codebuild/mutacao*/resultado-sem-utf8.csv</code> (preservado de propósito)</td></tr>
+  </tbody>
+</table>
+
+<h2>8 · Como reexecutar</h2>
+<p>Cada estágio é independente e reentrante: pode ser repetido isoladamente a
+partir dos dados do estágio anterior. Os comandos abaixo são os que de fato
+produziram os números.</p>
+
+<div class="note info">
+  <h4 class="ca">Pré-requisitos</h4>
+  <p class="small" style="margin:0">Docker com a imagem
+  <code>cloudarchlab/witup-evaluator:amd64</code> (traz JDK 11 de teste, jtreg e
+  JCov 3.0); AWS CLI com acesso ao bucket e ao CodeBuild; Python 3.9+; chave da
+  OpenAI apenas para o estágio 1. Em Apple Silicon a imagem roda emulada —
+  use <code>--platform linux/amd64</code>, e conte com algo em torno de 35
+  minutos por variante na mutação.</p>
+</div>
+
+<h3>Estágio 1 · Geração dos testes</h3>
+<p>Cada variante é definida por três variáveis de ambiente e um arquivo de
+configuração. É isto, e só isto, que muda entre os cenários:</p>
+<pre># gerar-variantes.sh — assinatura: gerar &lt;chave&gt; &lt;golden&gt; &lt;oracle&gt; &lt;config&gt;
+
+gerar jdk-v1  0 1 v1-pilot.runtime.json   # instrução de oráculo
+gerar jdk-v2  0 0 v2.runtime.json         # modelo mini
+gerar jdk-v4  1 0 v1-pilot.runtime.json   # few-shot (modelo obrigatório)
+gerar jdk-v3a 0 0 v3.runtime.json         # controle, temperatura 0,7
+
+# o que cada flag liga, em internal/aplicacao/prompts.go:
+#   WITUP_PROMPT_GOLDEN=1  → REGRA DE OURO + MODELO OBRIGATÓRIO DE CABEÇALHO
+#   WITUP_PROMPT_ORACLE=1  → bloco ORÁCULO OBRIGATÓRIO</pre>
+<pre>bash gerar-variantes.sh          # submete os lotes à Batch API da OpenAI
+bash daemon-submissao.sh         # acompanha e colhe as respostas</pre>
+<p class="small mut">Os modelos e temperaturas ficam em
+<code>generated/configs/*.json</code>: <code>v1-pilot</code> e <code>v3</code>
+usam <code>gpt-4.1-nano</code> (T=0 e T=0,7); <code>v2</code> usa
+<code>gpt-4.1-mini</code> (T=0).</p>
+
+<h3>Estágio 2 · Execução</h3>
+<pre>bash executar-variante.sh jdk-v1
+#  1. materializa as respostas em .java pareados por método
+#  2. divide em 24 shards por braço
+#  3. envia para s3://witup-jcov-results/&lt;stamp&gt;/inputs/
+#  4. dispara 48 builds no CodeBuild (jtreg + agente JCov)
+
+bash varredura-shards.sh         # confere buracos e relança o que faltou</pre>
+<div class="note">
+  <h4 class="cb">Não use <code>-boe skip</code> no merge</h4>
+  <p class="small" style="margin:0">Essa opção descarta arquivo problemático e
+  <b>termina com sucesso</b>. Foi assim que 10 shards sumiram em silêncio nas
+  variantes. O <code>merge-jcov-estrito.sh</code> já a removeu — se houver
+  conflito, ele falha, que é o comportamento desejado.</p>
+</div>
+
+<h3>Estágio 3 · Merge da cobertura</h3>
+<pre>cd rerun-codebuild
+
+python3 tirar-proxy.py 'merge-jdk-v1/direct-tests/*.xml' \
+                       'merge-jdk-v1/wit-context/*.xml'
+#   remove com.sun.proxy: classes geradas em runtime, nomeadas $ProxyN
+#   sequencialmente por JVM — o mesmo nome carrega estruturas diferentes
+#   entre shards, e é isso que faz o Merger abortar
+
+bash merge-jcov-estrito.sh jdk-v1 jdk-v2 jdk-v4 jdk-v3a
+
+# experimento principal (layout shard-NN/, por isso script próprio):
+bash remerge-original.sh</pre>
+
+<h3>Estágio 4 · Análises</h3>
+<pre># classificação estática — produz o resultado principal
+python3 cruzar-variante.py jdk-v1 "V1 instrução"
+
+# cobertura restrita aos métodos-alvo, denominador por união
+python3 cobertura-restrita.py manifest.csv \
+    merge-jdk-v1/out/rep-baseline \
+    merge-jdk-v1/out/rep-direct-tests \
+    merge-jdk-v1/out/rep-wit-context
+
+# robustez do classificador: mesma análise com padrão mais permissivo
+python3 cruzar-variante-regex2.py jdk-v1 "V1 regex ampliado"</pre>
+
+<h3>Estágio 5 · Mutação dirigida</h3>
+<pre>python3 preparar-mutacao.py jdk-v1          # monta o diretório da condição
+python3 preparar-mutacao.py jdk-v4 mutacao-v4b   # 2º arg: destino alternativo
+#   o join é pelo pairing-manifest.csv — o hash do arquivo de teste deriva do
+#   pair_id, que INCLUI a chave da variante, então hashes do baseline não casam
+
+docker run --rm --platform linux/amd64 -m 4g \
+  -v "$PWD/mutacao-v1:/m" cloudarchlab/witup-evaluator:amd64 \
+  bash /m/rodar.sh
+
+bash remutar.sh    # refaz as cinco condições com -encoding UTF-8</pre>
+<div class="note">
+  <h4 class="cb">Dois erros a não repetir na mutação</h4>
+  <p class="small" style="margin:0 0 8px"><b>Encoding:</b> sem
+  <code>-encoding UTF-8</code> no <code>javac</code>, todo teste com acento em
+  comentário é contado como "não compila". O braço WIT escreve acento muito mais
+  — era viés sistemático contra ele.</p>
+  <p class="small" style="margin:0"><b>Pareamento:</b> a taxa só é comparável
+  nos sites em que <b>os dois braços</b> têm veredito válido. Comparar sobre
+  conjuntos diferentes inverteu o sinal do experimento principal, de +0,5pp para
+  −3,5pp.</p>
+</div>
+
+<h3>Estágio 6 · Variância de execução</h3>
+<pre># relança 8 shards já executados num prefixo separado, preservando o original
+aws s3 cp s3://witup-jcov-results/jdk-v4-20261004/inputs/ \
+          s3://witup-jcov-results/reteste-v4/inputs/ --recursive
+
+# depois de concluídos, compara teste a teste
+python3 comparar-reteste.py reteste/exec1 reteste/exec2</pre>
+
+<h3>Ordem mínima para reproduzir o resultado principal</h3>
+<p>Se o objetivo for apenas confirmar os 1,33–1,76×, <b>não é preciso reexecutar
+nada na nuvem</b>. A classificação estática lê o código-fonte dos testes já
+materializados e os arquivos de resultado já baixados:</p>
+<pre>cd rerun-codebuild
+for K in jdk-v1 jdk-v2 jdk-v4 jdk-v3a; do
+    python3 cruzar-variante.py $K "$K"
+done</pre>
+<p class="small">Isso roda em segundos e é determinístico — a mesma entrada
+produz saída idêntica bit a bit, verificado por md5 em três execuções. É também
+a razão de o resultado principal ter sobrevivido aos quatro defeitos de
+infraestrutura: ele não passa por merge, execução nem compilação.</p>
+
+<h3>Custos observados</h3>
+<table>
+  <thead><tr><th>Estágio</th><th class="n">Custo</th><th>Observação</th></tr></thead>
+  <tbody>
+    <tr><td>Geração (4 variantes)</td><td class="n">crédito OpenAI</td>
+      <td>V3b e V3c pararam no limite de cobrança</td></tr>
+    <tr><td>Execução (96 shards)</td><td class="n">US$ 39</td>
+      <td>CodeBuild MEDIUM; mediana de 33 min por shard</td></tr>
+    <tr><td>Reteste (8 shards)</td><td class="n">US$ 2,64</td>
+      <td>~US$ 0,33 por shard</td></tr>
+    <tr><td>Merge e mutação</td><td class="n">local</td>
+      <td>~45 min por merge, ~35 min por condição de mutação (emulado)</td></tr>
+  </tbody>
+</table>
+
+<h2>9 · O limite do estudo</h2>
+<div class="note">
+  <h4 class="cb">Conformidade de contrato, não detecção de defeito real</h4>
+  <p style="margin:0 0 8px">O WIT lê o código e extrai <i>"este método lança NPE
+  quando o argumento é null"</i>. O teste verifica exatamente isso. Mas se o
+  código tivesse um bug e lançasse a exceção errada, o WIT extrairia a exceção
+  errada, o teste verificaria a exceção errada — e <b>passaria</b>.</p>
+  <p class="small" style="margin:0">É como conferir se um relógio está certo
+  olhando para o próprio relógio. Quebrar o círculo exige uma fonte de verdade
+  independente do código: mutação dirigida (sintética — feita, seção 4.4) ou
+  replay de bugs reais (Defects4J — artigo à parte).</p>
+</div>
+<h3>Outras ressalvas em aberto</h3>
+<ul>
+  <li><b>Sem barra de erro.</b> V3b e V3c nunca foram gerados; a variância entre
+  amostras de geração segue sem estimativa.</li>
+  <li><b>Granularidade da cobertura.</b> Medida em (classe, nome do método), com
+  sobrecargas agregadas. A regra é a mesma nos três braços, então a comparação é
+  justa, mas é mais grossa que por assinatura.</li>
+  <li><b>832 dos métodos-alvo nunca foram carregados</b> por nenhum braço nem
+  pelo baseline, e ficam fora de qualquer medida.</li>
+  <li><b>O few-shot do V4 é ambíguo</b> — foi escrito para fixar o formato do
+  cabeçalho, mas também demonstra um oráculo forte.</li>
+</ul>
+
+<h2>10 · Próximos passos</h2>
+<table>
+  <thead><tr><th>Passo</th><th class="n">Custo</th><th>O que destrava</th></tr></thead>
+  <tbody>
+    <tr><td><b>Operador de mutação por tipo errado</b></td><td class="n">~1 dia</td>
+      <td>mutante que só morre se o teste verifica o <b>tipo</b> — onde o WIT tem 1,3–1,6×. É o passo que mais agrega.</td></tr>
+    <tr><td>Regerar V3b e V3c</td><td class="n">billing OpenAI</td>
+      <td>a barra de erro dos 1,33–1,76×</td></tr>
+    <tr><td>Ampliar a amostra de variância</td><td class="n">~US$ 0,33/shard</td>
+      <td>estender a afirmação de reprodutibilidade além dos 726 testes</td></tr>
+    <tr><td>Replay de bugs reais (Defects4J)</td><td class="n">artigo à parte</td>
+      <td>detecção com falha real, não sintética — fecha a crítica central</td></tr>
+  </tbody>
+</table>
+
+</div></body></html>

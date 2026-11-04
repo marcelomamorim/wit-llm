@@ -217,3 +217,12 @@
     margin-top: 3.5rem;
   }
 }
+
+.catalogo-controles { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; }
+.catalogo-controles label { display: flex; flex-direction: column; min-width: 11rem; font-weight: 600; }
+.catalogo-controles input, .catalogo-controles select { color: var(--md-default-fg-color); background: var(--md-default-bg-color); border: 1px solid var(--witup-line); border-radius: .3rem; padding: .4rem; }
+.catalogo-item { border-bottom: 1px solid var(--witup-line); padding: .8rem 0; overflow-wrap: anywhere; }
+.catalogo-item p { margin: .3rem 0; }
+.catalogo-item details { font-size: .8rem; }
+.catalogo-paginacao { display: flex; align-items: center; gap: .7rem; margin: 1rem 0; }
+.catalogo-paginacao button { border: 1px solid var(--witup-line); border-radius: .3rem; padding: .4rem .8rem; }

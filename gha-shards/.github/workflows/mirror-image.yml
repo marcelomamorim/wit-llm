@@ -1,0 +1,31 @@
+name: mirror-image
+# Espelha a imagem base do avaliador para o GHCR. Roda uma vez.
+# Puxá-la em cada job estouraria o rate limit do Docker Hub (100 pulls/6h).
+# A origem vem de secret: input de dispatch ficaria visível no histórico público.
+on:
+  workflow_dispatch:
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      packages: write
+    steps:
+      - name: liberar disco
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+      - name: login no GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: pull + push
+        env:
+          SRC_IMAGE: ${{ secrets.SRC_IMAGE }}
+        run: |
+          set -euo pipefail
+          [ -n "$SRC_IMAGE" ] || { echo 'secret SRC_IMAGE vazio'; exit 1; }
+          DST="ghcr.io/${{ github.repository }}/evaluator:amd64"
+          docker pull --platform linux/amd64 "$SRC_IMAGE"
+          docker tag "$SRC_IMAGE" "$DST"
+          docker push "$DST"
+          echo "espelhada em $DST"

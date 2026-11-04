@@ -27,3 +27,10 @@ nos projetos:
 ## Observação
 
 Os caminhos de `root` e `wit_analysis_path` precisam ser ajustados para o seu ambiente antes da execução.
+
+## Quatro modelos com APIs diretas
+
+O perfil `quatro-modelos-diretos.json` configura GPT-6.1 Sol (raciocínio),
+GPT-4.1 (sem parâmetro de raciocínio), Gemini e Claude Sonnet.
+Veja [o guia de execução](../MULTI-MODEL.md) para preparação offline,
+chaves, geração com retomada e materialização no fluxo jtreg existente.

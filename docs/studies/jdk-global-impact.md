@@ -1,6 +1,6 @@
 # Impacto Global no JDK
 
-Esta pagina resume a rodada atual do `wit-llm` sobre o OpenJDK/JDK. O objetivo e medir o impacto de testes gerados por LLM quando integrados a suite `jtreg` do projeto.
+Esta página registra um **piloto histórico de 200 métodos**, distinto das rodadas atuais com os três modelos. Os valores abaixo são resultados preliminares dessa configuração e não devem ser tratados como resultados consolidados da comparação atual. A proveniência e a validade das métricas de cobertura exigem conferência antes de uso como evidência no artigo.
 
 ## Desenho experimental
 
@@ -67,9 +67,7 @@ Para `WIT_CONTEXT`, os expaths foram usados ou adaptados em 171 dos 200 metodos.
 
 ## Interpretacao
 
-Os dois cenarios aumentaram a cobertura estrutural em relacao ao baseline. O resultado mais importante, porem, aparece nas metricas de excecao: `WIT_CONTEXT` direcionou o LLM para produzir muito mais testes com verificacao explicita de excecoes.
-
-Assim, o WIT nao deve ser interpretado apenas como mecanismo para maximizar cobertura agregada. O seu valor aparece como um sinal estruturado e de baixo custo para orientar testes de comportamento excepcional e regressao.
+Os valores relatados para os dois cenários são maiores que os do baseline nas métricas estruturais desta tabela. A taxa de verificações explícitas também difere entre cenários. Essas observações são específicas do piloto; não estabelecem causalidade nem demonstram que os testes verificam corretamente todos os comportamentos excepcionais.
 
 ## Limitacoes conhecidas
 

@@ -7,7 +7,7 @@ Uso:
   python3 scripts/build-preparation-from-batch.py \
     --batch    /path/to/batch_output.jsonl \
     --wit      resources/wit-replication-package/data/output/jdk/wit_filtered.json \
-    --jdk-root /Users/marceloamorim/Documents/unb/jdk \
+    --jdk-root /path/to/openjdk \
     --run-dir  generated/experiments/jdk-global-impact-study/RUNSTAMP \
     --config   generated/configs/rodada-artigo.runtime.json
 """

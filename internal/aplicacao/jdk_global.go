@@ -22,8 +22,12 @@ import (
 	"github.com/marceloamorim/witup-llm/internal/witup"
 )
 
+// jdkGlobalProjectKey identifica a variante no custom_id (parts[0]).
+// pair_id() rio abaixo exige parts[1] ∈ {direct-tests, wit-context}, então a
+// variante só pode ser codificada aqui. Default "jdk" = baseline do paper.
+var jdkGlobalProjectKey = envOuPadrao("WITUP_PROJECT_KEY", "jdk")
+
 const (
-	jdkGlobalProjectKey         = "jdk"
 	jdkGlobalRepositoryURL      = "https://github.com/openjdk/jdk.git"
 	jdkGlobalExperimentalUnit   = "global_project_impact"
 	jdkGlobalPreparationFile    = "preparation_jdk_global_impact.json"
@@ -31,6 +35,13 @@ const (
 	jdkGlobalManifestFile       = "manifest_jdk_global_methods.csv"
 	jdkGlobalDefaultMethodCount = 30
 )
+
+func envOuPadrao(chave, padrao string) string {
+	if v := strings.TrimSpace(os.Getenv(chave)); v != "" {
+		return v
+	}
+	return padrao
+}
 
 var jdkGlobalExcludes = []string{
 	".git",
