@@ -1,0 +1,128 @@
+version: 0.2
+
+env:
+  shell: bash
+  variables:
+    AWS_REGION: "us-east-1"
+    S3_BUCKET: "witup-jcov-results"
+    EXPERIMENT_DIR: "jdk-paired-rematerialized"
+    SCRIPT_COMMIT: "1da1d9909a176a0f1306bf223dbb2600a4574e10"
+    JDK_SRC: "/opt/openjdk-src"
+    JTREG_CONCURRENCY: "8"
+    JCOV_CONCURRENCY: "1"
+
+phases:
+  pre_build:
+    commands:
+      - |
+        set -euo pipefail
+        echo "run=${RUN_STAMP} variant=${JCOV_VARIANT} shard=${SHARD_ID} input=${INPUT_ARCHIVE}"
+        test "${JCOV_VARIANT}" = "direct-tests" || test "${JCOV_VARIANT}" = "wit-context"
+      - |
+        if ! command -v aws >/dev/null 2>&1; then
+          curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          /tmp/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli
+        fi
+        aws --version
+      - |
+        export RUN_DIR="/data/generated/experiments/${EXPERIMENT_DIR}/${RUN_STAMP}"
+        mkdir -p "${RUN_DIR}"
+        aws s3 cp "s3://${S3_BUCKET}/${RUN_STAMP}/inputs/${INPUT_ARCHIVE}" /tmp/paired-input.zip
+        unzip -q /tmp/paired-input.zip -d "${RUN_DIR}"
+        cd "${RUN_DIR}"
+        sha256sum -c SHA256SUMS
+      - |
+        export RUN_DIR="/data/generated/experiments/${EXPERIMENT_DIR}/${RUN_STAMP}"
+        if [ "${JCOV_VARIANT}" = "direct-tests" ]; then
+          rm -rf "${RUN_DIR}/variants/wit-context"
+        else
+          rm -rf "${RUN_DIR}/variants/direct-tests"
+        fi
+        variant_test="${RUN_DIR}/variants/${JCOV_VARIANT}/test"
+        cp "${JDK_SRC}/test/jdk/TEST.ROOT" "${variant_test}/jdk/TEST.ROOT"
+        cp "${JDK_SRC}/test/jdk/TEST.groups" "${variant_test}/jdk/TEST.groups"
+        ln -s "${JDK_SRC}/test/lib" "${variant_test}/lib"
+        ln -s "${JDK_SRC}/test/jtreg-ext" "${variant_test}/jtreg-ext"
+      - |
+        base="${ARTIFACT_SCRIPT_BASE:-https://raw.githubusercontent.com/anonymous/wit-llm/${SCRIPT_COMMIT}/scripts}"
+        curl -fsS "${base}/run-jtreg-docker.sh" -o /data/scripts/run-jtreg-paired.sh
+        curl -fsS "${base}/run-jcov-docker.sh" -o /data/scripts/run-jcov-paired.sh
+        curl -fsS "${base}/analyze_jcov.py" -o /data/scripts/analyze_jcov.py
+        chmod +x /data/scripts/run-jtreg-paired.sh /data/scripts/run-jcov-paired.sh /data/scripts/analyze_jcov.py
+        sha256sum /data/scripts/run-jtreg-paired.sh /data/scripts/run-jcov-paired.sh /data/scripts/analyze_jcov.py
+
+  build:
+    commands:
+      - |
+        set -o pipefail
+        export RUN_DIR="/data/generated/experiments/${EXPERIMENT_DIR}/${RUN_STAMP}"
+        RUN_BASELINE=nao \
+        EXPERIMENT_DIR="${EXPERIMENT_DIR}" \
+        RUN_STAMP="${RUN_STAMP}" \
+        JTREG_CONCURRENCY="${JTREG_CONCURRENCY}" \
+        bash /data/scripts/run-jtreg-paired.sh 2>&1 | tee "${RUN_DIR}/jtreg-driver.log"
+      - |
+        export RUN_DIR="/data/generated/experiments/${EXPERIMENT_DIR}/${RUN_STAMP}"
+        python3 - "${RUN_DIR}" "${JCOV_VARIANT}" <<'PYEOF'
+        import json, pathlib, re, sys
+        run_dir = pathlib.Path(sys.argv[1])
+        variant = sys.argv[2]
+        log = run_dir / "variants" / variant / "jtreg-report-witup" / "jtreg-run.log"
+        text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+        def last(pattern):
+            values = re.findall(pattern, text)
+            return int(values[-1]) if values else 0
+        result = {
+            "variant": variant,
+            "pass": last(r"passed:\s+(\d+)"),
+            "fail": last(r"failed:\s+(\d+)"),
+            "error": last(r"error:\s+(\d+)"),
+            "source_log": str(log),
+        }
+        result["total"] = result["pass"] + result["fail"] + result["error"]
+        result["pass_rate_pct"] = round(100 * result["pass"] / result["total"], 2) if result["total"] else 0
+        output = run_dir / f"jtreg-results-{variant}.json"
+        output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        print(output.read_text())
+        if result["total"] == 0:
+            raise SystemExit("jtreg não executou nenhum teste")
+        PYEOF
+      - |
+        set -o pipefail
+        export RUN_DIR="/data/generated/experiments/${EXPERIMENT_DIR}/${RUN_STAMP}"
+        EXPERIMENT_DIR="${EXPERIMENT_DIR}" \
+        RUN_STAMP="${RUN_STAMP}" \
+        JCOV_VARIANT="${JCOV_VARIANT}" \
+        JTREG_CONCURRENCY="${JCOV_CONCURRENCY}" \
+        bash /data/scripts/run-jcov-paired.sh 2>&1 | tee "${RUN_DIR}/jcov-driver-${JCOV_VARIANT}.log"
+        test -s "${RUN_DIR}/jcov-results/${JCOV_VARIANT}/jcov-result.xml"
+
+  post_build:
+    commands:
+      - |
+        export RUN_DIR="/data/generated/experiments/${EXPERIMENT_DIR}/${RUN_STAMP}"
+        export DEST="s3://${S3_BUCKET}/${RUN_STAMP}/paired-results/${JCOV_VARIANT}/${SHARD_ID}"
+        aws s3 cp "${RUN_DIR}/pairing-manifest.csv" "${DEST}/pairing-manifest.csv"
+        aws s3 cp "${RUN_DIR}/SHA256SUMS" "${DEST}/input-SHA256SUMS"
+        aws s3 cp "${RUN_DIR}/jtreg-results-${JCOV_VARIANT}.json" "${DEST}/jtreg-results.json"
+        aws s3 cp "${RUN_DIR}/jtreg-driver.log" "${DEST}/jtreg-driver.log"
+        aws s3 cp "${RUN_DIR}/jcov-driver-${JCOV_VARIANT}.log" "${DEST}/jcov-driver.log"
+        aws s3 sync "${RUN_DIR}/jcov-results/${JCOV_VARIANT}/" "${DEST}/jcov/"
+      - |
+        # NOVO: preserva os .jtr (stdout, diagnóstico do javac, execStatus, elapsed
+        # por teste). Sem isso o diretório de trabalho é descartado no fim do build.
+        export RUN_DIR="/data/generated/experiments/${EXPERIMENT_DIR}/${RUN_STAMP}"
+        export DEST="s3://${S3_BUCKET}/${RUN_STAMP}/paired-results/${JCOV_VARIANT}/${SHARD_ID}"
+        cd "${RUN_DIR}/variants/${JCOV_VARIANT}"
+        n=$(find jtreg-work-witup -name '*.jtr' | wc -l)
+        echo "arquivos .jtr encontrados: ${n}"
+        test "${n}" -gt 0 || { echo "ERRO: nenhum .jtr gerado"; exit 1; }
+        find jtreg-work-witup -name '*.jtr' -print0 | tar czf /tmp/jtr.tgz --null -T -
+        ls -lh /tmp/jtr.tgz
+        aws s3 cp /tmp/jtr.tgz "${DEST}/jtr.tgz"
+        echo "jtr_count=${n}" > /tmp/jtr-count.txt
+        aws s3 cp /tmp/jtr-count.txt "${DEST}/jtr-count.txt"
+      - |
+        export DEST="s3://${S3_BUCKET}/${RUN_STAMP}/paired-results/${JCOV_VARIANT}/${SHARD_ID}"
+        echo "result=${DEST}"

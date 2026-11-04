@@ -1,0 +1,50 @@
+{
+  "direct": {
+    "pass": 1455,
+    "strict": 1433,
+    "comp_fail": 2288,
+    "exc_dyn": 40,
+    "status": {
+      "falha em execução": 382,
+      "compilação": 2288,
+      "pass genuíno": 136,
+      "pass sem saída": 1297,
+      "PASS mas stdout diz FAIL": 22
+    },
+    "comp_tax": {
+      "símbolo inexistente (import/API)": 666,
+      "outros": 510,
+      "tipos incompatíveis": 108,
+      "API interna inacessível": 727,
+      "abstrata não implementada": 53,
+      "assinatura incompatível (API alucinada)": 163,
+      "pacote inexistente": 20,
+      "exceção checada não tratada": 36,
+      "definição duplicada": 5
+    }
+  },
+  "wit": {
+    "pass": 1607,
+    "strict": 1517,
+    "comp_fail": 2271,
+    "exc_dyn": 465,
+    "status": {
+      "compilação": 2271,
+      "PASS mas stdout diz FAIL": 90,
+      "pass sem saída": 1009,
+      "falha em execução": 247,
+      "pass genuíno": 508
+    },
+    "comp_tax": {
+      "outros": 578,
+      "API interna inacessível": 745,
+      "tipos incompatíveis": 50,
+      "símbolo inexistente (import/API)": 630,
+      "abstrata não implementada": 59,
+      "assinatura incompatível (API alucinada)": 147,
+      "definição duplicada": 6,
+      "pacote inexistente": 13,
+      "exceção checada não tratada": 43
+    }
+  }
+}

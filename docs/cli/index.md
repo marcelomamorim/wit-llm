@@ -34,7 +34,7 @@ witup preparar-estudo-jdk-global --config <arquivo.json> --jdk-root <jdk> --wit-
 ./bin/witup preparar-estudo-jdk-global \
   --config generated/configs/rodada-artigo.runtime.json \
   --generation-model openai_main \
-  --jdk-root /Users/marceloamorim/Documents/unb/jdk \
+  --jdk-root /path/to/openjdk \
   --wit-analysis resources/wit-replication-package/data/output/jdk/wit_filtered.json \
   --output-dir generated/experiments/jdk-global-impact-study/<run> \
   --requests generated/experiments/jdk-global-impact-study/<run>/requests_openai_batch_generation.jsonl \

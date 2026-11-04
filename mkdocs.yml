@@ -68,43 +68,21 @@ markdown_extensions:
       permalink: true
 
 nav:
-  - Inicio: index.md
-  - Visao Geral:
-    - Introducao: overview/index.md
-    - Primeiros Passos: overview/getting-started.md
-    - Referencia de Configuracao: overview/configuration.md
-  - Estudos:
-    - Impacto Global no JDK: studies/jdk-global-impact.md
-  - CLI e Comandos:
-    - Visao Geral: cli/index.md
-  - Arquitetura:
-    - Visao Geral: architecture/index.md
-  - Harness:
-    - Visao Geral: harness/index.md
-    - Validacao: harness/validation.md
-    - Rodadas Pagas: harness/paid-runs.md
-    - Fluxo com Codex: harness/codex-workflow.md
-    - Padroes de Falha: harness/failure-patterns.md
-  - Design Docs:
-    - Visao Geral: design-docs/index.md
-    - Core Beliefs: design-docs/core-beliefs.md
-    - Fase 2: design-docs/phase-two-study.md
-  - Exec Plans:
-    - Visao Geral: exec-plans/index.md
-    - Template: exec-plans/template.md
-    - Tech Debt: exec-plans/tech-debt-tracker.md
-  - Integracao LLM:
-    - Cliente LLM: llm/client.md
-  - Catalogacao e Metricas:
-    - Visao Geral: cataloging/index.md
-    - Executor de Metricas: cataloging/metrics.md
-  - Qualidade:
-    - Quality Score: QUALITY_SCORE.md
-    - Reliability: RELIABILITY.md
-    - Security: SECURITY.md
-  - Referencias:
-    - Visao Geral: references/index.md
-    - WIT: references/wit-paper.md
-    - OpenAI Codex Harness: references/openai-codex-harness.md
-    - Commons IO Baseline: references/commons-io-baseline.md
-  - Glossario: glossary.md
+  - Início: index.md
+  - Pesquisa:
+    - Catálogo de testes: studies/catalogo.md
+    - Método experimental: studies/metodo.md
+    - Métricas e análise: studies/metricas.md
+    - Reprodutibilidade: studies/reprodutibilidade.md
+    - Piloto histórico no JDK: studies/jdk-global-impact.md
+  - Arquitetura do experimento: architecture/index.md
+  - Uso da ferramenta:
+    - Visão geral: overview/index.md
+    - Primeiros passos: overview/getting-started.md
+    - Configuração: overview/configuration.md
+    - CLI e comandos: cli/index.md
+    - Integração com modelos: llm/client.md
+  - Referência:
+    - Catálogo: cataloging/index.md
+    - Executor de métricas: cataloging/metrics.md
+    - Glossário: glossary.md

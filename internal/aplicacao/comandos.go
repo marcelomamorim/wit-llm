@@ -52,6 +52,8 @@ func Principal(argv []string) int {
 		return executarPreflightSegundaFase(args, servico)
 	case "preparar-batch-segunda-fase", "prepare-phase-two-batch":
 		return executarPreparacaoBatchSegundaFase(args, servico)
+	case "executar-lote-modelo", "run-model-batch":
+		return executarLoteModelo(args)
 	case "submeter-openai-batch", "submit-openai-batch":
 		return executarSubmissaoOpenAIBatch(args)
 	case "coletar-openai-batch", "collect-openai-batch":
@@ -102,6 +104,7 @@ func imprimirUso() {
 	fmt.Println("  executar-segunda-fase Executa a fase 2 focada em contexto WIT vs geração direta")
 	fmt.Println("  preflight-segunda-fase Valida ambiente, baselines e alinhamento antes da fase 2")
 	fmt.Println("  preparar-batch-segunda-fase Gera JSONL Batch para a geração WIT vs direta")
+	fmt.Println("  executar-lote-modelo Executa JSONL com APIs diretas, checkpoint e retomada")
 	fmt.Println("  submeter-openai-batch Submete um JSONL à Batch API da OpenAI")
 	fmt.Println("  coletar-openai-batch Consulta um batch e baixa outputs/erros quando disponíveis")
 	fmt.Println("  avaliar-batch-segunda-fase Materializa respostas Batch e executa métricas locais")

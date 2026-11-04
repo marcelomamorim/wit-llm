@@ -35,7 +35,7 @@ func construirPromptGeracaoSistema(framework string) string {
 	case frameworkJUnit5:
 		return "Você é um especialista em escrita de testes Java usando JUnit 5 (Jupiter). Responda apenas com JSON. Gere testes compatíveis com org.junit.jupiter.api.*. Nunca invente pacotes, classes, métodos, construtores, campos ou enums que não estejam evidentes no contexto fornecido. Não assuma construtor sem argumentos; prefira fábricas públicas, builders, métodos getInstance(), of() ou valueOf() que estejam evidentes. Evite reflexão por padrão; só use getDeclaredField/getDeclaredConstructor/getDeclaredMethod/setAccessible quando o membro refletido aparecer explicitamente no source_code fornecido e não houver caminho público confiável. Não use Mockito a menos que o contexto mostre dependência explícita do projeto. Não tente sobrescrever ou mockar métodos estáticos de classes do projeto; use entradas reais e asserts sobre comportamento observável. Antes de responder, faça uma checagem estática mental: cada teste deve compilar com as APIs visíveis no checkout atual e deve ter alta chance de passar no primeiro run. Se houver dúvida entre o baseline e o código atual, priorize o comportamento observável do código atual."
 	case frameworkJTReg:
-		return "Você é um especialista em escrita de testes Java para o OpenJDK usando jtreg. Responda apenas com JSON." +
+		p := "Você é um especialista em escrita de testes Java para o OpenJDK usando jtreg. Responda apenas com JSON." +
 			" RESTRIÇÃO CRÍTICA DE VERSÃO: o código gerado DEVE ser 100% compatível com JDK 11+28 (commit da75f3c4, setembro de 2018, pré-lançamento do JDK 11 GA). NÃO use nenhuma API, sintaxe ou recurso introduzido após o JDK 11." +
 			" Sintaxes e APIs PROIBIDAS: records (JDK 16+, ex: record Foo(...) {}); blocos de texto/text blocks (JDK 15+, ex: \"\"\"...\"\"\"); expressões switch com yield ou seta (JDK 14+, ex: switch(x) { case 1 -> ...}); pattern matching em instanceof (JDK 16+, ex: if (obj instanceof String s)); sealed classes/permits (JDK 17+); ObjectInputFilter.setSerialFilter() (JDK 17+); qualquer outro recurso pós-JDK-11." +
 			" Pacotes NÃO exportados por padrão ao unnamed module — se o teste precisar acessar pacotes como com.sun.crypto.provider, com.sun.java.util.jar.pack, com.sun.net.ssl, com.sun.security.ntlm, sun.security.*, sun.net.*, com.sun.* ou qualquer subpacote de java.base não listado no módulo público, você DEVE declarar '@modules java.base/nome.do.pacote' no cabeçalho jtreg; sem essa diretiva a compilação falha. Para jdk.internal.* evite ao máximo; só use se o método-alvo estiver literalmente nesse pacote e declare '@modules java.base/jdk.internal.subpacote'." +
@@ -49,11 +49,21 @@ func construirPromptGeracaoSistema(framework string) string {
 			" NÃO declare package no arquivo gerado; use sempre o pacote padrão (unnamed package)." +
 			" Diretiva @modules: use quando o teste acessar módulo ou pacote não exportado por padrão. Sintaxe CORRETA: '@modules java.base' ou '@modules java.base/sun.security.util'. Sintaxe PROIBIDA: '@modules(java.base)' — parênteses são inválidos e causam erro de parse no jtreg." +
 			" Gere testes standalone. Não use JUnit, Mockito, AssertJ ou bibliotecas externas. Prefira APIs públicas e observáveis. Use apenas APIs visíveis no JDK 11+28 e que apareçam no contexto fornecido. Não invente pacotes, classes, métodos, construtores, campos ou enums não evidentes no contexto. Evite reflexão por padrão; só use quando o membro refletido aparecer literalmente no source_code e não houver caminho público." +
-			" Antes de responder, faça uma checagem estática mental obrigatória: (1) o arquivo compila com JDK 11+28? (2) o nome da classe pública bate com o nome do arquivo? (3) o cabeçalho jtreg usa /* */? (4) há @run main? (5) nenhum pacote inacessível é importado? (6) nenhuma sintaxe pós-JDK-11 foi usada? Só devolva o JSON se todas as respostas forem sim." +
-			" REGRA DE OURO: em caso de dúvida sobre compilação, simplifique o teste ao mínimo que compila — um teste simples que compila e passa tem mais valor que um teste elaborado que falha na compilação." +
-			" MODELO OBRIGATÓRIO DE CABEÇALHO (copie este padrão exato — nunca invente variações):\n" +
-			"/* @test\n   @summary Verifica comportamento de X.\n   @run main NomeDaClasseExato\n */\nimport java.util.Objects;\npublic class NomeDaClasseExato {\n    public static void main(String[] args) throws Exception {\n        try { Objects.requireNonNull(null); throw new AssertionError(\"expected NPE\"); } catch (NullPointerException e) { /* expected */ }\n    }\n}\n" +
-			" Se houver dúvida entre o baseline WIT e o código atual, priorize o comportamento observável do código atual. Gere apenas código Java executável — sem comentários explicativos extras, sem Javadoc adicional. O cabeçalho jtreg é obrigatório; o restante deve ser código puro."
+			" Antes de responder, faça uma checagem estática mental obrigatória: (1) o arquivo compila com JDK 11+28? (2) o nome da classe pública bate com o nome do arquivo? (3) o cabeçalho jtreg usa /* */? (4) há @run main? (5) nenhum pacote inacessível é importado? (6) nenhuma sintaxe pós-JDK-11 foi usada? Só devolva o JSON se todas as respostas forem sim."
+		base := p
+		// I2: bloco adicionado após o batch do paper. Contém REGRA DE OURO e um
+		// MODELO que já demonstra oráculo forte (throw new AssertionError).
+		// Desligar com WITUP_PROMPT_GOLDEN=0 para reproduzir o baseline.
+		if envOuPadrao("WITUP_PROMPT_GOLDEN", "1") != "0" {
+			base += " REGRA DE OURO: em caso de dúvida sobre compilação, simplifique o teste ao mínimo que compila — um teste simples que compila e passa tem mais valor que um teste elaborado que falha na compilação." +
+				" MODELO OBRIGATÓRIO DE CABEÇALHO (copie este padrão exato — nunca invente variações):\n" +
+				"/* @test\n   @summary Verifica comportamento de X.\n   @run main NomeDaClasseExato\n */\nimport java.util.Objects;\npublic class NomeDaClasseExato {\n    public static void main(String[] args) throws Exception {\n        try { Objects.requireNonNull(null); throw new AssertionError(\"expected NPE\"); } catch (NullPointerException e) { /* expected */ }\n    }\n}\n"
+		}
+		// V1: exigência explícita de oráculo com voz.
+		if envOuPadrao("WITUP_PROMPT_ORACLE", "0") == "1" {
+			base += " ORÁCULO OBRIGATÓRIO: ao detectar comportamento incorreto, o teste DEVE sinalizar a falha ao harness — lance uma exceção (throw new AssertionError(...) ou throw new RuntimeException(...)) ou chame System.exit(1). Apenas imprimir uma mensagem como System.out.println(\"FAIL: ...\") NÃO reprova o teste: o jtreg considera aprovado qualquer teste cujo main retorne normalmente. Todo caminho que detecte erro deve terminar lançando."
+		}
+		return base + " Se houver dúvida entre o baseline WIT e o código atual, priorize o comportamento observável do código atual. Gere apenas código Java executável — sem comentários explicativos extras, sem Javadoc adicional. O cabeçalho jtreg é obrigatório; o restante deve ser código puro."
 	default:
 		return fmt.Sprintf("Você é um especialista em escrita de testes Java usando %s. Responda apenas com JSON.", framework)
 	}

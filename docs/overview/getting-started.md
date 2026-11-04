@@ -33,7 +33,7 @@ O preparo gera manifesto e JSONL Batch, mas nao chama a API da OpenAI:
 
 ```bash
 METHOD_COUNT=200 \
-JDK_ROOT=/Users/marceloamorim/Documents/unb/jdk \
+JDK_ROOT=/path/to/openjdk \
 ./scripts/prepare-jdk-global-impact-experiment.sh
 ```
 
@@ -60,7 +60,7 @@ Depois da coleta, materialize as respostas em variantes do JDK:
 
 ```bash
 RUN_DIR=<diretorio-da-rodada> \
-JDK_ROOT=/Users/marceloamorim/Documents/unb/jdk \
+JDK_ROOT=/path/to/openjdk \
 ./scripts/evaluate-jdk-global-impact-experiment.sh
 ```
 

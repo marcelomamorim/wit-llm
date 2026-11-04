@@ -18,6 +18,8 @@ var precosPadraoModelos = map[string]precificacaoModelo{
 	"gpt-5-nano":   {entrada: 0.05, entradaCache: 0.005, saida: 0.40},
 	"gpt-4o-mini":  {entrada: 0.15, entradaCache: 0.075, saida: 0.60},
 	"gpt-4.1-mini": {entrada: 0.40, entradaCache: 0.10, saida: 1.60},
+	"gpt-4.1-nano": {entrada: 0.10, entradaCache: 0.025, saida: 0.40},
+	"gpt-4.1":      {entrada: 2.00, entradaCache: 0.50, saida: 8.00},
 }
 
 func estimarCustoTokens(modelo string, inputTokens, cachedInputTokens, outputTokens int) *float64 {

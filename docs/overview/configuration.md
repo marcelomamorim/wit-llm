@@ -133,7 +133,7 @@ Cada entrada em `phase_two.projects` possui:
 {
   "version": "1",
   "project": {
-    "root": "/Users/marceloamorim/Documents/unb/jdk",
+    "root": "/path/to/openjdk",
     "include": ["src"],
     "exclude": [".git", "build", "generated", "images", "support"],
     "test_framework": "jtreg"

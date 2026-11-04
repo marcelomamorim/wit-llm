@@ -1,0 +1,171 @@
+{
+  "variant": "direct-tests",
+  "xml_file": "/data/generated/experiments/jdk-paired-rematerialized/jdk-v2-20261002/jcov-results/direct-tests/jcov-result.xml",
+  "scope": {
+    "packages": 104,
+    "classes": 1118,
+    "classes_interface": 19,
+    "classes_inner": 365,
+    "classes_anonymous": 117,
+    "classes_enum": 28,
+    "classes_abstract": 159,
+    "methods": 18055
+  },
+  "method_coverage": {
+    "covered": 5520,
+    "uncovered": 12535,
+    "total": 18055,
+    "pct": 30.57
+  },
+  "branch_coverage": {
+    "covered": 13150,
+    "uncovered": 72972,
+    "total": 86122,
+    "pct": 15.27
+  },
+  "branch_by_type": {
+    "conditional": {
+      "covered": 9214,
+      "uncovered": 50008,
+      "total": 59222,
+      "pct": 15.56
+    },
+    "conditional_true": {
+      "covered": 5018,
+      "uncovered": 24593,
+      "total": 29611,
+      "pct": 16.95
+    },
+    "conditional_false": {
+      "covered": 4196,
+      "uncovered": 25415,
+      "total": 29611,
+      "pct": 14.17
+    },
+    "switch_case": {
+      "covered": 163,
+      "uncovered": 2508,
+      "total": 2671,
+      "pct": 6.1
+    },
+    "switch_default": {
+      "covered": 26,
+      "uncovered": 290,
+      "total": 316,
+      "pct": 8.23
+    },
+    "fall_through": {
+      "covered": 1908,
+      "uncovered": 9427,
+      "total": 11335,
+      "pct": 16.83
+    },
+    "goto": {
+      "covered": 1825,
+      "uncovered": 9058,
+      "total": 10883,
+      "pct": 16.77
+    },
+    "exception_catch": {
+      "covered": 14,
+      "uncovered": 1681,
+      "total": 1695,
+      "pct": 0.83
+    }
+  },
+  "method_by_modifier": {
+    "class_abstract": {
+      "covered": 599,
+      "uncovered": 1311,
+      "total": 1910,
+      "pct": 31.36
+    },
+    "class_anonymous": {
+      "covered": 295,
+      "uncovered": 116,
+      "total": 411,
+      "pct": 71.78
+    },
+    "class_concrete": {
+      "covered": 3430,
+      "uncovered": 9037,
+      "total": 12467,
+      "pct": 27.51
+    },
+    "class_enum": {
+      "covered": 50,
+      "uncovered": 118,
+      "total": 168,
+      "pct": 29.76
+    },
+    "class_inner": {
+      "covered": 1111,
+      "uncovered": 1817,
+      "total": 2928,
+      "pct": 37.94
+    },
+    "class_interface": {
+      "covered": 35,
+      "uncovered": 136,
+      "total": 171,
+      "pct": 20.47
+    },
+    "constructor": {
+      "covered": 1055,
+      "uncovered": 640,
+      "total": 1695,
+      "pct": 62.24
+    },
+    "package_private": {
+      "covered": 556,
+      "uncovered": 1058,
+      "total": 1614,
+      "pct": 34.45
+    },
+    "private": {
+      "covered": 917,
+      "uncovered": 1880,
+      "total": 2797,
+      "pct": 32.79
+    },
+    "protected": {
+      "covered": 151,
+      "uncovered": 236,
+      "total": 387,
+      "pct": 39.02
+    },
+    "public": {
+      "covered": 2256,
+      "uncovered": 7315,
+      "total": 9571,
+      "pct": 23.57
+    },
+    "static_initializer": {
+      "covered": 197,
+      "uncovered": 219,
+      "total": 416,
+      "pct": 47.36
+    },
+    "static_package": {
+      "covered": 388,
+      "uncovered": 1187,
+      "total": 1575,
+      "pct": 24.63
+    }
+  },
+  "exit_opcodes_count": {
+    "areturn": 10394,
+    "athrow": 4922,
+    "dreturn": 162,
+    "freturn": 112,
+    "ireturn": 6442,
+    "lreturn": 633,
+    "return": 5530
+  },
+  "methods_with_throws": 4922,
+  "cyclomatic_complexity": {
+    "avg_branches_per_method": 10.23,
+    "max_branches_per_method": 362,
+    "methods_with_high_complexity_uncovered": 1734
+  }
+}

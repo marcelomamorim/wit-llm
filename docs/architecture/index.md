@@ -1,64 +1,69 @@
-# Arquitetura
+# Arquitetura do experimento
 
-A arquitetura atual separa tres preocupacoes: preparar a comparacao pareada, gerar testes via Batch API e medir impacto no JDK.
+## 1. Visão geral
 
-- carregar baseline WIT local;
-- alinhar ao checkout;
-- comparar dois cenários de geração;
-- materializar variantes do projeto;
-- medir `jtreg`, JCov e metricas de excecao.
-
-## Blocos principais
-
-| Pacote | Responsabilidade |
-| :--- | :--- |
-| `internal/dominio` | Tipos de configuração, análise, geração, avaliação, Batch e JDK |
-| `internal/aplicacao` | Orquestra a execução ponta a ponta |
-| `internal/catalogo` | Descobre métodos Java no checkout |
-| `internal/llm` | Cliente Responses API e OpenAI Batch API |
-| `internal/metricas` | Executa e extrai métricas locais |
-| `internal/visualizacao` | Gera o dashboard HTML |
-| `internal/witup` | Lê os artefatos WIT em JSON |
-
-## Fluxo interno
+A arquitetura organiza a pesquisa em etapas rastreáveis: seleção de métodos, preparação de prompts, geração, execução e análise. Uma rodada específica pode utilizar scripts e infraestrutura diferentes; os registros dessa rodada são a fonte de verdade para sua reprodução.
 
 ```mermaid
-graph TD
-    CFG["ConfigAplicacao"] --> SVC["Servico"]
-    SVC --> WIT["internal/witup"]
-    SVC --> CAT["internal/catalogo"]
-    SVC --> LLM["internal/llm"]
-    SVC --> MET["internal/metricas"]
-
-    WIT --> ALIGN["Alinhamento WIT -> checkout"]
-    CAT --> ALIGN
-    ALIGN --> REQ["Requests Batch pareados"]
-    REQ --> LLM
-    LLM --> GEN["generation.json por cenario"]
-    GEN --> VAR["Variantes JDK"]
-    VAR --> JTREG["jtreg"]
-    VAR --> JCOV["JCov"]
-    JTREG --> MET
-    JCOV --> MET
+flowchart TB
+    subgraph Entrada
+      J["Código-fonte OpenJDK 11"]
+      W["Artefatos WIT: expaths"]
+    end
+    subgraph Preparação
+      C["Catálogo e alinhamento"]
+      M["Manifesto de alvos"]
+      P["Prompts por modelo e condição"]
+    end
+    subgraph Geração
+      L["API / processamento em lote"]
+      R["Respostas, tokens e estado"]
+    end
+    subgraph Avaliação
+      T["Materialização Java"]
+      X["jtreg: descoberta, compilação e execução"]
+      V["JCov: dados de cobertura"]
+    end
+    subgraph Análise
+      A["Pareamento e classificação de resultados"]
+      Z["Tabelas, custos e interpretação"]
+    end
+    J --> C
+    W --> C
+    C --> M --> P --> L --> R --> T
+    T --> X
+    T --> V
+    X --> A
+    V --> A
+    R --> A --> Z
 ```
 
-## Fluxo JDK
+## 2. Componentes e responsabilidades
 
-1. `preparar-estudo-jdk-global` cataloga o JDK, alinha o WIT e gera JSONL Batch.
-2. `submit-openai-batch` envia os prompts para a OpenAI.
-3. `collect-openai-batch` baixa respostas e erros.
-4. `avaliar-estudo-jdk-global` materializa `baseline`, `wit-context` e `direct-tests`.
-5. `medir-impacto-jdk-global` executa `jtreg` nas variantes.
-6. Scripts auxiliares consolidam JCov e metricas de excecao.
+| Componente | Responsabilidade | Evidência produzida |
+|---|---|---|
+| Código-fonte e WIT | Fornecer métodos e hipóteses de condições excepcionais | Versão do projeto e artefatos WIT |
+| Catálogo e alinhamento | Identificar e relacionar métodos disponíveis nos dois insumos | Identificadores e manifesto de seleção |
+| Preparação | Montar requisições para cada condição e modelo | Prompts, parâmetros e IDs de requisição |
+| Provedores | Gerar respostas, inclusive por processamento em lote quando aplicável | Respostas, estados e uso de tokens |
+| Materialização e jtreg | Preparar arquivos Java e registrar descoberta e execução | Testes, logs e resultados jtreg |
+| JCov e análise | Coletar cobertura e comparar resultados pareados | XMLs, manifestos, tabelas e relatórios |
 
-## Decisão arquitetural importante
+O caminho crítico para auditoria é **método → condição → requisição → resposta → teste → execução → cobertura**. Preservar identificadores e versões em cada etapa permite rastrear uma observação até seus insumos.
 
-O fluxo usa artefatos simples e auditaveis:
+## 3. Condições comparadas
 
-- baselines WIT locais;
-- JSON intermediário;
-- CSV consolidado;
-- Markdown para relato de resultados;
-- diretorios de variantes para reproducao.
+Para cada método elegível, o cenário `direct-tests` solicita testes a partir do código, enquanto `wit-context` também apresenta hipóteses WIT. Os prompts históricos têm diferenças de redação e conteúdo além da presença dos expaths; a comparação mede o efeito das condições completas de geração.
 
-Isso deixa a comparacao WIT vs direto rastreavel: mesmos metodos-alvo, mesmo modelo, mesmo numero de chamadas, e avaliacao local sobre variantes materializadas.
+## 4. Organização do código
+
+| Local | Responsabilidade principal |
+|---|---|
+| `internal/dominio` | Tipos e conceitos compartilhados |
+| `internal/aplicacao` | Orquestração, preparação de estudos e prompts |
+| `internal/catalogo` e `internal/witup` | Catálogo de métodos e leitura de artefatos WIT |
+| `internal/llm` | Comunicação com provedores e processamento de requisições |
+| `internal/metricas` | Execução e extração de métricas |
+| `scripts/` e `docker/` | Preparação, execução e análise de rodadas específicas |
+
+Consulte o [método](../studies/metodo.md) para o desenho experimental e a [reprodutibilidade](../studies/reprodutibilidade.md) para os requisitos de proveniência. As setas representam o fluxo conceitual; não implicam que cada rodada tenha usado a mesma implementação ou infraestrutura.
