@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "project": {"root": "../jdk-src", "include": ["src/java.base/share/classes"], "test_framework": "jtreg"},
+  "pipeline": {"output_dir": "../generated/four-models", "save_prompts": true, "llm_mode": "direct"},
+  "models": {
+    "gpt_reasoning": {
+      "provider": "openai", "model": "gpt-6.1-sol",
+      "base_url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY",
+      "reasoning_effort": "low", "max_output_tokens": 8192,
+      "timeout_seconds": 300, "max_retries": 2, "request_interval_ms": 1000
+    },
+    "gpt_standard": {
+      "provider": "openai", "model": "gpt-4.1-2025-04-14",
+      "base_url": "https://api.openai.com/v1", "api_key_env": "OPENAI_API_KEY",
+      "temperature": 0, "max_output_tokens": 8192,
+      "timeout_seconds": 300, "max_retries": 2, "request_interval_ms": 1000
+    },
+    "gemini": {
+      "provider": "gemini", "model": "gemini-3.8-flash",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta", "api_key_env": "GEMINI_API_KEY",
+      "temperature": 1, "reasoning_effort": "low", "max_output_tokens": 8192,
+      "timeout_seconds": 300, "max_retries": 2, "request_interval_ms": 2000
+    },
+    "sonnet": {
+      "provider": "anthropic", "model": "claude-sonnet-5-5",
+      "base_url": "https://api.anthropic.com/v1", "api_key_env": "ANTHROPIC_API_KEY",
+      "reasoning_effort": "low", "max_output_tokens": 8192,
+      "timeout_seconds": 300, "max_retries": 2, "request_interval_ms": 2000
+    }
+  }
+}

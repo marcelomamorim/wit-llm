@@ -3,7 +3,7 @@
 # no mesmo layout dos runs do CodeBuild. Custo de compute: zero.
 set -uo pipefail
 cd "$(dirname "$0")/.."; R="$PWD"
-BUCKET=witup-jcov-results
+BUCKET="${WITUP_S3_BUCKET:?Defina WITUP_S3_BUCKET para o bucket do experimento}"
 PAR="${PARALELO:-2}"
 LOG="$R/local-exec/runner-$(date +%Y%m%d-%H%M%S).log"
 exec > >(tee -a "$LOG") 2>&1

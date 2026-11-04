@@ -153,6 +153,9 @@ func ExtrairRespostaBatch(model dominio.ConfigModelo, linha LinhaResultadoBatch)
 
 // SubmeterBatchOpenAI envia um arquivo JSONL já preparado para a Batch API.
 func (c *Cliente) SubmeterBatchOpenAI(model dominio.ConfigModelo, jsonlPath string) (MetadadosBatch, error) {
+	if model.Provedor != "openai" && model.Provedor != "openai_compatible" {
+		return MetadadosBatch{}, fmt.Errorf("Batch OpenAI não suporta %s; use executar-lote-modelo", model.Provedor)
+	}
 	headers, err := openAIHeaders(model)
 	if err != nil {
 		return MetadadosBatch{}, err

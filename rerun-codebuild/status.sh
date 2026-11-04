@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+: "${WITUP_S3_BUCKET:?Defina WITUP_S3_BUCKET para o bucket do experimento}"
 # Placar do run. Compatível com bash 3.2 (macOS).
 cd "$(dirname "$0")"
 RUN_STAMP=$(cat .run_stamp)
@@ -12,7 +13,7 @@ echo "$ids" | xargs aws codebuild batch-get-builds --ids 2>/dev/null \
   | tr '\t' '\n' | sort | uniq -c | sed 's/^/  /'
 
 echo "=== artefatos no S3 ==="
-ls_out=$(aws s3 ls "s3://witup-jcov-results/$RUN_STAMP/paired-results/" --recursive 2>/dev/null)
+ls_out=$(aws s3 ls "s3://${WITUP_S3_BUCKET}/$RUN_STAMP/paired-results/" --recursive 2>/dev/null)
 printf "  %-22s %s / 48\n" "jtr.tgz"        "$(echo "$ls_out" | grep -c 'jtr\.tgz')"
 printf "  %-22s %s / 48\n" "jcov-result.xml" "$(echo "$ls_out" | grep -c 'jcov-result\.xml')"
 for v in direct-tests wit-context; do

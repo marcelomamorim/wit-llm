@@ -4,7 +4,7 @@ env:
   shell: bash
   variables:
     AWS_REGION: "us-east-1"
-    S3_BUCKET: "witup-jcov-results"
+    # S3_BUCKET must be provided by the CodeBuild project or build override.
     EXPERIMENT_DIR: "jdk-paired-rematerialized"
     SCRIPT_COMMIT: "1da1d9909a176a0f1306bf223dbb2600a4574e10"
     JDK_SRC: "/opt/openjdk-src"
@@ -16,6 +16,7 @@ phases:
     commands:
       - |
         set -euo pipefail
+        : "${S3_BUCKET:?Configure S3_BUCKET no CodeBuild}"
         echo "run=${RUN_STAMP} variant=${JCOV_VARIANT} shard=${SHARD_ID} input=${INPUT_ARCHIVE}"
         test "${JCOV_VARIANT}" = "direct-tests" || test "${JCOV_VARIANT}" = "wit-context"
       - |

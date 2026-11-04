@@ -54,8 +54,15 @@ func NovoCliente() *Cliente {
 
 // CompletarJSON solicita uma conclusão textual e extrai um objeto JSON da resposta.
 func (c *Cliente) CompletarJSON(model dominio.ConfigModelo, systemPrompt, userPrompt string, opcoes dominio.OpcoesRequisicaoLLM) (*Resposta, error) {
-	if model.Provedor == "openai_compatible" {
+	if model.Provedor == "openai" || model.Provedor == "openai_compatible" {
 		return c.completeOpenAICompatibleJSON(model, systemPrompt, userPrompt, opcoes)
+	}
+	if model.Provedor == "gemini" || model.Provedor == "anthropic" {
+		raw, err := c.requisitarProvedor(model, systemPrompt, userPrompt, opcoes)
+		if err != nil {
+			return nil, err
+		}
+		return interpretarRespostaProvedor(model, raw)
 	}
 	text, err := c.CompletarTexto(model, systemPrompt, userPrompt, opcoes)
 	if err != nil {
@@ -83,9 +90,15 @@ func (c *Cliente) CompletarJSON(model dominio.ConfigModelo, systemPrompt, userPr
 // CompletarTexto solicita uma conclusão textual ao provedor configurado.
 func (c *Cliente) CompletarTexto(model dominio.ConfigModelo, systemPrompt, userPrompt string, opcoes dominio.OpcoesRequisicaoLLM) (string, error) {
 	switch model.Provedor {
+	case "gemini", "anthropic":
+		r, err := c.CompletarJSON(model, systemPrompt, userPrompt, opcoes)
+		if err != nil {
+			return "", err
+		}
+		return r.RawText, nil
 	case "ollama":
 		return c.completeOllama(model, systemPrompt, userPrompt)
-	case "openai_compatible":
+	case "openai", "openai_compatible":
 		response, err := c.completeOpenAICompatibleJSON(model, systemPrompt, userPrompt, opcoes)
 		if err != nil {
 			return "", err
@@ -100,7 +113,7 @@ func (c *Cliente) CompletarTexto(model dominio.ConfigModelo, systemPrompt, userP
 func (c *Cliente) Sondar(model dominio.ConfigModelo) (map[string]interface{}, error) {
 	registro.Info("llm", "iniciando sonda do provedor=%s modelo=%s endpoint=%s", model.Provedor, model.Modelo, strings.TrimRight(model.URLBase, "/"))
 	switch model.Provedor {
-	case "openai_compatible":
+	case "openai", "openai_compatible":
 		headers, err := openAIHeaders(model)
 		if err != nil {
 			return nil, err
@@ -119,6 +132,8 @@ func (c *Cliente) Sondar(model dominio.ConfigModelo) (map[string]interface{}, er
 			"model_echo":       model.Modelo,
 			"models_available": count,
 		}, nil
+	case "gemini", "anthropic":
+		return c.sondarProvedor(model)
 	case "ollama":
 		payload, err := c.requestJSON(http.MethodGet, strings.TrimRight(model.URLBase, "/")+"/api/tags", nil, model, nil)
 		if err != nil {
@@ -274,7 +289,7 @@ func construirCorpoResponses(
 	if anterior := strings.TrimSpace(opcoes.PreviousResponseID); anterior != "" {
 		body["previous_response_id"] = anterior
 	}
-	if aceitaTemperaturaResponses(model.Modelo) {
+	if aceitaTemperaturaResponses(model.Modelo) && !(strings.HasPrefix(model.Modelo, "gpt-6") && model.EsforcoRaciocinio != "none") {
 		body["temperature"] = model.Temperature
 	} else {
 		registro.Debug("llm", "omitindo temperature para o modelo %s na Responses API", model.Modelo)
@@ -289,7 +304,11 @@ func construirCorpoResponses(
 		body["service_tier"] = nivelServico
 	}
 	if retencao := strings.TrimSpace(model.RetencaoCachePrompt); retencao != "" {
-		body["prompt_cache_retention"] = retencao
+		if strings.HasPrefix(model.Modelo, "gpt-6") {
+			body["prompt_cache_options"] = map[string]string{"ttl": "30m"}
+		} else {
+			body["prompt_cache_retention"] = retencao
+		}
 	}
 	if cacheKey := normalizarPromptCacheKey(opcoes.PromptCacheKey); cacheKey != "" {
 		body["prompt_cache_key"] = cacheKey
@@ -316,6 +335,9 @@ func normalizarPromptCacheKey(chave string) string {
 
 // extrairTextoResponses lê o texto consolidado de uma resposta da Responses API.
 func extrairTextoResponses(payload map[string]interface{}) (string, error) {
+	if status, _ := payload["status"].(string); status != "" && status != "completed" {
+		return "", fmt.Errorf("resposta não concluída: %s", status)
+	}
 	var blocos []string
 	outputs, ok := payload["output"].([]interface{})
 	if !ok || len(outputs) == 0 {
@@ -382,8 +404,22 @@ func openAIHeaders(model dominio.ConfigModelo) (map[string]string, error) {
 	return headers, nil
 }
 
+// ErroHTTP permite interromper um lote quando credenciais, quota ou modelo são inválidos.
+type ErroHTTP struct {
+	StatusCode int
+	URL, Body  string
+}
+
+func (e *ErroHTTP) Error() string {
+	return fmt.Sprintf("http %d de %s: %s", e.StatusCode, e.URL, e.Body)
+}
+
 // requestJSON executa uma requisição HTTP, aplica retries e devolve o corpo parseado.
 func (c *Cliente) requestJSON(method, url string, payload map[string]interface{}, model dominio.ConfigModelo, extraHeaders map[string]string) (map[string]interface{}, error) {
+	return c.requestJSONContext(context.Background(), method, url, payload, model, extraHeaders)
+}
+
+func (c *Cliente) requestJSONContext(parent context.Context, method, url string, payload map[string]interface{}, model dominio.ConfigModelo, extraHeaders map[string]string) (map[string]interface{}, error) {
 	attempts := model.MaximoTentativas + 1
 	if attempts < 1 {
 		attempts = 1
@@ -399,8 +435,11 @@ func (c *Cliente) requestJSON(method, url string, payload map[string]interface{}
 	}
 
 	for attempt := 1; attempt <= attempts; attempt++ {
+		if err := parent.Err(); err != nil {
+			return nil, err
+		}
 		registro.Info("llm", "requisição %s %s tentativa=%d/%d modelo=%s", method, url, attempt, attempts, model.Modelo)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(model.SegundosTimeout)*time.Second)
+		ctx, cancel := context.WithTimeout(parent, time.Duration(model.SegundosTimeout)*time.Second)
 		requestBody := io.Reader(nil)
 		if payload != nil {
 			requestBody = bytes.NewReader(encoded)
@@ -423,7 +462,9 @@ func (c *Cliente) requestJSON(method, url string, payload map[string]interface{}
 			cancel()
 			registro.Info("llm", "falha de transporte em %s %s tentativa=%d/%d: %v", method, url, attempt, attempts, err)
 			if attempt < attempts {
-				sleepBackoff(attempt, 0)
+				if err := sleepBackoffContext(parent, attempt, 0); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			return nil, fmt.Errorf("a requisição para %s falhou: %w", url, err)
@@ -452,10 +493,12 @@ func (c *Cliente) requestJSON(method, url string, payload map[string]interface{}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			registro.Info("llm", "resposta não bem-sucedida em %s %s: status=%d corpo=%s", method, url, resp.StatusCode, truncate(string(responseBody), 400))
 			if retryableStatus[resp.StatusCode] && attempt < attempts {
-				sleepBackoff(attempt, parseRetryAfter(resp.Header.Get("Retry-After")))
+				if err := sleepBackoffContext(parent, attempt, parseRetryAfter(resp.Header.Get("Retry-After"))); err != nil {
+					return nil, err
+				}
 				continue
 			}
-			return nil, fmt.Errorf("http %d de %s: %s", resp.StatusCode, url, truncate(string(responseBody), 800))
+			return nil, &ErroHTTP{StatusCode: resp.StatusCode, URL: url, Body: truncate(string(responseBody), 800)}
 		}
 
 		parsed := map[string]interface{}{}
@@ -482,6 +525,10 @@ func primeiroHeader(headers http.Header, chaves ...string) string {
 // sleepBackoff aplica um backoff exponencial entre tentativas, respeitando
 // o cabeçalho Retry-After quando informado pelo servidor.
 func sleepBackoff(attempt int, retryAfter time.Duration) {
+	_ = sleepBackoffContext(context.Background(), attempt, retryAfter)
+}
+
+func sleepBackoffContext(ctx context.Context, attempt int, retryAfter time.Duration) error {
 	d := 200 * time.Millisecond * time.Duration(1<<(attempt-1))
 	if d > 60*time.Second {
 		d = 60 * time.Second
@@ -493,7 +540,14 @@ func sleepBackoff(attempt int, retryAfter time.Duration) {
 		}
 		d = retryAfter
 	}
-	time.Sleep(d)
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // parseRetryAfter extrai a duração do cabeçalho Retry-After.

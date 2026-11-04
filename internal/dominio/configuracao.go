@@ -47,6 +47,7 @@ type ConfigSegundaFase struct {
 
 // ConfigModelo define um endpoint de LLM configurado.
 type ConfigModelo struct {
+	IntervaloRequisicoesMS   int     `json:"request_interval_ms,omitempty"`
 	Provedor                 string  `json:"provider"`
 	Modelo                   string  `json:"model"`
 	URLBase                  string  `json:"base_url"`

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+: "${WITUP_S3_BUCKET:?Defina WITUP_S3_BUCKET para o bucket do experimento}"
 # Encadeia o trabalho restante para rodar sem supervisão.
 # Reentrante: pula o que já tem resultado. Nada aqui pede aprovação —
 # tudo roda em container local ou lê do S3 com credenciais já configuradas.
@@ -42,15 +43,15 @@ done
 # 4. reteste: espera os 8 shards, baixa e compara teste a teste
 diz "aguardando os 8 shards do reteste"
 ini=$(date +%s)
-until [ "$(aws s3 ls s3://witup-jcov-results/reteste-v4/paired-results/ --recursive 2>/dev/null | grep -c 'jtr.tgz')" -ge 8 ] \
+until [ "$(aws s3 ls s3://${WITUP_S3_BUCKET}/reteste-v4/paired-results/ --recursive 2>/dev/null | grep -c 'jtr.tgz')" -ge 8 ] \
    || [ $(( $(date +%s)-ini )) -gt 14400 ]; do sleep 180; done
-n=$(aws s3 ls s3://witup-jcov-results/reteste-v4/paired-results/ --recursive 2>/dev/null | grep -c 'jtr.tgz')
+n=$(aws s3 ls s3://${WITUP_S3_BUCKET}/reteste-v4/paired-results/ --recursive 2>/dev/null | grep -c 'jtr.tgz')
 diz "shards prontos: $n/8"
 if [ "$n" -ge 1 ]; then
   mkdir -p reteste/exec1 reteste/exec2
   for v in direct-tests wit-context; do for s in 00 01 02 03; do
-    [ -s "reteste/exec1/$v-$s.tgz" ] || aws s3 cp "s3://witup-jcov-results/jdk-v4-20261004/paired-results/$v/$s/jtr.tgz" "reteste/exec1/$v-$s.tgz" --quiet 2>/dev/null
-    [ -s "reteste/exec2/$v-$s.tgz" ] || aws s3 cp "s3://witup-jcov-results/reteste-v4/paired-results/$v/$s/jtr.tgz"      "reteste/exec2/$v-$s.tgz" --quiet 2>/dev/null
+    [ -s "reteste/exec1/$v-$s.tgz" ] || aws s3 cp "s3://${WITUP_S3_BUCKET}/jdk-v4-20261004/paired-results/$v/$s/jtr.tgz" "reteste/exec1/$v-$s.tgz" --quiet 2>/dev/null
+    [ -s "reteste/exec2/$v-$s.tgz" ] || aws s3 cp "s3://${WITUP_S3_BUCKET}/reteste-v4/paired-results/$v/$s/jtr.tgz"      "reteste/exec2/$v-$s.tgz" --quiet 2>/dev/null
   done; done
   diz "── variância de execução, teste a teste ──"
   python3 comparar-reteste.py reteste/exec1 reteste/exec2

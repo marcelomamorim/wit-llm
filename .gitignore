@@ -5,6 +5,17 @@
 .env
 .env.*
 !.env.example
+.envrc
+.secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.kubeconfig
+*.tfstate
+*.tfstate.*
+.aws/
+.azure/
 
 # Build artifacts
 bin/
@@ -54,6 +65,42 @@ coverage.out
 resources/*
 !resources/README.md
 /AGENTS.md
+# Local research, vendor checkouts and personal documents. Existing tracked files
+# are not untracked by these rules; review the Git index separately.
+/jdk-src/
+/jcov-official/
+/jcov-repgen/
+/sast2026-artifact/
+/prep-vaga-itau/
+/paper/
+/output/
+/tmp/
+/soft-oracle-rerun/
+/rerun-codebuild/__pycache__/
+# Historical experiment data and reconstructed environments are backed up
+# separately; preserve scripts, manifests and small analysis tables in Git.
+/rerun-codebuild/mutacao*/orig/
+/rerun-codebuild/mutacao*/work/
+/rerun-codebuild/mutacao*/testes/
+/rerun-codebuild/mutacao*/mut/
+/rerun-codebuild/mutacao*/classes/
+/rerun-codebuild/merge-original/
+/rerun-codebuild/merge-jdk-*/
+/rerun-codebuild/jtr/
+/rerun-codebuild/tgz-jdk-*/
+/rerun-codebuild/reteste/
+/rerun-codebuild/diag/
+/rerun-codebuild/local-exec/wjdk/
+/rerun-codebuild/local-exec/out/
+/rerun-codebuild/local-exec/jcov-baseline.xml
+/results/variantes-jcov/
+/scripts/backup-azure-haiku-s3.py
+/scripts/compute_paper_results.py
+/scripts/analyze-experiments-paired.py
+/scripts/analyze-experiments-exploratory.py
+/apresentacao/resumo-pesquisa-wit-llm.docx
+/resumo-pesquisa-wit-llm.docx
+/sast2026-revisao.docx
 /docs/*
 !/docs/studies/
 !/docs/studies/**
