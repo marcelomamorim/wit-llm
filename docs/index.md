@@ -1,113 +1,41 @@
-# wit-llm
+# WIT + LLM: geração de testes para comportamentos excepcionais
 
-`wit-llm` e uma CLI em Go para estudar geracao de testes Java com LLMs. O foco atual e comparar testes gerados com **contexto WIT** contra testes gerados diretamente do codigo, medindo o impacto em um projeto real de grande porte: o OpenJDK/JDK.
+Este projeto de pesquisa investiga como informações de análise estática influenciam a geração de testes Java por modelos de linguagem. O objeto principal é o **OpenJDK 11**; os testes são avaliados com **jtreg**, e a cobertura é investigada com **JCov**.
 
-## Escopo atual
+!!! abstract "Objetivo"
+    Avaliar, para os mesmos métodos-alvo, as diferenças entre testes gerados com informações de caminhos excepcionais identificadas pelo WIT e testes gerados diretamente a partir do código, considerando diferentes modelos e as limitações dos protocolos utilizados.
 
-- Projeto alvo: **OpenJDK/JDK**
-- Analise estatica: **What Is Thrown (WIT)**
-- Geracao: `WIT_CONTEXT` vs `DIRECT_TESTS`
-- Execucao: `jtreg`
-- Cobertura: **JCov**
+## Perguntas de pesquisa
 
-## O que a ferramenta faz agora
+1. Como a inclusão de informações WIT se relaciona à aprovação, aos erros de compilação e à cobertura dos testes gerados?
+2. Como os resultados diferem entre modelos, considerando as diferenças de configuração e de execução das rodadas?
 
-Para o JDK:
+A hipótese de trabalho é que o contexto WIT pode orientar a geração para condições excepcionais. A hipótese deve ser confrontada com os dados: não se presume que o contexto melhore todas as métricas.
 
-1. carrega o `wit_filtered.json` do WIT;
-2. alinha os metodos WIT ao checkout do OpenJDK;
-3. seleciona um conjunto comum de metodos-alvo;
-4. gera testes em dois cenários:
-   - `WIT_CONTEXT`
-   - `DIRECT_TESTS`
-5. integra os testes gerados na suite `jtreg`;
-6. mede cobertura estrutural com JCov;
-7. calcula metricas de excecao;
-8. materializa os resultados em:
-   - `JSON`
-   - `CSV`
-   - `Markdown`
-
-## Fluxo resumido
+## Visão geral do experimento
 
 ```mermaid
-graph LR
-    A["WIT filtrado do JDK"] --> B["Alinhamento ao checkout OpenJDK"]
-    C["Codigo Java local"] --> D["Catalogacao de metodos"]
-    B --> E["Metodos-alvo comuns"]
+flowchart LR
+    A["OpenJDK 11 e alvos"] --> B["Pareamento por método"]
+    W["Hipóteses WIT"] --> B
+    B --> C["Sem WIT"]
+    B --> D["Com WIT"]
+    C --> E["Modelos de linguagem"]
     D --> E
-    E --> F["WIT_CONTEXT"]
-    E --> G["DIRECT_TESTS"]
-    F --> H["Testes jtreg gerados"]
-    G --> H
-    H --> I["Execucao jtreg + JCov"]
-    I --> J["Cobertura + metricas de excecao"]
-    J --> K["JSON + CSV + Markdown"]
+    E --> F["Respostas e testes Java"]
+    F --> G["jtreg e JCov"]
+    G --> H["Resultados, cobertura e análise"]
 ```
 
-## Resultado preliminar JDK 200
+O estudo considera GPT-4.1 nano, GPT-4.1 mini e Claude Haiku 5.5. As rodadas históricas apresentam diferenças de orçamento de saída, configuração de geração e processamento; uma comparação entre modelos não isola automaticamente o efeito do modelo.
 
-Na rodada atual com 200 metodos-alvo do JDK:
+!!! warning "Estado dos resultados"
+    O estudo está em andamento. A reexecução e a validação da cobertura são necessárias para comparações consistentes. A página de [piloto histórico](studies/jdk-global-impact.md) descreve uma rodada anterior, distinta da coorte atual.
 
-- `WIT_CONTEXT` melhorou cobertura de linhas em **+3.09 p.p.** contra o baseline.
-- `DIRECT_TESTS` melhorou cobertura de linhas em **+3.36 p.p.** contra o baseline.
-- `WIT_CONTEXT` alcancou **17/17 classes-alvo**.
-- `DIRECT_TESTS` alcancou **16/17 classes-alvo**.
-- `WIT_CONTEXT` gerou verificacoes explicitas de excecao em **94%** dos metodos.
-- `DIRECT_TESTS` gerou verificacoes explicitas de excecao em **59%** dos metodos.
+## Roteiro de leitura
 
-Veja a pagina [Impacto Global no JDK](studies/jdk-global-impact.md) para os detalhes.
-
-## Páginas recomendadas
-
-<div class="grid cards" markdown>
-
--   **Primeiros Passos**
-
-    ---
-
-    Como preparar o ambiente, compilar a CLI e rodar o fluxo JDK.
-
-    [**Abrir**](overview/getting-started.md)
-
--   **Configuração**
-
-    ---
-
-    Estrutura do `pipeline.json` e modelos de LLM.
-
-    [**Abrir**](overview/configuration.md)
-
--   **CLI**
-
-    ---
-
-    Comandos principais para Batch, JDK e metricas.
-
-    [**Abrir**](cli/index.md)
-
--   **Arquitetura**
-
-    ---
-
-    Visao de como WIT, LLM, Batch, jtreg e JCov se conectam.
-
-    [**Abrir**](architecture/index.md)
-
--   **Harness**
-
-    ---
-
-    Como Codex deve navegar, validar e evoluir o projeto.
-
-    [**Abrir**](harness/index.md)
-
--   **Exec Plans**
-
-    ---
-
-    Planos para mudanças maiores, dívida técnica e decisões em andamento.
-
-    [**Abrir**](exec-plans/index.md)
-
-</div>
+- [Arquitetura do experimento](architecture/index.md): componentes, fluxos de dados e artefatos.
+- [Método experimental](studies/metodo.md): objetivo, condições, prompts e procedimento.
+- [Métricas e análise](studies/metricas.md): definições, denominadores e limites de interpretação.
+- [Reprodutibilidade](studies/reprodutibilidade.md): ambientes, proveniência e validação.
+- [Primeiros passos](overview/getting-started.md): preparação e uso da ferramenta.
