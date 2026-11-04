@@ -104,5 +104,7 @@ resources/*
 /docs/*
 !/docs/studies/
 !/docs/studies/**
+!/docs/testes-gerados/
+!/docs/testes-gerados/**
 /ARCHITECTURE.md
 requirements-docs.txt

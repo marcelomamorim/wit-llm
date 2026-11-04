@@ -1,0 +1,33 @@
+/*
+ * @test
+ * @summary Test UnsafeLongFieldAccessorImpl.getInt throws expected IllegalArgumentException
+ * @run main UnsafeLongFieldAccessorImplWitupTest
+ */
+
+import java.lang.reflect.Field;
+import jdk.internal.reflect.UnsafeLongFieldAccessorImpl;
+
+public class UnsafeLongFieldAccessorImplWitupTest {
+    public static void main(String[] args) {
+        try {
+            // Create a dummy Field instance via reflection to pass to constructor
+            Field dummyField = UnsafeLongFieldAccessorImplWitupTest.class.getDeclaredField("dummyField");
+            UnsafeLongFieldAccessorImpl accessor = new UnsafeLongFieldAccessorImpl(dummyField);
+
+            // The getInt method is expected to always throw IllegalArgumentException
+            try {
+                accessor.getInt(new Object());
+                throw new RuntimeException("Expected IllegalArgumentException not thrown by getInt");
+            } catch (IllegalArgumentException expected) {
+                // Expected exception caught, test passes
+            }
+
+        } catch (NoSuchFieldException e) {
+            throw new RuntimeException("Test setup failed: dummyField not found", e);
+        }
+    }
+
+    // Dummy field to obtain a Field instance for constructor
+    @SuppressWarnings("unused")
+    private long dummyField = 0L;
+}

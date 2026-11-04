@@ -35,6 +35,7 @@ O estudo considera GPT-4.1 nano, GPT-4.1 mini e Claude Haiku 5.5. As rodadas his
 ## Roteiro de leitura
 
 - [Arquitetura do experimento](architecture/index.md): componentes, fluxos de dados e artefatos.
+- [Catálogo de testes](studies/catalogo.md): pesquisa dos arquivos gerados por modelo e condição.
 - [Método experimental](studies/metodo.md): objetivo, condições, prompts e procedimento.
 - [Métricas e análise](studies/metricas.md): definições, denominadores e limites de interpretação.
 - [Reprodutibilidade](studies/reprodutibilidade.md): ambientes, proveniência e validação.
